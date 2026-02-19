@@ -10,3 +10,10 @@
     font-family: 'DM Sans', system-ui, sans-serif;
   }
 }
+
+@media print {
+  aside,
+  .no-print {
+    display: none !important;
+  }
+}

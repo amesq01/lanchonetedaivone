@@ -13,6 +13,7 @@ export default function AdminProdutos() {
   const [valor, setValor] = useState('');
   const [quantidade, setQuantidade] = useState(0);
   const [ativo, setAtivo] = useState(true);
+  const [imagemUrl, setImagemUrl] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -34,6 +35,7 @@ export default function AdminProdutos() {
       setValor(String(prod.valor));
       setQuantidade(prod.quantidade);
       setAtivo(prod.ativo);
+      setImagemUrl(prod.imagem_url ?? '');
     } else {
       setEditing(null);
       setCodigo('');
@@ -42,6 +44,7 @@ export default function AdminProdutos() {
       setValor('');
       setQuantidade(0);
       setAtivo(true);
+      setImagemUrl('');
     }
     setOpen(true);
   }
@@ -57,6 +60,7 @@ export default function AdminProdutos() {
         valor: Number(valor),
         quantidade,
         ativo,
+        imagem_url: imagemUrl.trim() || null,
         updated_at: new Date().toISOString(),
       };
       if (editing) await supabase.from('produtos').update(payload).eq('id', editing.id);
@@ -88,6 +92,7 @@ export default function AdminProdutos() {
               <th className="px-4 py-3 text-left text-sm font-medium text-stone-600">Valor</th>
               <th className="px-4 py-3 text-left text-sm font-medium text-stone-600">Qtd</th>
               <th className="px-4 py-3 text-left text-sm font-medium text-stone-600">Ativo</th>
+              <th className="px-4 py-3 text-left text-sm font-medium text-stone-600">Foto</th>
               <th className="px-4 py-3"></th>
             </tr>
           </thead>
@@ -100,6 +105,9 @@ export default function AdminProdutos() {
                 <td className="px-4 py-3">R$ {Number(p.valor).toFixed(2)}</td>
                 <td className="px-4 py-3">{p.quantidade}</td>
                 <td className="px-4 py-3">{p.ativo ? 'Sim' : 'Não'}</td>
+                <td className="px-4 py-3">
+                  {p.imagem_url ? <img src={p.imagem_url} alt="" className="w-10 h-10 rounded object-cover" /> : <span className="text-stone-400 text-xs">—</span>}
+                </td>
                 <td className="px-4 py-3">
                   <button onClick={() => openForm(p)} className="text-amber-600 hover:underline text-sm">Editar</button>
                 </td>
@@ -133,6 +141,11 @@ export default function AdminProdutos() {
               <div>
                 <label className="block text-sm font-medium text-stone-600">Quantidade</label>
                 <input type="number" min="0" value={quantidade} onChange={(e) => setQuantidade(Number(e.target.value))} className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-stone-600">URL da foto do produto</label>
+                <input type="url" value={imagemUrl} onChange={(e) => setImagemUrl(e.target.value)} className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2" placeholder="https://..." />
+                {imagemUrl && <img src={imagemUrl} alt="Preview" className="mt-2 w-20 h-20 rounded object-cover border border-stone-200" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />}
               </div>
               <div className="flex items-center gap-2">
                 <input type="checkbox" id="ativo" checked={ativo} onChange={(e) => setAtivo(e.target.checked)} className="rounded border-stone-300" />

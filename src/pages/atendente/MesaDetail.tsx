@@ -1,13 +1,16 @@
-import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { Plus, ChevronDown, ChevronUp } from 'lucide-react';
-import { getMesas, getComandaByMesa, getComandaWithPedidos, getProdutos, createPedidoPresencial, getPedidosByComanda, updatePedidoStatus } from '../../lib/api';
+import { getMesas, getComandaByMesa, getComandaWithPedidos, getProdutos, createPedidoPresencial, getPedidosByComanda, updatePedidoStatus, closeComanda } from '../../lib/api';
+import { useAuth } from '../../contexts/AuthContext';
 import type { Produto } from '../../types/database';
 
 type ItemCarrinho = { produto: Produto; quantidade: number; observacao: string };
 
 export default function AtendenteMesaDetail() {
   const { mesaId } = useParams();
+  const navigate = useNavigate();
+  const { profile } = useAuth();
   const [mesaNome, setMesaNome] = useState('');
   const [clienteNome, setClienteNome] = useState('');
   const [comandaId, setComandaId] = useState<string | null>(null);
@@ -18,6 +21,10 @@ export default function AtendenteMesaDetail() {
   const [loading, setLoading] = useState(true);
   const [pedidoExpandido, setPedidoExpandido] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
+  const [popupFecharMesa, setPopupFecharMesa] = useState(false);
+  const [popupCancelar, setPopupCancelar] = useState<{ pedidoId: string } | null>(null);
+  const [motivoCancelamento, setMotivoCancelamento] = useState('');
+  const [fechando, setFechando] = useState(false);
 
   useEffect(() => {
     if (!mesaId) return;
@@ -49,10 +56,19 @@ export default function AtendenteMesaDetail() {
     setSearch('');
   };
 
+  const qtdDeltaRef = useRef<{ index: number; delta: number; id: number } | null>(null);
+  const appliedIdRef = useRef<number>(0);
   const updateQtd = (index: number, delta: number) => {
+    const id = Date.now();
+    qtdDeltaRef.current = { index, delta, id };
     setCarrinho((c) => {
-      const novo = [...c];
-      novo[index].quantidade = Math.max(0, novo[index].quantidade + delta);
+      const applied = qtdDeltaRef.current;
+      if (!applied || applied.index >= c.length) return c;
+      if (appliedIdRef.current === applied.id) return c;
+      appliedIdRef.current = applied.id;
+      const novo = c.map((item, i) =>
+        i === applied.index ? { ...item, quantidade: Math.max(0, item.quantidade + applied.delta) } : item
+      );
       return novo.filter((i) => i.quantidade > 0);
     });
   };
@@ -79,8 +95,29 @@ export default function AtendenteMesaDetail() {
     }
   };
 
-  const cancelarPedido = async (pedidoId: string) => {
-    await updatePedidoStatus(pedidoId, 'cancelado');
+  const pedidosAtivos = pedidos.filter((p) => p.status !== 'cancelado');
+  const podeFecharMesa = pedidosAtivos.length === 0;
+
+  const confirmarFecharMesa = async () => {
+    if (!comandaId) return;
+    setFechando(true);
+    try {
+      await closeComanda(comandaId, 'Sem consumo');
+      setPopupFecharMesa(false);
+      navigate('/pdv/mesas');
+    } finally {
+      setFechando(false);
+    }
+  };
+
+  const confirmarCancelarPedido = async () => {
+    if (!popupCancelar || !motivoCancelamento.trim()) return;
+    await updatePedidoStatus(popupCancelar.pedidoId, 'cancelado', {
+      motivo_cancelamento: motivoCancelamento.trim(),
+      cancelado_por: profile?.id,
+    });
+    setPopupCancelar(null);
+    setMotivoCancelamento('');
     if (comandaId) getPedidosByComanda(comandaId).then(setPedidos);
   };
 
@@ -89,9 +126,16 @@ export default function AtendenteMesaDetail() {
 
   return (
     <div className="max-w-2xl mx-auto">
-      <div className="mb-4">
-        <h1 className="text-xl font-bold text-stone-800">{mesaNome}</h1>
-        <p className="text-stone-600">Cliente: {clienteNome}</p>
+      <div className="mb-4 flex items-center justify-between flex-wrap gap-2">
+        <div>
+          <h1 className="text-xl font-bold text-stone-800">{mesaNome}</h1>
+          <p className="text-stone-600">Cliente: {clienteNome}</p>
+        </div>
+        {podeFecharMesa && (
+          <button onClick={() => setPopupFecharMesa(true)} className="rounded-lg border border-stone-300 px-4 py-2 text-stone-600 hover:bg-stone-50 text-sm">
+            Fechar mesa (sem pedidos)
+          </button>
+        )}
       </div>
 
       <div className="relative flex gap-2 mb-4">
@@ -106,8 +150,11 @@ export default function AtendenteMesaDetail() {
               <div className="absolute left-4 right-4 mt-1 z-10 rounded-lg border border-stone-200 bg-white shadow-lg max-h-48 overflow-y-auto">
                 {filtrados.slice(0, 8).map((p) => (
                   <button key={p.id} type="button" onClick={() => addItem(p)} className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-stone-50 border-b border-stone-100 last:border-0">
+                    <div className="w-10 h-10 rounded-lg bg-stone-100 flex-shrink-0 overflow-hidden flex items-center justify-center">
+                      {p.imagem_url ? <img src={p.imagem_url} alt="" className="w-full h-full object-cover" /> : <span className="text-stone-400 text-xs">IMG</span>}
+                    </div>
                     <span className="text-sm font-medium text-stone-500">{p.codigo}</span>
-                    <span className="text-stone-800">{p.descricao}</span>
+                    <span className="text-stone-800 truncate">{p.descricao}</span>
                     <span className="ml-auto text-amber-600 font-medium">R$ {Number(p.valor).toFixed(2)}</span>
                   </button>
                 ))}
@@ -124,7 +171,9 @@ export default function AtendenteMesaDetail() {
               <ul className="divide-y divide-stone-100">
                 {carrinho.map((item, i) => (
                   <li key={i} className="flex flex-wrap items-center gap-2 p-3">
-                    <div className="w-12 h-12 rounded-lg bg-stone-100 flex items-center justify-center text-stone-400 text-xs">IMG</div>
+                    <div className="w-12 h-12 rounded-lg bg-stone-100 flex-shrink-0 overflow-hidden flex items-center justify-center">
+                      {item.produto.imagem_url ? <img src={item.produto.imagem_url} alt="" className="w-full h-full object-cover" /> : <span className="text-stone-400 text-xs">IMG</span>}
+                    </div>
                     <div className="flex-1 min-w-0">
                       <div className="font-medium text-stone-800">{item.produto.codigo} - {item.produto.descricao}</div>
                       <input type="text" value={item.observacao} onChange={(e) => setObs(i, e.target.value)} placeholder="Observação (ex: sem cebola)" className="mt-1 w-full text-sm rounded border border-stone-200 px-2 py-1" />
@@ -160,7 +209,7 @@ export default function AtendenteMesaDetail() {
                   ))}
                 </ul>
                 {p.status === 'novo_pedido' && (
-                  <button onClick={() => cancelarPedido(p.id)} className="text-sm text-red-600 hover:underline">Cancelar pedido</button>
+                  <button onClick={() => setPopupCancelar({ pedidoId: p.id })} className="text-sm text-red-600 hover:underline">Cancelar pedido</button>
                 )}
               </div>
             )}
@@ -168,10 +217,37 @@ export default function AtendenteMesaDetail() {
         ))}
       </div>
 
-      {pedidos.filter((p) => p.status !== 'cancelado').length > 0 && (
+      {pedidosAtivos.length > 0 && (
         <button type="button" className="mt-4 w-full rounded-lg border-2 border-dashed border-amber-400 py-3 text-amber-700 font-medium hover:bg-amber-50">
           Adicionar outro pedido
         </button>
+      )}
+
+      {popupFecharMesa && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
+            <h3 className="font-semibold text-stone-800 mb-2">Fechar mesa</h3>
+            <p className="text-sm text-stone-600 mb-4">Não há pedidos nesta mesa. Deseja fechá-la?</p>
+            <div className="flex gap-2">
+              <button onClick={confirmarFecharMesa} disabled={fechando} className="flex-1 rounded-lg bg-amber-600 py-2 text-white hover:bg-amber-700 disabled:opacity-50">Sim, fechar</button>
+              <button onClick={() => setPopupFecharMesa(false)} className="rounded-lg border border-stone-300 px-4 py-2 text-stone-600">Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {popupCancelar && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
+            <h3 className="font-semibold text-stone-800 mb-2">Cancelar pedido</h3>
+            <p className="text-sm text-stone-600 mb-2">Informe o motivo do cancelamento (obrigatório para relatório):</p>
+            <textarea value={motivoCancelamento} onChange={(e) => setMotivoCancelamento(e.target.value)} className="w-full rounded-lg border border-stone-300 px-3 py-2 mb-4 min-h-[80px]" placeholder="Ex: Cliente desistiu" required />
+            <div className="flex gap-2">
+              <button onClick={confirmarCancelarPedido} disabled={!motivoCancelamento.trim()} className="flex-1 rounded-lg bg-red-600 py-2 text-white hover:bg-red-700 disabled:opacity-50">Confirmar cancelamento</button>
+              <button onClick={() => { setPopupCancelar(null); setMotivoCancelamento(''); }} className="rounded-lg border border-stone-300 px-4 py-2 text-stone-600">Voltar</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

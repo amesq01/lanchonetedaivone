@@ -62,21 +62,46 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(false);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      setProfileFetched(false);
-      setProfileError(null);
-      if (session?.user) {
-        setProfile(null); // limpa perfil antigo enquanto busca o novo
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (session) {
+        setSession(session);
+        setUser(session.user);
+        setProfileFetched(false);
+        setProfileError(null);
+        setProfile(null);
         await fetchProfile(session.user.id);
       } else {
-        setProfile(null);
-        setProfileFetched(true);
+        const { data: { session: current } } = await supabase.auth.getSession();
+        if (current) {
+          setSession(current);
+          setUser(current.user);
+          setProfileFetched(false);
+          await fetchProfile(current.user.id);
+        } else {
+          setSession(null);
+          setUser(null);
+          setProfile(null);
+          setProfileFetched(true);
+        }
       }
     });
 
-    return () => subscription.unsubscribe();
+    const handleVisibility = () => {
+      if (document.visibilityState !== 'visible') return;
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (session) {
+          setSession(session);
+          setUser(session.user);
+          fetchProfile(session.user.id);
+        }
+      });
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      subscription.unsubscribe();
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
   }, []);
 
   async function signIn(email: string, password: string) {

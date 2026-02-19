@@ -42,6 +42,24 @@ export async function getComandaByMesa(mesaId: string) {
   return data as Database['public']['Tables']['comandas']['Row'] | null;
 }
 
+/** Mesa IDs que têm comanda aberta com pelo menos um pedido não finalizado/cancelado */
+export async function getMesasIdsComPedidosAbertos(): Promise<Set<string>> {
+  const { data: comandas } = await supabase.from('comandas').select('id, mesa_id').eq('aberta', true);
+  if (!comandas?.length) return new Set();
+  const ids = comandas.map((c) => c.id);
+  const { data: pedidos } = await supabase.from('pedidos').select('comanda_id').in('comanda_id', ids).in('status', ['novo_pedido', 'em_preparacao', 'aguardando_aceite']);
+  const comandasComPedido = new Set((pedidos ?? []).map((p) => p.comanda_id));
+  const mesaIds = new Set<string>();
+  comandas.forEach((c) => { if (comandasComPedido.has(c.id)) mesaIds.add(c.mesa_id); });
+  return mesaIds;
+}
+
+/** Se há pedidos de viagem em aberto (não finalizados/cancelados) */
+export async function getViagemTemPedidosAbertos(): Promise<boolean> {
+  const { data } = await supabase.from('pedidos').select('id').eq('origem', 'viagem').in('status', ['novo_pedido', 'em_preparacao', 'aguardando_aceite']).limit(1);
+  return (data?.length ?? 0) > 0;
+}
+
 export async function openComanda(mesaId: string, atendenteId: string, nomeCliente: string) {
   const { data, error } = await supabase.from('comandas').insert({ mesa_id: mesaId, atendente_id: atendenteId, nome_cliente: nomeCliente }).select().single();
   if (error) throw error;
@@ -49,7 +67,9 @@ export async function openComanda(mesaId: string, atendenteId: string, nomeClien
 }
 
 export async function closeComanda(comandaId: string, formaPagamento: string) {
-  await supabase.from('comandas').update({ aberta: false, forma_pagamento: formaPagamento, encerrada_em: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('id', comandaId);
+  const now = new Date().toISOString();
+  await supabase.from('comandas').update({ aberta: false, forma_pagamento: formaPagamento, encerrada_em: now, updated_at: now }).eq('id', comandaId);
+  await supabase.from('pedidos').update({ encerrado_em: now, forma_pagamento: formaPagamento, updated_at: now }).eq('comanda_id', comandaId).neq('status', 'cancelado');
 }
 
 export async function getComandaWithPedidos(comandaId: string) {
@@ -93,8 +113,18 @@ export async function createPedidoViagem(nomeCliente: string, atendenteId: strin
   return { pedido, comanda };
 }
 
-export async function updatePedidoStatus(pedidoId: string, status: 'novo_pedido' | 'em_preparacao' | 'finalizado' | 'cancelado') {
-  await supabase.from('pedidos').update({ status, updated_at: new Date().toISOString() }).eq('id', pedidoId);
+export async function updatePedidoStatus(
+  pedidoId: string,
+  status: 'novo_pedido' | 'em_preparacao' | 'finalizado' | 'cancelado',
+  opts?: { motivo_cancelamento?: string; cancelado_por?: string }
+) {
+  const payload: Record<string, unknown> = { status, updated_at: new Date().toISOString() };
+  if (status === 'cancelado' && opts) {
+    if (opts.motivo_cancelamento) payload.motivo_cancelamento = opts.motivo_cancelamento;
+    if (opts.cancelado_por) payload.cancelado_por = opts.cancelado_por;
+    payload.cancelado_em = new Date().toISOString();
+  }
+  await supabase.from('pedidos').update(payload).eq('id', pedidoId);
 }
 
 export async function getPedidosByComanda(comandaId: string) {
@@ -103,7 +133,7 @@ export async function getPedidosByComanda(comandaId: string) {
 }
 
 export async function getPedidosCozinha() {
-  const { data } = await supabase.from('pedidos').select('*, pedido_itens(*, produtos(*)), comandas(nome_cliente)').in('status', ['novo_pedido', 'em_preparacao', 'finalizado']).order('created_at');
+  const { data } = await supabase.from('pedidos').select('*, pedido_itens(*, produtos(*)), comandas(nome_cliente, mesa_id, mesas(numero, nome))').in('status', ['novo_pedido', 'em_preparacao', 'finalizado']).order('created_at');
   return (data ?? []) as any[];
 }
 
@@ -162,6 +192,11 @@ export async function createPedidoOnline(payload: {
   return pedido;
 }
 
+export async function getCuponsAtivos() {
+  const { data } = await supabase.from('cupons').select('*').eq('ativo', true).gt('usos_restantes', 0).order('codigo');
+  return (data ?? []) as Database['public']['Tables']['cupons']['Row'][];
+}
+
 export async function getTotalComanda(comandaId: string): Promise<{ itens: { descricao: string; codigo: string; quantidade: number; valor: number }[]; total: number }> {
   const { data: pedidos } = await supabase.from('pedidos').select('id').eq('comanda_id', comandaId).neq('status', 'cancelado');
   if (!pedidos?.length) return { itens: [], total: 0 };
@@ -175,4 +210,71 @@ export async function getTotalComanda(comandaId: string): Promise<{ itens: { des
     total += linha.valor;
   }
   return { itens: list, total };
+}
+
+export async function getRelatorioFinanceiro(desde: string, ate: string) {
+  const { data: pedidos } = await supabase
+    .from('pedidos')
+    .select('id, numero, origem, encerrado_em, created_at, cliente_nome, desconto, taxa_entrega, forma_pagamento, comandas(nome_cliente)')
+    .eq('status', 'finalizado')
+    .gte('encerrado_em', desde)
+    .lte('encerrado_em', ate)
+    .order('encerrado_em');
+  if (!pedidos?.length) return { pedidos: [], totalGeral: 0 };
+  const ids = pedidos.map((p) => p.id);
+  const { data: itens } = await supabase.from('pedido_itens').select('pedido_id, quantidade, valor_unitario').in('pedido_id', ids);
+  const totalPorPedido: Record<string, number> = {};
+  for (const i of itens ?? []) {
+    totalPorPedido[i.pedido_id] = (totalPorPedido[i.pedido_id] ?? 0) + i.quantidade * i.valor_unitario;
+  }
+  const linhas = pedidos.map((p) => {
+    const subtotal = totalPorPedido[p.id] ?? 0;
+    const desconto = Number(p.desconto ?? 0);
+    const taxa = Number(p.taxa_entrega ?? 0);
+    const total = subtotal - desconto + taxa;
+    const comanda = (p as any).comandas;
+    const clienteNome = p.origem === 'presencial' && comanda
+      ? (Array.isArray(comanda) ? comanda[0]?.nome_cliente : comanda.nome_cliente)
+      : p.cliente_nome;
+    return {
+      ...p,
+      cliente_nome: clienteNome ?? '-',
+      total,
+      desconto,
+    };
+  });
+  const totalGeral = linhas.reduce((s, p) => s + p.total, 0);
+  return { pedidos: linhas, totalGeral };
+}
+
+/** Aplica desconto (de cupom) nos pedidos da comanda para refletir no relatório. Chamado ao imprimir conta com cupom. */
+export async function applyDescontoComanda(comandaId: string, cupomId: string, valorDescontoTotal: number) {
+  const { data: pedidos } = await supabase.from('pedidos').select('id').eq('comanda_id', comandaId).neq('status', 'cancelado');
+  if (!pedidos?.length) return;
+  const valorPorPedido = valorDescontoTotal / pedidos.length;
+  for (const p of pedidos) {
+    await supabase.from('pedidos').update({
+      desconto: valorPorPedido,
+      cupom_id: cupomId,
+      updated_at: new Date().toISOString(),
+    }).eq('id', p.id);
+  }
+}
+
+export async function getRelatorioCancelamentos(desde: string, ate: string) {
+  const { data } = await supabase
+    .from('pedidos')
+    .select('id, numero, origem, motivo_cancelamento, cancelado_por, cancelado_em, created_at, cliente_nome')
+    .eq('status', 'cancelado')
+    .gte('cancelado_em', desde)
+    .lte('cancelado_em', ate)
+    .order('cancelado_em', { ascending: false });
+  const pedidos = (data ?? []) as any[];
+  if (pedidos.length === 0) return { itens: [], total: 0 };
+  const ids = [...new Set(pedidos.map((p) => p.cancelado_por).filter(Boolean))] as string[];
+  const { data: profiles } = ids.length ? await supabase.from('profiles').select('id, nome').in('id', ids) : { data: [] };
+  const nomes: Record<string, string> = {};
+  (profiles ?? []).forEach((r: any) => { nomes[r.id] = r.nome; });
+  const itens = pedidos.map((p) => ({ ...p, cancelado_por_nome: p.cancelado_por ? nomes[p.cancelado_por] ?? p.cancelado_por : '-' }));
+  return { itens, total: itens.length };
 }

@@ -10,7 +10,7 @@ export default function Login() {
 
   // Redireciona no render (mais confiável que useEffect): já logado com perfil carregado
   if (!loading && user && profile) {
-    const to = profile.role === 'admin' ? '/admin' : '/pdv';
+    const to = profile.role === 'admin' ? '/admin' : profile.role === 'cozinha' ? '/cozinha' : '/pdv';
     return <Navigate to={to} replace />;
   }
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { getProdutos } from '../../lib/api';
 import type { Produto } from '../../types/database';
@@ -50,10 +50,19 @@ export default function LojaCarrinho() {
     });
   }, [addId]);
 
+  const qtdDeltaRef = useRef<{ index: number; delta: number; id: number } | null>(null);
+  const appliedIdRef = useRef<number>(0);
   const updateQtd = (index: number, delta: number) => {
+    const id = Date.now();
+    qtdDeltaRef.current = { index, delta, id };
     setItens((prev) => {
-      const next = [...prev];
-      next[index].quantidade = Math.max(0, next[index].quantidade + delta);
+      const applied = qtdDeltaRef.current;
+      if (!applied || applied.index >= prev.length) return prev;
+      if (appliedIdRef.current === applied.id) return prev;
+      appliedIdRef.current = applied.id;
+      const next = prev.map((item, i) =>
+        i === applied.index ? { ...item, quantidade: Math.max(0, item.quantidade + applied.delta) } : item
+      );
       const filtered = next.filter((i) => i.quantidade > 0);
       saveCart(filtered);
       return filtered;

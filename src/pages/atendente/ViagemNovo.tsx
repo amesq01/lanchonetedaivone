@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, ChevronDown, ChevronUp } from 'lucide-react';
 import { getProdutos, createPedidoViagem, getPedidosViagemAbertos } from '../../lib/api';
@@ -32,10 +32,19 @@ export default function AtendenteViagemNovo() {
     setSearch('');
   };
 
+  const qtdDeltaRef = useRef<{ index: number; delta: number; id: number } | null>(null);
+  const appliedIdRef = useRef<number>(0);
   const updateQtd = (index: number, delta: number) => {
+    const id = Date.now();
+    qtdDeltaRef.current = { index, delta, id };
     setCarrinho((c) => {
-      const novo = [...c];
-      novo[index].quantidade = Math.max(0, novo[index].quantidade + delta);
+      const applied = qtdDeltaRef.current;
+      if (!applied || applied.index >= c.length) return c;
+      if (appliedIdRef.current === applied.id) return c;
+      appliedIdRef.current = applied.id;
+      const novo = c.map((item, i) =>
+        i === applied.index ? { ...item, quantidade: Math.max(0, item.quantidade + applied.delta) } : item
+      );
       return novo.filter((i) => i.quantidade > 0);
     });
   };
@@ -85,8 +94,11 @@ export default function AtendenteViagemNovo() {
           <div className="absolute left-0 right-12 top-full mt-1 z-10 rounded-lg border border-stone-200 bg-white shadow-lg max-h-48 overflow-y-auto">
             {filtrados.slice(0, 8).map((p) => (
               <button key={p.id} type="button" onClick={() => addItem(p)} className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-stone-50 border-b border-stone-100 last:border-0">
+                <div className="w-10 h-10 rounded-lg bg-stone-100 flex-shrink-0 overflow-hidden flex items-center justify-center">
+                  {p.imagem_url ? <img src={p.imagem_url} alt="" className="w-full h-full object-cover" /> : <span className="text-stone-400 text-xs">IMG</span>}
+                </div>
                 <span className="text-sm font-medium text-stone-500">{p.codigo}</span>
-                <span className="text-stone-800">{p.descricao}</span>
+                <span className="text-stone-800 truncate">{p.descricao}</span>
                 <span className="ml-auto text-amber-600 font-medium">R$ {Number(p.valor).toFixed(2)}</span>
               </button>
             ))}
@@ -102,7 +114,9 @@ export default function AtendenteViagemNovo() {
           <ul className="divide-y divide-stone-100">
             {carrinho.map((item, i) => (
               <li key={i} className="flex flex-wrap items-center gap-2 p-3">
-                <div className="w-12 h-12 rounded-lg bg-stone-100 flex items-center justify-center text-stone-400 text-xs">IMG</div>
+                <div className="w-12 h-12 rounded-lg bg-stone-100 flex-shrink-0 overflow-hidden flex items-center justify-center">
+                  {item.produto.imagem_url ? <img src={item.produto.imagem_url} alt="" className="w-full h-full object-cover" /> : <span className="text-stone-400 text-xs">IMG</span>}
+                </div>
                 <div className="flex-1 min-w-0">
                   <div className="font-medium text-stone-800">{item.produto.codigo} - {item.produto.descricao}</div>
                   <input type="text" value={item.observacao} onChange={(e) => setObs(i, e.target.value)} placeholder="Observação" className="mt-1 w-full text-sm rounded border border-stone-200 px-2 py-1" />

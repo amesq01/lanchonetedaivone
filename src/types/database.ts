@@ -6,7 +6,7 @@ export interface Database {
       profiles: {
         Row: {
           id: string;
-          role: 'admin' | 'atendente';
+          role: 'admin' | 'atendente' | 'cozinha';
           codigo: string | null;
           nome: string;
           email: string;
@@ -111,6 +111,9 @@ export interface Database {
           desconto: number;
           taxa_entrega: number;
           encerrado_em: string | null;
+          motivo_cancelamento: string | null;
+          cancelado_por: string | null;
+          cancelado_em: string | null;
           created_at: string;
           updated_at: string;
         };

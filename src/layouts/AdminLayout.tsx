@@ -1,5 +1,6 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { useNovoPedidoOnline } from '../hooks/useNovoPedidoOnline';
 import {
   LayoutDashboard,
   UtensilsCrossed,
@@ -11,6 +12,8 @@ import {
   Ticket,
   DollarSign,
   LogOut,
+  BarChart3,
+  FileX,
 } from 'lucide-react';
 
 const nav = [
@@ -22,11 +25,14 @@ const nav = [
   { to: '/admin/produtos', label: 'Produtos', icon: Package },
   { to: '/admin/cupons', label: 'Cupons', icon: Ticket },
   { to: '/admin/taxa-entrega', label: 'Taxa Entrega', icon: DollarSign },
+  { to: '/admin/relatorio-financeiro', label: 'Rel. Financeiro', icon: BarChart3 },
+  { to: '/admin/relatorio-cancelamentos', label: 'Rel. Cancelamentos', icon: FileX },
 ];
 
 export default function AdminLayout() {
   const { profile, signOut } = useAuth();
   const navigate = useNavigate();
+  const { mostrar: novoPedidoOnline, count: pendentesOnline, fechar: fecharNovoPedido } = useNovoPedidoOnline();
 
   const handleSignOut = async () => {
     await signOut();
@@ -35,7 +41,14 @@ export default function AdminLayout() {
 
   return (
     <div className="flex h-screen bg-stone-100">
-      <aside className="w-56 flex flex-col border-r border-stone-200 bg-white">
+      {novoPedidoOnline && (
+        <div className="fixed top-4 right-4 z-[100] flex items-center gap-3 rounded-lg bg-amber-500 px-4 py-3 shadow-lg text-white animate-pulse">
+          <span className="font-semibold">Novo pedido online!</span>
+          <NavLink to="/admin/pedidos-online" className="underline font-medium">Ver ({pendentesOnline})</NavLink>
+          <button onClick={fecharNovoPedido} className="ml-2 rounded px-2 py-0.5 bg-amber-600 hover:bg-amber-700">Fechar</button>
+        </div>
+      )}
+      <aside className="no-print w-56 flex flex-col border-r border-stone-200 bg-white">
         <div className="p-4 border-b border-stone-200">
           <NavLink to="/admin" className="flex items-center gap-2 font-bold text-stone-800">
             <LayoutDashboard className="h-6 w-6 text-amber-600" />

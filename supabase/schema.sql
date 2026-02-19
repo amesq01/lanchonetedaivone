@@ -5,7 +5,7 @@
 -- Perfis: admin, atendente (vinculado a auth.users)
 CREATE TABLE IF NOT EXISTS profiles (
   id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-  role TEXT NOT NULL CHECK (role IN ('admin', 'atendente')),
+  role TEXT NOT NULL CHECK (role IN ('admin', 'atendente', 'cozinha')),
   codigo TEXT UNIQUE,
   nome TEXT NOT NULL,
   email TEXT NOT NULL,
@@ -86,6 +86,9 @@ CREATE TABLE IF NOT EXISTS pedidos (
   desconto DECIMAL(10,2) DEFAULT 0,
   taxa_entrega DECIMAL(10,2) DEFAULT 0,
   encerrado_em TIMESTAMPTZ,
+  motivo_cancelamento TEXT,
+  cancelado_por UUID REFERENCES auth.users(id),
+  cancelado_em TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
