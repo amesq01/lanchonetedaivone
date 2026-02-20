@@ -1,15 +1,20 @@
 import { useEffect, useState } from 'react';
-import { getPedidosViagemAbertos, getTotalComanda, updatePedidoStatus } from '../../lib/api';
+import { getPedidosViagemAbertos, getTotalComanda, getCuponsAtivos, applyDescontoComanda } from '../../lib/api';
 import { supabase } from '../../lib/supabase';
+import type { Cupom } from '../../types/database';
 
 export default function AdminViagem() {
   const [pedidos, setPedidos] = useState<any[]>([]);
-  const [finalizados, setFinalizados] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [accordionFinalizados, setAccordionFinalizados] = useState(false);
   const [popupPagamento, setPopupPagamento] = useState<{ pedidoId: string; comandaId: string } | null>(null);
   const [formaPagamento, setFormaPagamento] = useState('');
-  const [printPedidoId, setPrintPedidoId] = useState<string | null>(null);
+  const [popupImprimir, setPopupImprimir] = useState<any | null>(null);
+  const [contaItensPedido, setContaItensPedido] = useState<{ itens: { codigo: string; descricao: string; quantidade: number; valor: number }[]; total: number } | null>(null);
+  const [cupomDesconto, setCupomDesconto] = useState('');
+  const [cupons, setCupons] = useState<Cupom[]>([]);
+  const [printMode, setPrintMode] = useState(false);
+  const [printData, setPrintData] = useState<{ pedido: any; contaItens: { itens: any[]; total: number }; valorDesconto: number; cupomSelecionado: Cupom | null } | null>(null);
 
   useEffect(() => {
     load();
@@ -17,11 +22,13 @@ export default function AdminViagem() {
 
   async function load() {
     const abertos = await getPedidosViagemAbertos();
-    setPedidos(abertos.filter((p) => p.status !== 'finalizado' && p.status !== 'cancelado'));
-    const { data } = await supabase.from('pedidos').select('*, comandas(nome_cliente)').eq('origem', 'viagem').eq('status', 'finalizado').order('encerrado_em', { ascending: false });
-    setFinalizados((data ?? []) as any[]);
+    setPedidos(abertos);
     setLoading(false);
   }
+
+  useEffect(() => {
+    getCuponsAtivos().then(setCupons);
+  }, []);
 
   async function getTotalPedido(pedidoId: string) {
     const { data: ped } = await supabase.from('pedidos').select('comanda_id').eq('id', pedidoId).single();
@@ -29,12 +36,37 @@ export default function AdminViagem() {
     return getTotalComanda(ped.comanda_id);
   }
 
-  const handleFinalizarPedido = (pedido: any) => {
-    setPrintPedidoId(pedido.id);
+  useEffect(() => {
+    if (popupImprimir) getTotalPedido(popupImprimir.id).then(setContaItensPedido);
+    else setContaItensPedido(null);
+  }, [popupImprimir?.id]);
+
+  const handleAbrirImprimir = (pedido: any) => setPopupImprimir(pedido);
+
+  const handleImprimirConta = async () => {
+    if (!popupImprimir) return;
+    const cupomSelecionado = cupomDesconto ? cupons.find((c) => c.id === cupomDesconto) : null;
+    let contaParaPrint = contaItensPedido ?? await getTotalPedido(popupImprimir.id);
+    const subtotal = contaParaPrint.total;
+    const valorDesconto = cupomSelecionado ? (subtotal * Number(cupomSelecionado.porcentagem)) / 100 : 0;
+    if (cupomSelecionado && valorDesconto > 0) {
+      await applyDescontoComanda(popupImprimir.comanda_id, cupomSelecionado.id, valorDesconto);
+      contaParaPrint = await getTotalPedido(popupImprimir.id);
+      setContaItensPedido(contaParaPrint);
+    }
+    setPrintData({
+      pedido: popupImprimir,
+      contaItens: { itens: contaParaPrint.itens, total: subtotal - valorDesconto },
+      valorDesconto,
+      cupomSelecionado: cupomSelecionado ?? null,
+    });
+    setPrintMode(true);
+    setPopupImprimir(null);
     setTimeout(() => {
       window.print();
-      setPrintPedidoId(null);
-    }, 100);
+      setPrintMode(false);
+      setPrintData(null);
+    }, 150);
   };
 
   const handleEncerrarPedido = (pedido: any) => {
@@ -43,9 +75,9 @@ export default function AdminViagem() {
 
   const confirmarEncerramento = async () => {
     if (!popupPagamento || !formaPagamento) return;
-    await supabase.from('comandas').update({ aberta: false, forma_pagamento: formaPagamento, encerrada_em: new Date().toISOString() }).eq('id', popupPagamento.comandaId);
-    await updatePedidoStatus(popupPagamento.pedidoId, 'finalizado');
-    await supabase.from('pedidos').update({ encerrado_em: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('id', popupPagamento.pedidoId);
+    const now = new Date().toISOString();
+    await supabase.from('comandas').update({ aberta: false, forma_pagamento: formaPagamento, encerrada_em: now }).eq('id', popupPagamento.comandaId);
+    await supabase.from('pedidos').update({ encerrado_em: now, forma_pagamento: formaPagamento, updated_at: now }).eq('id', popupPagamento.pedidoId);
     setPopupPagamento(null);
     setFormaPagamento('');
     load();
@@ -53,15 +85,64 @@ export default function AdminViagem() {
 
   const formas = ['dinheiro', 'pix', 'cartão crédito', 'cartão débito'];
 
+  const comandaAberta = (p: any) => (Array.isArray(p.comandas) ? p.comandas[0]?.aberta : p.comandas?.aberta) !== false;
+  const emPreparacao = pedidos.filter((p) => p.status !== 'finalizado');
+  const prontosEncerrar = pedidos.filter((p) => p.status === 'finalizado' && comandaAberta(p));
+  const finalizadosEncerrados = pedidos.filter((p) => p.status === 'finalizado' && !comandaAberta(p));
+
+  const cupomSelecionado = cupomDesconto ? cupons.find((c) => c.id === cupomDesconto) : null;
+  const subtotalPrint = contaItensPedido?.total ?? 0;
+  const valorDescontoPrint = cupomSelecionado ? (subtotalPrint * Number(cupomSelecionado.porcentagem)) / 100 : 0;
+
+  if (printMode && printData) {
+    const { pedido, contaItens, valorDesconto, cupomSelecionado: cupom } = printData;
+    const clienteNome = pedido.cliente_nome || (pedido.comandas as any)?.nome_cliente || '-';
+    return (
+      <div className="bg-white p-6 text-stone-800">
+        <div className="text-center mb-6">
+          <h1 className="text-2xl font-bold">Lanchonete & Sushi</h1>
+          <p className="mt-2 text-lg">Pedido #{pedido.numero} - VIAGEM - {clienteNome}</p>
+        </div>
+        <div className="border-t border-b border-stone-200 py-3 space-y-1">
+          {contaItens.itens.map((item: any, i: number) => (
+            <div key={i} className="flex justify-between text-sm">
+              <span>{item.codigo} - {item.descricao} - {item.quantidade}x</span>
+              <span>R$ {item.valor.toFixed(2)}</span>
+            </div>
+          ))}
+        </div>
+        <div className="mt-3 space-y-1 text-sm">
+          <div className="flex justify-between">
+            <span>Subtotal</span>
+            <span>R$ {(contaItens.total + valorDesconto).toFixed(2)}</span>
+          </div>
+          {cupom && valorDesconto > 0 && (
+            <div className="flex justify-between text-amber-700">
+              <span>Desconto ({cupom.codigo} - {cupom.porcentagem}%)</span>
+              <span>- R$ {valorDesconto.toFixed(2)}</span>
+            </div>
+          )}
+          <div className="flex justify-between font-bold text-base mt-2 pt-2 border-t border-stone-200">
+            <span>Total</span>
+            <span>R$ {contaItens.total.toFixed(2)}</span>
+          </div>
+        </div>
+        <footer className="text-center mt-8 pt-4 text-stone-500 text-sm">
+          Obrigado! Volte sempre.
+        </footer>
+      </div>
+    );
+  }
+
   if (loading) return <p className="text-stone-500">Carregando...</p>;
 
   return (
-    <div>
+    <div className="no-print">
       <h1 className="text-2xl font-bold text-stone-800 mb-6">Mesa VIAGEM</h1>
       <p className="text-stone-600 mb-4">Pedidos para viagem. Encerre cada pedido após o pagamento.</p>
 
       <div className="space-y-4">
-        {pedidos.map((p) => (
+        {emPreparacao.map((p) => (
           <div key={p.id} className="rounded-xl bg-white p-4 shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
@@ -69,7 +150,28 @@ export default function AdminViagem() {
                 <span className="ml-2 text-stone-600">- {p.cliente_nome || (p.comandas as any)?.nome_cliente}</span>
               </div>
               <div className="flex gap-2">
-                <button onClick={() => handleFinalizarPedido(p)} className="rounded-lg border border-stone-300 px-3 py-1.5 text-sm hover:bg-stone-50">
+                <button onClick={() => handleAbrirImprimir(p)} className="rounded-lg border border-stone-300 px-3 py-1.5 text-sm hover:bg-stone-50">
+                  Imprimir conta
+                </button>
+                <span className="text-sm text-stone-400 py-1.5">Finalize na cozinha para encerrar</span>
+              </div>
+            </div>
+            <ul className="mt-2 text-sm text-stone-600">
+              {(p.pedido_itens ?? []).map((i: any) => (
+                <li key={i.id}>{i.quantidade}x {i.produtos?.descricao}</li>
+              ))}
+            </ul>
+          </div>
+        ))}
+        {prontosEncerrar.map((p) => (
+          <div key={p.id} className="rounded-xl bg-white p-4 shadow-sm border-l-4 border-amber-500">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <span className="font-semibold text-stone-800">Pedido #{p.numero}</span>
+                <span className="ml-2 text-stone-600">- {p.cliente_nome || (p.comandas as any)?.nome_cliente}</span>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => handleAbrirImprimir(p)} className="rounded-lg border border-stone-300 px-3 py-1.5 text-sm hover:bg-stone-50">
                   Imprimir conta
                 </button>
                 <button onClick={() => handleEncerrarPedido(p)} className="rounded-lg bg-amber-600 px-3 py-1.5 text-sm text-white hover:bg-amber-700">
@@ -93,14 +195,44 @@ export default function AdminViagem() {
         </button>
         {accordionFinalizados && (
           <div className="mt-2 space-y-2">
-            {finalizados.map((p) => (
+            {finalizadosEncerrados.map((p) => (
               <div key={p.id} className="rounded-lg border border-stone-200 bg-white px-4 py-2 text-sm">
-                #{p.numero} - {(p.comandas as any)?.nome_cliente ?? p.cliente_nome} - R$ (total)
+                #{p.numero} - {(p.comandas as any)?.nome_cliente ?? p.cliente_nome} - {p.forma_pagamento ? `R$ (${p.forma_pagamento})` : ''}
               </div>
             ))}
           </div>
         )}
       </div>
+
+      {popupImprimir && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
+            <h3 className="font-semibold text-stone-800 mb-4">Imprimir conta - Pedido #{popupImprimir.numero}</h3>
+            <label className="block text-sm font-medium text-stone-600 mb-2">Desconto (cupom)</label>
+            <select
+              value={cupomDesconto}
+              onChange={(e) => setCupomDesconto(e.target.value)}
+              className="w-full rounded-lg border border-stone-300 px-3 py-2 mb-4"
+            >
+              <option value="">Nenhum</option>
+              {cupons.map((c) => (
+                <option key={c.id} value={c.id}>{c.codigo} ({c.porcentagem}%)</option>
+              ))}
+            </select>
+            {cupomSelecionado && contaItensPedido && (
+              <p className="text-sm text-stone-500 mb-2">
+                Desconto: R$ {valorDescontoPrint.toFixed(2)} — Total: R$ {(contaItensPedido.total - valorDescontoPrint).toFixed(2)}
+              </p>
+            )}
+            <div className="flex gap-2 mt-4">
+              <button onClick={handleImprimirConta} className="flex-1 rounded-lg bg-amber-600 py-2 text-white hover:bg-amber-700">
+                Imprimir
+              </button>
+              <button onClick={() => setPopupImprimir(null)} className="rounded-lg border border-stone-300 px-4 py-2 text-stone-600">Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {popupPagamento && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">

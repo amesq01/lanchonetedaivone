@@ -138,6 +138,7 @@ export async function getPedidosCozinha() {
   const { data } = await supabase.from('pedidos').select('*, pedido_itens(*, produtos(*)), comandas(nome_cliente, mesa_id, mesas(numero, nome))').in('status', ['novo_pedido', 'em_preparacao', 'finalizado']).order('created_at');
   const list = (data ?? []) as any[];
   return list.filter((p) => {
+    if (p.origem === 'viagem') return true;
     const itens = p.pedido_itens ?? [];
     const temItemParaCozinha = itens.some((i: any) => (i.produtos?.vai_para_cozinha !== false));
     return temItemParaCozinha;
@@ -147,7 +148,7 @@ export async function getPedidosCozinha() {
 export async function getPedidosViagemAbertos() {
   const { data: mesaViagem } = await supabase.from('mesas').select('id').eq('is_viagem', true).single();
   if (!mesaViagem) return [];
-  const { data } = await supabase.from('pedidos').select('*, pedido_itens(*, produtos(*))').eq('origem', 'viagem').neq('status', 'cancelado').order('created_at', { ascending: false });
+  const { data } = await supabase.from('pedidos').select('*, pedido_itens(*, produtos(*)), comandas(nome_cliente, aberta)').eq('origem', 'viagem').neq('status', 'cancelado').order('created_at', { ascending: false });
   return (data ?? []) as any[];
 }
 
