@@ -5,13 +5,14 @@ type ConfigKey = 'taxa_entrega' | 'quantidade_mesas';
 
 export async function getConfig(key: ConfigKey): Promise<number> {
   const { data } = await supabase.from('config').select('value').eq('key', key).single();
-  const v = data?.value;
+  const row = data as { value?: unknown } | null;
+  const v = row?.value;
   const n = typeof v === 'number' ? v : Number(v);
   return Number.isFinite(n) ? n : 0;
 }
 
 export async function setConfig(key: ConfigKey, value: number) {
-  await supabase.from('config').upsert({ key, value, updated_at: new Date().toISOString() });
+  await (supabase as any).from('config').upsert({ key, value, updated_at: new Date().toISOString() });
 }
 
 export async function getMesas() {
@@ -23,16 +24,15 @@ export async function getMesas() {
 export async function initMesas(quantidade: number) {
   const mesasExistentes = await getMesas();
   if (mesasExistentes.length > 0) {
-    const maxNum = Math.max(...mesasExistentes.map((m) => m.numero), 0);
     const viagem = mesasExistentes.find((m) => m.is_viagem);
     const nums = Array.from({ length: quantidade }, (_, i) => i + 1);
     const toInsert = nums.filter((n) => !mesasExistentes.some((m) => m.numero === n)).map((numero) => ({ numero, nome: `Mesa ${numero}`, is_viagem: false }));
     if (!viagem) toInsert.push({ numero: 0, nome: 'VIAGEM', is_viagem: true });
-    if (toInsert.length) await supabase.from('mesas').insert(toInsert);
+    if (toInsert.length) await (supabase as any).from('mesas').insert(toInsert);
   } else {
     const rows = Array.from({ length: quantidade }, (_, i) => ({ numero: i + 1, nome: `Mesa ${i + 1}`, is_viagem: false }));
     rows.push({ numero: 0, nome: 'VIAGEM', is_viagem: true });
-    await supabase.from('mesas').insert(rows);
+    await (supabase as any).from('mesas').insert(rows);
   }
   await setConfig('quantidade_mesas', quantidade);
   return getMesas();
@@ -45,11 +45,13 @@ export async function getComandaByMesa(mesaId: string) {
 
 /** Mesa IDs que têm comanda aberta com pelo menos um pedido não finalizado/cancelado */
 export async function getMesasIdsComPedidosAbertos(): Promise<Set<string>> {
-  const { data: comandas } = await supabase.from('comandas').select('id, mesa_id').eq('aberta', true);
-  if (!comandas?.length) return new Set();
+  const { data: comandasData } = await supabase.from('comandas').select('id, mesa_id').eq('aberta', true);
+  const comandas = (comandasData ?? []) as { id: string; mesa_id: string }[];
+  if (!comandas.length) return new Set();
   const ids = comandas.map((c) => c.id);
-  const { data: pedidos } = await supabase.from('pedidos').select('comanda_id').in('comanda_id', ids).in('status', ['novo_pedido', 'em_preparacao', 'aguardando_aceite']);
-  const comandasComPedido = new Set((pedidos ?? []).map((p) => p.comanda_id));
+  const { data: pedidosData } = await supabase.from('pedidos').select('comanda_id').in('comanda_id', ids).in('status', ['novo_pedido', 'em_preparacao', 'aguardando_aceite']);
+  const pedidos = (pedidosData ?? []) as { comanda_id: string }[];
+  const comandasComPedido = new Set(pedidos.map((p) => p.comanda_id));
   const mesaIds = new Set<string>();
   comandas.forEach((c) => { if (comandasComPedido.has(c.id)) mesaIds.add(c.mesa_id); });
   return mesaIds;
@@ -63,26 +65,28 @@ export async function getViagemTemPedidosAbertos(): Promise<boolean> {
 
 /** Mesa IDs (presencial) que têm comanda aberta com pelo menos um pedido finalizado = conta pendente de encerramento */
 export async function getMesasIdsComContaPendente(): Promise<Set<string>> {
-  const { data: comandas } = await supabase.from('comandas').select('id, mesa_id').eq('aberta', true);
-  if (!comandas?.length) return new Set();
+  const { data: comandasData } = await supabase.from('comandas').select('id, mesa_id').eq('aberta', true);
+  const comandas = (comandasData ?? []) as { id: string; mesa_id: string }[];
+  if (!comandas.length) return new Set();
   const ids = comandas.map((c) => c.id);
-  const { data: pedidos } = await supabase.from('pedidos').select('comanda_id').in('comanda_id', ids).eq('status', 'finalizado');
-  const comandasComFinalizado = new Set((pedidos ?? []).map((p) => p.comanda_id));
+  const { data: pedidosData } = await supabase.from('pedidos').select('comanda_id').in('comanda_id', ids).eq('status', 'finalizado');
+  const pedidos = (pedidosData ?? []) as { comanda_id: string }[];
+  const comandasComFinalizado = new Set(pedidos.map((p) => p.comanda_id));
   const mesaIds = new Set<string>();
   comandas.forEach((c) => { if (comandasComFinalizado.has(c.id)) mesaIds.add(c.mesa_id); });
   return mesaIds;
 }
 
 export async function openComanda(mesaId: string, atendenteId: string, nomeCliente: string) {
-  const { data, error } = await supabase.from('comandas').insert({ mesa_id: mesaId, atendente_id: atendenteId, nome_cliente: nomeCliente }).select().single();
+  const { data, error } = await (supabase as any).from('comandas').insert({ mesa_id: mesaId, atendente_id: atendenteId, nome_cliente: nomeCliente }).select().single();
   if (error) throw error;
   return data as Database['public']['Tables']['comandas']['Row'];
 }
 
 export async function closeComanda(comandaId: string, formaPagamento: string) {
   const now = new Date().toISOString();
-  await supabase.from('comandas').update({ aberta: false, forma_pagamento: formaPagamento, encerrada_em: now, updated_at: now }).eq('id', comandaId);
-  await supabase.from('pedidos').update({ encerrado_em: now, forma_pagamento: formaPagamento, updated_at: now }).eq('comanda_id', comandaId).neq('status', 'cancelado');
+  await (supabase as any).from('comandas').update({ aberta: false, forma_pagamento: formaPagamento, encerrada_em: now, updated_at: now }).eq('id', comandaId);
+  await (supabase as any).from('pedidos').update({ encerrado_em: now, forma_pagamento: formaPagamento, updated_at: now }).eq('comanda_id', comandaId).neq('status', 'cancelado');
 }
 
 export async function getComandaWithPedidos(comandaId: string) {
@@ -114,18 +118,21 @@ export async function nextPedidoNumero(): Promise<number> {
 
 export async function createPedidoPresencial(comandaId: string, itens: { produto_id: string; quantidade: number; valor_unitario: number; observacao?: string }[]) {
   const numero = await nextPedidoNumero();
-  const { data: pedido, error: e1 } = await supabase.from('pedidos').insert({ numero, comanda_id: comandaId, origem: 'presencial', status: 'novo_pedido' }).select().single();
+  const { data: pedido, error: e1 } = await (supabase as any).from('pedidos').insert({ numero, comanda_id: comandaId, origem: 'presencial', status: 'novo_pedido' }).select().single();
   if (e1) throw e1;
-  await supabase.from('pedido_itens').insert(itens.map((i) => ({ pedido_id: pedido.id, produto_id: i.produto_id, quantidade: i.quantidade, valor_unitario: i.valor_unitario, observacao: i.observacao ?? null })));
+  const ped = pedido as { id: string };
+  await (supabase as any).from('pedido_itens').insert(itens.map((i) => ({ pedido_id: ped.id, produto_id: i.produto_id, quantidade: i.quantidade, valor_unitario: i.valor_unitario, observacao: i.observacao ?? null })));
   return pedido;
 }
 
 export async function createPedidoViagem(nomeCliente: string, atendenteId: string, itens: { produto_id: string; quantidade: number; valor_unitario: number; observacao?: string }[]) {
   const numero = await nextPedidoNumero();
-  const mesaViagem = (await supabase.from('mesas').select('id').eq('is_viagem', true).single()).data;
+  const { data: mesaViagem } = await supabase.from('mesas').select('id').eq('is_viagem', true).single();
   if (!mesaViagem) throw new Error('Mesa VIAGEM não encontrada');
-  const { data: comanda, error: ec } = await supabase.from('comandas').insert({ mesa_id: mesaViagem.id, atendente_id: atendenteId, nome_cliente: nomeCliente, aberta: true }).select().single();
+  const mesa = mesaViagem as { id: string };
+  const { data: comanda, error: ec } = await (supabase as any).from('comandas').insert({ mesa_id: mesa.id, atendente_id: atendenteId, nome_cliente: nomeCliente, aberta: true }).select().single();
   if (ec) throw ec;
+  const com = comanda as { id: string };
   const ids = [...new Set(itens.map((i) => i.produto_id))];
   const { data: produtos } = await supabase.from('produtos').select('id, vai_para_cozinha').in('id', ids);
   const byId: Record<string, { vai_para_cozinha: boolean }> = {};
@@ -133,11 +140,12 @@ export async function createPedidoViagem(nomeCliente: string, atendenteId: strin
   const temItemParaCozinha = itens.some((i) => Boolean(byId[i.produto_id]?.vai_para_cozinha));
   const status = temItemParaCozinha ? 'novo_pedido' : 'finalizado';
   const now = new Date().toISOString();
-  const payload: Record<string, unknown> = { numero, comanda_id: comanda.id, origem: 'viagem', status, cliente_nome: nomeCliente };
+  const payload: Record<string, unknown> = { numero, comanda_id: com.id, origem: 'viagem', status, cliente_nome: nomeCliente };
   if (status === 'finalizado') payload.encerrado_em = now;
-  const { data: pedido, error: e1 } = await supabase.from('pedidos').insert(payload).select().single();
+  const { data: pedido, error: e1 } = await (supabase as any).from('pedidos').insert(payload).select().single();
   if (e1) throw e1;
-  await supabase.from('pedido_itens').insert(itens.map((i) => ({ pedido_id: pedido.id, produto_id: i.produto_id, quantidade: i.quantidade, valor_unitario: i.valor_unitario, observacao: i.observacao ?? null })));
+  const ped = pedido as { id: string };
+  await (supabase as any).from('pedido_itens').insert(itens.map((i) => ({ pedido_id: ped.id, produto_id: i.produto_id, quantidade: i.quantidade, valor_unitario: i.valor_unitario, observacao: i.observacao ?? null })));
   return { pedido, comanda };
 }
 
@@ -149,7 +157,8 @@ export async function updatePedidoStatus(
   const now = new Date().toISOString();
   const payload: Record<string, unknown> = { status, updated_at: now };
   if (status === 'finalizado') {
-    const { data: ped } = await supabase.from('pedidos').select('origem').eq('id', pedidoId).single();
+    const { data: pedData } = await supabase.from('pedidos').select('origem').eq('id', pedidoId).single();
+    const ped = pedData as { origem: string } | null;
     if (ped?.origem !== 'online') payload.encerrado_em = now;
   }
   if (status === 'cancelado' && opts) {
@@ -157,7 +166,7 @@ export async function updatePedidoStatus(
     if (opts.cancelado_por) payload.cancelado_por = opts.cancelado_por;
     payload.cancelado_em = now;
   }
-  await supabase.from('pedidos').update(payload).eq('id', pedidoId);
+  await (supabase as any).from('pedidos').update(payload).eq('id', pedidoId);
 }
 
 export async function getPedidosByComanda(comandaId: string) {
@@ -223,16 +232,16 @@ export async function getPedidosOnlineEncerradosHoje() {
 
 export async function acceptPedidoOnline(pedidoId: string) {
   const now = new Date().toISOString();
-  await supabase.from('pedidos').update({ status: 'novo_pedido', aceito_em: now, updated_at: now }).eq('id', pedidoId);
+  await (supabase as any).from('pedidos').update({ status: 'novo_pedido', aceito_em: now, updated_at: now }).eq('id', pedidoId);
 }
 
 export async function setImprimidoEntregaPedido(pedidoId: string) {
-  await supabase.from('pedidos').update({ imprimido_entrega_em: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('id', pedidoId);
+  await (supabase as any).from('pedidos').update({ imprimido_entrega_em: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('id', pedidoId);
 }
 
 export async function encerrarPedidoOnline(pedidoId: string) {
   const now = new Date().toISOString();
-  await supabase.from('pedidos').update({ encerrado_em: now, updated_at: now }).eq('id', pedidoId);
+  await (supabase as any).from('pedidos').update({ encerrado_em: now, updated_at: now }).eq('id', pedidoId);
 }
 
 export async function createPedidoOnline(payload: {
@@ -253,13 +262,14 @@ export async function createPedidoOnline(payload: {
   let desconto = 0;
   if (payload.cupom_codigo) {
     const codigoTrim = payload.cupom_codigo.trim();
-    const { data: cupom } = await supabase.from('cupons').select('*').ilike('codigo', codigoTrim).eq('ativo', true).maybeSingle();
+    const { data: cupomData } = await supabase.from('cupons').select('*').ilike('codigo', codigoTrim).eq('ativo', true).maybeSingle();
+    const cupom = cupomData as { valido_ate: string; usos_restantes: number; porcentagem: number } | null;
     if (cupom && new Date(cupom.valido_ate) >= new Date() && Number(cupom.usos_restantes) > 0) {
       const subTotal = payload.itens.reduce((s, i) => s + i.quantidade * i.valor_unitario, 0);
       desconto = (subTotal * Number(cupom.porcentagem)) / 100;
     }
   }
-  const { data: pedido, error: e1 } = await supabase.from('pedidos').insert({
+  const { data: pedido, error: e1 } = await (supabase as any).from('pedidos').insert({
     numero,
     comanda_id: null,
     origem: 'online',
@@ -276,7 +286,8 @@ export async function createPedidoOnline(payload: {
     taxa_entrega: taxa,
   }).select().single();
   if (e1) throw e1;
-  await supabase.from('pedido_itens').insert(payload.itens.map((i) => ({ pedido_id: pedido.id, produto_id: i.produto_id, quantidade: i.quantidade, valor_unitario: i.valor_unitario, observacao: i.observacao ?? null })));
+  const ped = pedido as { id: string };
+  await (supabase as any).from('pedido_itens').insert(payload.itens.map((i) => ({ pedido_id: ped.id, produto_id: i.produto_id, quantidade: i.quantidade, valor_unitario: i.valor_unitario, observacao: i.observacao ?? null })));
   return pedido;
 }
 
@@ -287,17 +298,19 @@ export async function getCuponsAtivos() {
 
 /** Repõe os usos restantes do cupom para o valor total (quantidade_usos). */
 export async function reporUsosCupom(cupomId: string) {
-  const { data: cupom } = await supabase.from('cupons').select('quantidade_usos').eq('id', cupomId).single();
+  const { data: cupomData } = await supabase.from('cupons').select('quantidade_usos').eq('id', cupomId).single();
+  const cupom = cupomData as { quantidade_usos: number } | null;
   if (!cupom) return;
-  await supabase.from('cupons').update({ usos_restantes: Number(cupom.quantidade_usos) }).eq('id', cupomId);
+  await (supabase as any).from('cupons').update({ usos_restantes: Number(cupom.quantidade_usos) }).eq('id', cupomId);
 }
 
 /** Valida cupom por código no banco. Retorna o cupom se válido ou mensagem de erro. */
 export async function validarCupom(codigo: string): Promise<{ cupom: Database['public']['Tables']['cupons']['Row'] } | { error: string }> {
   const codigoTrim = codigo?.trim();
   if (!codigoTrim) return { error: 'Informe o código do cupom.' };
-  const { data: cupom, error: err } = await supabase.from('cupons').select('*').ilike('codigo', codigoTrim).maybeSingle();
+  const { data: cupomData, error: err } = await supabase.from('cupons').select('*').ilike('codigo', codigoTrim).maybeSingle();
   if (err) return { error: 'Erro ao consultar cupom.' };
+  const cupom = cupomData as Database['public']['Tables']['cupons']['Row'] | null;
   if (!cupom) return { error: 'Cupom não encontrado.' };
   if (!cupom.ativo) return { error: 'Cupom inativo.' };
   if (new Date(cupom.valido_ate) < new Date()) return { error: 'Cupom expirado.' };
@@ -306,13 +319,15 @@ export async function validarCupom(codigo: string): Promise<{ cupom: Database['p
 }
 
 export async function getTotalComanda(comandaId: string): Promise<{ itens: { descricao: string; codigo: string; quantidade: number; valor: number }[]; total: number }> {
-  const { data: pedidos } = await supabase.from('pedidos').select('id').eq('comanda_id', comandaId).neq('status', 'cancelado');
-  if (!pedidos?.length) return { itens: [], total: 0 };
-  const { data: itens } = await supabase.from('pedido_itens').select('*, produtos(codigo, descricao)').in('pedido_id', pedidos.map((p) => p.id));
+  const { data: pedidosData } = await supabase.from('pedidos').select('id').eq('comanda_id', comandaId).neq('status', 'cancelado');
+  const pedidos = (pedidosData ?? []) as { id: string }[];
+  if (!pedidos.length) return { itens: [], total: 0 };
+  const { data: itensData } = await supabase.from('pedido_itens').select('*, produtos(codigo, descricao)').in('pedido_id', pedidos.map((p) => p.id));
+  const itens = (itensData ?? []) as any[];
   const list: { descricao: string; codigo: string; quantidade: number; valor: number }[] = [];
   let total = 0;
-  for (const i of itens ?? []) {
-    const prod = (i as any).produtos;
+  for (const i of itens) {
+    const prod = i.produtos;
     const linha = { descricao: prod?.descricao ?? '', codigo: prod?.codigo ?? '', quantidade: i.quantidade, valor: i.quantidade * i.valor_unitario };
     list.push(linha);
     total += linha.valor;
@@ -321,26 +336,28 @@ export async function getTotalComanda(comandaId: string): Promise<{ itens: { des
 }
 
 export async function getRelatorioFinanceiro(desde: string, ate: string) {
-  const { data: pedidos } = await supabase
+  const { data } = await supabase
     .from('pedidos')
     .select('id, numero, origem, encerrado_em, created_at, cliente_nome, desconto, taxa_entrega, forma_pagamento, comanda_id, comandas(nome_cliente, mesa_id, mesas(numero, nome))')
     .eq('status', 'finalizado')
     .gte('encerrado_em', desde)
     .lte('encerrado_em', ate)
     .order('encerrado_em');
-  if (!pedidos?.length) return { pedidos: [], totalGeral: 0 };
-  const ids = pedidos.map((p) => p.id);
-  const { data: itens } = await supabase.from('pedido_itens').select('pedido_id, quantidade, valor_unitario').in('pedido_id', ids);
+  const pedidos = (data ?? []) as any[];
+  if (!pedidos.length) return { pedidos: [], totalGeral: 0 };
+  const ids = pedidos.map((p: any) => p.id);
+  const { data: itensData } = await supabase.from('pedido_itens').select('pedido_id, quantidade, valor_unitario').in('pedido_id', ids);
+  const itens = (itensData ?? []) as any[];
   const totalPorPedido: Record<string, number> = {};
-  for (const i of itens ?? []) {
+  for (const i of itens) {
     totalPorPedido[i.pedido_id] = (totalPorPedido[i.pedido_id] ?? 0) + i.quantidade * i.valor_unitario;
   }
-  const linhas = pedidos.map((p) => {
+  const linhas = pedidos.map((p: any) => {
     const subtotal = totalPorPedido[p.id] ?? 0;
     const desconto = Number(p.desconto ?? 0);
     const taxa = Number(p.taxa_entrega ?? 0);
     const total = subtotal - desconto + taxa;
-    const comanda = (p as any).comandas;
+    const comanda = p.comandas;
     const clienteNome = p.origem === 'presencial' && comanda
       ? (Array.isArray(comanda) ? comanda[0]?.nome_cliente : comanda.nome_cliente)
       : p.cliente_nome;
@@ -410,11 +427,12 @@ export async function getRelatorioFinanceiro(desde: string, ate: string) {
 
 /** Aplica desconto (de cupom) nos pedidos da comanda para refletir no relatório. Chamado ao imprimir conta com cupom. */
 export async function applyDescontoComanda(comandaId: string, cupomId: string, valorDescontoTotal: number) {
-  const { data: pedidos } = await supabase.from('pedidos').select('id').eq('comanda_id', comandaId).neq('status', 'cancelado');
-  if (!pedidos?.length) return;
+  const { data } = await supabase.from('pedidos').select('id').eq('comanda_id', comandaId).neq('status', 'cancelado');
+  const pedidos = (data ?? []) as { id: string }[];
+  if (!pedidos.length) return;
   const valorPorPedido = valorDescontoTotal / pedidos.length;
   for (const p of pedidos) {
-    await supabase.from('pedidos').update({
+    await (supabase as any).from('pedidos').update({
       desconto: valorPorPedido,
       cupom_id: cupomId,
       updated_at: new Date().toISOString(),

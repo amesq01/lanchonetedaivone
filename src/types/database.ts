@@ -153,6 +153,10 @@ export interface Database {
         Update: Partial<Database['public']['Tables']['pedido_itens']['Insert']>;
       };
     };
+    Views: Record<string, never>;
+    Functions: Record<string, never>;
+    Enums: Record<string, never>;
+    CompositeTypes: Record<string, never>;
   };
 }
 

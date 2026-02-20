@@ -46,7 +46,7 @@ function saveCart(items: Item[]) {
 export default function LojaCarrinho() {
   const [searchParams] = useSearchParams();
   const addId = searchParams.get('add');
-  const [produtos, setProdutos] = useState<Record<string, Produto>>({});
+  const [, setProdutos] = useState<Record<string, Produto>>({});
   const [itens, setItens] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
   const [cupomInput, setCupomInput] = useState('');

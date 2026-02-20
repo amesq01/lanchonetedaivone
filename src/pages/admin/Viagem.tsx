@@ -32,8 +32,9 @@ export default function AdminViagem() {
 
   async function getTotalPedido(pedidoId: string) {
     const { data: ped } = await supabase.from('pedidos').select('comanda_id').eq('id', pedidoId).single();
-    if (!ped?.comanda_id) return { itens: [], total: 0 };
-    return getTotalComanda(ped.comanda_id);
+    const p = ped as { comanda_id: string } | null;
+    if (!p?.comanda_id) return { itens: [], total: 0 };
+    return getTotalComanda(p.comanda_id);
   }
 
   useEffect(() => {
@@ -76,8 +77,8 @@ export default function AdminViagem() {
   const confirmarEncerramento = async () => {
     if (!popupPagamento || !formaPagamento) return;
     const now = new Date().toISOString();
-    await supabase.from('comandas').update({ aberta: false, forma_pagamento: formaPagamento, encerrada_em: now }).eq('id', popupPagamento.comandaId);
-    await supabase.from('pedidos').update({ encerrado_em: now, forma_pagamento: formaPagamento, updated_at: now }).eq('id', popupPagamento.pedidoId);
+    await (supabase as any).from('comandas').update({ aberta: false, forma_pagamento: formaPagamento, encerrada_em: now }).eq('id', popupPagamento.comandaId);
+    await (supabase as any).from('pedidos').update({ encerrado_em: now, forma_pagamento: formaPagamento, updated_at: now }).eq('id', popupPagamento.pedidoId);
     setPopupPagamento(null);
     setFormaPagamento('');
     load();

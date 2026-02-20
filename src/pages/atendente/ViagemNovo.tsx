@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, ChevronDown, ChevronUp } from 'lucide-react';
-import { getProdutos, createPedidoViagem, getPedidosViagemAbertos } from '../../lib/api';
+import { Plus } from 'lucide-react';
+import { getProdutos, createPedidoViagem } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
 import type { Produto } from '../../types/database';
 

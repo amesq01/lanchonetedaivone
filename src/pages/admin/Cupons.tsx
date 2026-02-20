@@ -54,7 +54,7 @@ export default function AdminCupons() {
       const q = Math.max(1, parseInt(quantidadeUsos, 10) || 1);
       const restantes = editing ? Math.max(0, parseInt(usosRestantes, 10) || 0) : q;
       if (editing) {
-        await supabase.from('cupons').update({
+        await (supabase as any).from('cupons').update({
           porcentagem: Number(porcentagem),
           valido_ate: validoAte,
           quantidade_usos: q,
@@ -62,7 +62,7 @@ export default function AdminCupons() {
           ativo,
         }).eq('id', editing.id);
       } else {
-        await supabase.from('cupons').insert({
+        await (supabase as any).from('cupons').insert({
           codigo: codigo.trim(),
           porcentagem: Number(porcentagem),
           valido_ate: validoAte,

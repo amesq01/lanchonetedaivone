@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Plus, ChevronDown, ChevronUp } from 'lucide-react';
-import { getMesas, getComandaByMesa, getComandaWithPedidos, getProdutos, createPedidoPresencial, getPedidosByComanda, updatePedidoStatus, closeComanda } from '../../lib/api';
+import { getMesas, getComandaByMesa, getProdutos, createPedidoPresencial, getPedidosByComanda, updatePedidoStatus, closeComanda } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
 import type { Produto } from '../../types/database';
 

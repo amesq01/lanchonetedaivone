@@ -8,7 +8,7 @@ const nav = [
 ];
 
 export default function AtendenteLayout() {
-  const { profile, signOut } = useAuth();
+  const { signOut } = useAuth();
   const navigate = useNavigate();
 
   const handleSignOut = async () => {

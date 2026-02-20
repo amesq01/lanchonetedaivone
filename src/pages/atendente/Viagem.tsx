@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { getMesas, getPedidosViagemAbertos } from '../../lib/api';
 
 export default function AtendenteViagem() {
-  const [mesaViagemId, setMesaViagemId] = useState<string | null>(null);
+  const [, setMesaViagemId] = useState<string | null>(null);
   const [pedidos, setPedidos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 

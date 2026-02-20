@@ -75,8 +75,8 @@ export default function AdminProdutos() {
         categoria_id: categoriaId || null,
         updated_at: new Date().toISOString(),
       };
-      if (editing) await supabase.from('produtos').update(payload).eq('id', editing.id);
-      else await supabase.from('produtos').insert(payload);
+      if (editing) await (supabase as any).from('produtos').update(payload).eq('id', editing.id);
+      else await (supabase as any).from('produtos').insert(payload);
       setOpen(false);
       load();
     } finally {
