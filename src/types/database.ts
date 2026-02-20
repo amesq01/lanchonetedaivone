@@ -71,6 +71,7 @@ export interface Database {
           quantidade: number;
           ativo: boolean;
           imagem_url: string | null;
+          vai_para_cozinha: boolean;
           created_at: string;
           updated_at: string;
         };
@@ -114,6 +115,7 @@ export interface Database {
           motivo_cancelamento: string | null;
           cancelado_por: string | null;
           cancelado_em: string | null;
+          tipo_entrega: 'entrega' | 'retirada' | null;
           created_at: string;
           updated_at: string;
         };

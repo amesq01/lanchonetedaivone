@@ -53,6 +53,7 @@ CREATE TABLE IF NOT EXISTS produtos (
   quantidade INT DEFAULT 0,
   ativo BOOLEAN DEFAULT TRUE,
   imagem_url TEXT,
+  vai_para_cozinha BOOLEAN DEFAULT TRUE,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -89,6 +90,7 @@ CREATE TABLE IF NOT EXISTS pedidos (
   motivo_cancelamento TEXT,
   cancelado_por UUID REFERENCES auth.users(id),
   cancelado_em TIMESTAMPTZ,
+  tipo_entrega TEXT CHECK (tipo_entrega IS NULL OR tipo_entrega IN ('entrega', 'retirada')),
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );

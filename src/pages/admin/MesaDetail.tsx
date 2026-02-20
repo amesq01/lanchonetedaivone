@@ -22,6 +22,7 @@ export default function AdminMesaDetail() {
   const [cupomDesconto, setCupomDesconto] = useState<string>('');
   const [popupCancelar, setPopupCancelar] = useState<{ pedidoId: string } | null>(null);
   const [motivoCancelamento, setMotivoCancelamento] = useState('');
+  const [popupPedidosNaoFinalizados, setPopupPedidosNaoFinalizados] = useState(false);
 
   useEffect(() => {
     if (!mesaId) return;
@@ -55,7 +56,30 @@ export default function AdminMesaDetail() {
     }, 150);
   };
 
-  const handleEncerrar = () => {
+  const handleEncerrar = async () => {
+    if (!comanda) return;
+    const naoCancelados = pedidos.filter((p) => p.status !== 'cancelado');
+    const naoFinalizados = naoCancelados.filter((p) => p.status !== 'finalizado');
+    const soItensNaoCozinha = naoFinalizados.filter((p) => {
+      const itens = p.pedido_itens ?? [];
+      if (itens.length === 0) return false;
+      return itens.every((i: any) => i.produtos?.vai_para_cozinha === false);
+    });
+    for (const p of soItensNaoCozinha) {
+      await updatePedidoStatus(p.id, 'finalizado');
+    }
+    let listaParaCheck = pedidos;
+    if (soItensNaoCozinha.length > 0) {
+      const r = await getComandaWithPedidos(comanda.id);
+      listaParaCheck = r?.pedidos ?? pedidos;
+      setPedidos(listaParaCheck);
+    }
+    const pedidosAtivos = listaParaCheck.filter((p) => p.status !== 'cancelado');
+    const todosFinalizados = pedidosAtivos.length === 0 || pedidosAtivos.every((p) => p.status === 'finalizado');
+    if (!todosFinalizados) {
+      setPopupPedidosNaoFinalizados(true);
+      return;
+    }
     setPopupPagamento(true);
   };
 
@@ -227,6 +251,16 @@ export default function AdminMesaDetail() {
               <button onClick={confirmarCancelarPedido} disabled={!motivoCancelamento.trim()} className="flex-1 rounded-lg bg-red-600 py-2 text-white hover:bg-red-700 disabled:opacity-50">Confirmar cancelamento</button>
               <button onClick={() => { setPopupCancelar(null); setMotivoCancelamento(''); }} className="rounded-lg border border-stone-300 px-4 py-2 text-stone-600">Voltar</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {popupPedidosNaoFinalizados && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
+            <h3 className="font-semibold text-stone-800 mb-2">Não é possível encerrar a mesa</h3>
+            <p className="text-sm text-stone-600 mb-4">Há pedidos que ainda não foram finalizados na cozinha. Finalize todos os pedidos antes de encerrar a mesa.</p>
+            <button onClick={() => setPopupPedidosNaoFinalizados(false)} className="w-full rounded-lg bg-amber-600 py-2 text-white hover:bg-amber-700">Entendi</button>
           </div>
         </div>
       )}

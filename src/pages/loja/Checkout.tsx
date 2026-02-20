@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { createPedidoOnline } from '../../lib/api';
+import { createPedidoOnline, getConfig } from '../../lib/api';
 import type { SavedItem } from './Carrinho';
 
 const CART_KEY = 'lanchonete_cart';
@@ -19,6 +19,7 @@ export default function LojaCheckout() {
   const navigate = useNavigate();
   const [nome, setNome] = useState('');
   const [whatsapp, setWhatsapp] = useState('');
+  const [tipoEntrega, setTipoEntrega] = useState<'entrega' | 'retirada'>('entrega');
   const [endereco, setEndereco] = useState('');
   const [formaPagamento, setFormaPagamento] = useState('');
   const [troco, setTroco] = useState('');
@@ -26,8 +27,12 @@ export default function LojaCheckout() {
   const [cupom, setCupom] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [taxaEntrega, setTaxaEntrega] = useState<number | null>(null);
 
   const cart = getCart();
+  useEffect(() => {
+    getConfig('taxa_entrega').then(setTaxaEntrega);
+  }, []);
   if (cart.length === 0 && !submitting) {
     return (
       <div className="min-h-screen bg-stone-50 flex items-center justify-center p-4">
@@ -58,9 +63,10 @@ export default function LojaCheckout() {
       await createPedidoOnline({
         cliente_nome: nome,
         cliente_whatsapp: whatsapp,
-        cliente_endereco: endereco,
+        cliente_endereco: tipoEntrega === 'entrega' ? endereco : 'Retirada no local',
         forma_pagamento: formaPagamento,
-        troco_para: formaPagamento === 'dinheiro' && troco ? Number(troco) : undefined,
+        tipo_entrega: tipoEntrega,
+        troco_para: formaPagamento === 'Dinheiro' && troco ? Number(troco) : undefined,
         observacoes: observacoes || undefined,
         cupom_codigo: cupom || undefined,
         itens,
@@ -93,9 +99,25 @@ export default function LojaCheckout() {
             <input value={whatsapp} onChange={(e) => setWhatsapp(e.target.value)} required placeholder="(00) 00000-0000" className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-stone-600">Endereço *</label>
-            <textarea value={endereco} onChange={(e) => setEndereco(e.target.value)} required rows={2} className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2" placeholder="Rua, número, bairro, complemento" />
+            <label className="block text-sm font-medium text-stone-600">Como deseja receber? *</label>
+            <div className="mt-2 flex gap-4">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="radio" name="tipoEntrega" value="entrega" checked={tipoEntrega === 'entrega'} onChange={() => setTipoEntrega('entrega')} className="border-stone-300" />
+                <span>Entrega</span>
+                {taxaEntrega !== null && taxaEntrega > 0 && <span className="text-stone-500 text-sm">(taxa R$ {taxaEntrega.toFixed(2)})</span>}
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="radio" name="tipoEntrega" value="retirada" checked={tipoEntrega === 'retirada'} onChange={() => setTipoEntrega('retirada')} className="border-stone-300" />
+                <span>Retirada no local (grátis)</span>
+              </label>
+            </div>
           </div>
+          {tipoEntrega === 'entrega' && (
+            <div>
+              <label className="block text-sm font-medium text-stone-600">Endereço *</label>
+              <textarea value={endereco} onChange={(e) => setEndereco(e.target.value)} required rows={2} className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2" placeholder="Rua, número, bairro, complemento" />
+            </div>
+          )}
           <div>
             <label className="block text-sm font-medium text-stone-600">Forma de pagamento *</label>
             <select value={formaPagamento} onChange={(e) => setFormaPagamento(e.target.value)} required className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2">

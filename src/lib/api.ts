@@ -118,11 +118,13 @@ export async function updatePedidoStatus(
   status: 'novo_pedido' | 'em_preparacao' | 'finalizado' | 'cancelado',
   opts?: { motivo_cancelamento?: string; cancelado_por?: string }
 ) {
-  const payload: Record<string, unknown> = { status, updated_at: new Date().toISOString() };
+  const now = new Date().toISOString();
+  const payload: Record<string, unknown> = { status, updated_at: now };
+  if (status === 'finalizado') payload.encerrado_em = now;
   if (status === 'cancelado' && opts) {
     if (opts.motivo_cancelamento) payload.motivo_cancelamento = opts.motivo_cancelamento;
     if (opts.cancelado_por) payload.cancelado_por = opts.cancelado_por;
-    payload.cancelado_em = new Date().toISOString();
+    payload.cancelado_em = now;
   }
   await supabase.from('pedidos').update(payload).eq('id', pedidoId);
 }
@@ -134,7 +136,12 @@ export async function getPedidosByComanda(comandaId: string) {
 
 export async function getPedidosCozinha() {
   const { data } = await supabase.from('pedidos').select('*, pedido_itens(*, produtos(*)), comandas(nome_cliente, mesa_id, mesas(numero, nome))').in('status', ['novo_pedido', 'em_preparacao', 'finalizado']).order('created_at');
-  return (data ?? []) as any[];
+  const list = (data ?? []) as any[];
+  return list.filter((p) => {
+    const itens = p.pedido_itens ?? [];
+    const temItemParaCozinha = itens.some((i: any) => (i.produtos?.vai_para_cozinha !== false));
+    return temItemParaCozinha;
+  });
 }
 
 export async function getPedidosViagemAbertos() {
@@ -158,12 +165,14 @@ export async function createPedidoOnline(payload: {
   cliente_whatsapp: string;
   cliente_endereco: string;
   forma_pagamento: string;
+  tipo_entrega?: 'entrega' | 'retirada';
   troco_para?: number;
   observacoes?: string;
   cupom_codigo?: string;
   itens: { produto_id: string; quantidade: number; valor_unitario: number; observacao?: string }[];
 }) {
-  const taxa = await getConfig('taxa_entrega');
+  const tipoEntrega = payload.tipo_entrega ?? 'entrega';
+  const taxa = tipoEntrega === 'retirada' ? 0 : await getConfig('taxa_entrega');
   const numero = await nextPedidoNumero();
   let desconto = 0;
   if (payload.cupom_codigo) {
@@ -182,6 +191,7 @@ export async function createPedidoOnline(payload: {
     cliente_whatsapp: payload.cliente_whatsapp,
     cliente_endereco: payload.cliente_endereco,
     forma_pagamento: payload.forma_pagamento,
+    tipo_entrega: tipoEntrega,
     troco_para: payload.troco_para ?? null,
     observacoes: payload.observacoes ?? null,
     desconto,
@@ -215,7 +225,7 @@ export async function getTotalComanda(comandaId: string): Promise<{ itens: { des
 export async function getRelatorioFinanceiro(desde: string, ate: string) {
   const { data: pedidos } = await supabase
     .from('pedidos')
-    .select('id, numero, origem, encerrado_em, created_at, cliente_nome, desconto, taxa_entrega, forma_pagamento, comandas(nome_cliente)')
+    .select('id, numero, origem, encerrado_em, created_at, cliente_nome, desconto, taxa_entrega, forma_pagamento, comanda_id, comandas(nome_cliente, mesa_id, mesas(numero, nome))')
     .eq('status', 'finalizado')
     .gte('encerrado_em', desde)
     .lte('encerrado_em', ate)
@@ -241,10 +251,63 @@ export async function getRelatorioFinanceiro(desde: string, ate: string) {
       cliente_nome: clienteNome ?? '-',
       total,
       desconto,
+      subtotal,
+      taxa,
     };
   });
-  const totalGeral = linhas.reduce((s, p) => s + p.total, 0);
-  return { pedidos: linhas, totalGeral };
+
+  const comComanda = linhas.filter((p) => p.comanda_id);
+  const online = linhas.filter((p) => !p.comanda_id);
+
+  const porComanda = new Map<string, typeof linhas>();
+  for (const p of comComanda) {
+    const cid = p.comanda_id!;
+    if (!porComanda.has(cid)) porComanda.set(cid, []);
+    porComanda.get(cid)!.push(p);
+  }
+
+  function mesaFromComanda(comanda: any): string {
+    if (!comanda) return '-';
+    const c = Array.isArray(comanda) ? comanda[0] : comanda;
+    const mesas = c?.mesas;
+    const m = Array.isArray(mesas) ? mesas[0] : mesas;
+    if (!m) return '-';
+    return m.nome ?? `Mesa ${m.numero ?? '-'}`;
+  }
+
+  const aggregated: any[] = [];
+  for (const [comandaId, grupo] of porComanda) {
+    const numeros = grupo.map((p) => p.numero).sort((a, b) => a - b);
+    const descontoTotal = grupo.reduce((s, p) => s + p.desconto, 0);
+    const subtotalMesa = grupo.reduce((s, p) => s + p.subtotal, 0);
+    const totalMesa = grupo.reduce((s, p) => s + p.total, 0);
+    const primeiro = grupo[0];
+    const comanda = (primeiro as any).comandas;
+    aggregated.push({
+      id: 'comanda-' + comandaId,
+      numero: numeros.join(', '),
+      origem: 'presencial',
+      encerrado_em: primeiro.encerrado_em,
+      created_at: primeiro.created_at,
+      cliente_nome: primeiro.cliente_nome ?? '-',
+      forma_pagamento: primeiro.forma_pagamento ?? '-',
+      mesa: mesaFromComanda(comanda),
+      subtotal: subtotalMesa,
+      taxa: 0,
+      desconto: descontoTotal,
+      total: totalMesa,
+    });
+  }
+
+  for (const p of online) {
+    (p as any).mesa = '-';
+  }
+
+  const resultado = [...aggregated, ...online].sort(
+    (a, b) => new Date(a.encerrado_em || 0).getTime() - new Date(b.encerrado_em || 0).getTime()
+  );
+  const totalGeral = resultado.reduce((s, p) => s + p.total, 0);
+  return { pedidos: resultado, totalGeral };
 }
 
 /** Aplica desconto (de cupom) nos pedidos da comanda para refletir no relatório. Chamado ao imprimir conta com cupom. */

@@ -13,6 +13,7 @@ export default function AdminProdutos() {
   const [valor, setValor] = useState('');
   const [quantidade, setQuantidade] = useState(0);
   const [ativo, setAtivo] = useState(true);
+  const [vaiParaCozinha, setVaiParaCozinha] = useState(true);
   const [imagemUrl, setImagemUrl] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -35,6 +36,7 @@ export default function AdminProdutos() {
       setValor(String(prod.valor));
       setQuantidade(prod.quantidade);
       setAtivo(prod.ativo);
+      setVaiParaCozinha(prod.vai_para_cozinha !== false);
       setImagemUrl(prod.imagem_url ?? '');
     } else {
       setEditing(null);
@@ -44,6 +46,7 @@ export default function AdminProdutos() {
       setValor('');
       setQuantidade(0);
       setAtivo(true);
+      setVaiParaCozinha(true);
       setImagemUrl('');
     }
     setOpen(true);
@@ -61,6 +64,7 @@ export default function AdminProdutos() {
         quantidade,
         ativo,
         imagem_url: imagemUrl.trim() || null,
+        vai_para_cozinha: vaiParaCozinha,
         updated_at: new Date().toISOString(),
       };
       if (editing) await supabase.from('produtos').update(payload).eq('id', editing.id);
@@ -92,6 +96,7 @@ export default function AdminProdutos() {
               <th className="px-4 py-3 text-left text-sm font-medium text-stone-600">Valor</th>
               <th className="px-4 py-3 text-left text-sm font-medium text-stone-600">Qtd</th>
               <th className="px-4 py-3 text-left text-sm font-medium text-stone-600">Ativo</th>
+              <th className="px-4 py-3 text-left text-sm font-medium text-stone-600">Cozinha</th>
               <th className="px-4 py-3 text-left text-sm font-medium text-stone-600">Foto</th>
               <th className="px-4 py-3"></th>
             </tr>
@@ -105,6 +110,7 @@ export default function AdminProdutos() {
                 <td className="px-4 py-3">R$ {Number(p.valor).toFixed(2)}</td>
                 <td className="px-4 py-3">{p.quantidade}</td>
                 <td className="px-4 py-3">{p.ativo ? 'Sim' : 'Não'}</td>
+                <td className="px-4 py-3">{p.vai_para_cozinha !== false ? 'Sim' : 'Não'}</td>
                 <td className="px-4 py-3">
                   {p.imagem_url ? <img src={p.imagem_url} alt="" className="w-10 h-10 rounded object-cover" /> : <span className="text-stone-400 text-xs">—</span>}
                 </td>
@@ -150,6 +156,10 @@ export default function AdminProdutos() {
               <div className="flex items-center gap-2">
                 <input type="checkbox" id="ativo" checked={ativo} onChange={(e) => setAtivo(e.target.checked)} className="rounded border-stone-300" />
                 <label htmlFor="ativo" className="text-sm text-stone-600">Ativo</label>
+              </div>
+              <div className="flex items-center gap-2">
+                <input type="checkbox" id="vai_para_cozinha" checked={vaiParaCozinha} onChange={(e) => setVaiParaCozinha(e.target.checked)} className="rounded border-stone-300" />
+                <label htmlFor="vai_para_cozinha" className="text-sm text-stone-600">Vai para cozinha (preparo)</label>
               </div>
               <div className="flex gap-2 pt-2">
                 <button type="submit" disabled={submitting} className="flex-1 rounded-lg bg-amber-600 py-2 text-white hover:bg-amber-700 disabled:opacity-50">

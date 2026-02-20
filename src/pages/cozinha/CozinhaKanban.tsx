@@ -39,7 +39,14 @@ export default function CozinhaKanban() {
     load();
   }
 
-  const porColuna = (key: string) => pedidos.filter((p) => p.status === key);
+  const hoje = new Date().toDateString();
+
+  const porColuna = (key: string) => {
+    if (key === 'finalizado') {
+      return pedidos.filter((p) => p.status === 'finalizado' && (p.encerrado_em ? new Date(p.encerrado_em).toDateString() === hoje : new Date(p.updated_at).toDateString() === hoje));
+    }
+    return pedidos.filter((p) => p.status === key);
+  };
 
   if (loading) return <p className="text-stone-500">Carregando...</p>;
 

@@ -71,6 +71,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setProfile(null);
         await fetchProfile(session.user.id);
       } else {
+        if (document.hidden) return;
+        await new Promise((r) => setTimeout(r, 400));
         const { data: { session: current } } = await supabase.auth.getSession();
         if (current) {
           setSession(current);

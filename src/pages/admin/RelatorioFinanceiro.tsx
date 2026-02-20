@@ -75,10 +75,13 @@ export default function RelatorioFinanceiro() {
               <thead className="bg-stone-50 border-b border-stone-200">
                 <tr>
                   <th className="px-4 py-3 text-left text-sm font-medium text-stone-600">Data</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-stone-600">#</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-stone-600">Pedido</th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-stone-600">Origem</th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-stone-600">Cliente</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-stone-600">Mesa</th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-stone-600">Pagamento</th>
+                  <th className="px-4 py-3 text-right text-sm font-medium text-stone-600">Subtotal</th>
+                  <th className="px-4 py-3 text-right text-sm font-medium text-stone-600">Taxa</th>
                   <th className="px-4 py-3 text-right text-sm font-medium text-stone-600">Desconto</th>
                   <th className="px-4 py-3 text-right text-sm font-medium text-stone-600">Total</th>
                 </tr>
@@ -90,7 +93,10 @@ export default function RelatorioFinanceiro() {
                     <td className="px-4 py-2">{p.numero}</td>
                     <td className="px-4 py-2 text-sm">{p.origem}</td>
                     <td className="px-4 py-2 text-sm">{p.cliente_nome ?? '-'}</td>
+                    <td className="px-4 py-2 text-sm">{p.mesa ?? '-'}</td>
                     <td className="px-4 py-2 text-sm">{p.forma_pagamento ?? '-'}</td>
+                    <td className="px-4 py-2 text-right text-sm">R$ {Number(p.subtotal ?? 0).toFixed(2)}</td>
+                    <td className="px-4 py-2 text-right text-sm">{Number(p.taxa ?? 0) > 0 ? `R$ ${Number(p.taxa).toFixed(2)}` : '-'}</td>
                     <td className="px-4 py-2 text-right text-sm">{Number(p.desconto ?? 0) > 0 ? `R$ ${Number(p.desconto).toFixed(2)}` : '-'}</td>
                     <td className="px-4 py-2 text-right font-medium">R$ {Number(p.total ?? 0).toFixed(2)}</td>
                   </tr>
