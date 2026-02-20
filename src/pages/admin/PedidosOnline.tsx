@@ -74,11 +74,29 @@ export default function AdminPedidosOnline() {
         {p.ponto_referencia && <p className="text-sm text-stone-600">Ref: {p.ponto_referencia}</p>}
         <p className="mt-2 text-sm">Pagamento: {p.forma_pagamento} {p.troco_para ? `- Troco para R$ ${Number(p.troco_para).toFixed(2)}` : ''}</p>
         {p.observacoes && <p className="text-sm italic mt-1">{p.observacoes}</p>}
-        <ul className="mt-4 border-t border-stone-200 pt-2 space-y-1">
-          {(p.pedido_itens ?? []).map((i: any) => (
-            <li key={i.id}>{i.quantidade}x {i.produtos?.descricao} {i.observacao ? `(${i.observacao})` : ''}</li>
-          ))}
-        </ul>
+        <table className="mt-4 w-full border-collapse border border-stone-200 text-sm">
+          <thead>
+            <tr className="bg-stone-100">
+              <th className="border border-stone-200 px-2 py-1.5 text-left font-semibold">Código</th>
+              <th className="border border-stone-200 px-2 py-1.5 text-left font-semibold">Produto</th>
+              <th className="border border-stone-200 px-2 py-1.5 text-center font-semibold">Quantidade</th>
+              <th className="border border-stone-200 px-2 py-1.5 text-right font-semibold">Valor</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(p.pedido_itens ?? []).map((i: any) => (
+              <tr key={i.id}>
+                <td className="border border-stone-200 px-2 py-1">{i.produtos?.codigo ?? '-'}</td>
+                <td className="border border-stone-200 px-2 py-1">{i.produtos?.descricao ?? '-'}{i.observacao ? ` (${i.observacao})` : ''}</td>
+                <td className="border border-stone-200 px-2 py-1 text-center">{i.quantidade}</td>
+                <td className="border border-stone-200 px-2 py-1 text-right">R$ {((i.quantidade || 0) * Number(i.valor_unitario || 0)).toFixed(2)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <div className="mt-3 text-right font-bold text-base pt-2 border-t border-stone-200">
+          Total: R$ {totalPedido(p).toFixed(2)}
+        </div>
       </div>
     );
   }

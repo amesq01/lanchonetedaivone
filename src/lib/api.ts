@@ -170,6 +170,29 @@ export async function getPedidosViagemAbertos() {
   return (data ?? []) as any[];
 }
 
+/** Retorna início e fim do dia de hoje em Brasília (America/Sao_Paulo) em ISO UTC. */
+function hojeBrasiliaUTC(): { desde: string; ate: string } {
+  const brDateStr = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+  const [y, m, d] = brDateStr.split('-').map(Number);
+  const desde = new Date(Date.UTC(y, m - 1, d, 3, 0, 0, 0)).toISOString();
+  const ate = new Date(Date.UTC(y, m - 1, d + 1, 2, 59, 59, 999)).toISOString();
+  return { desde, ate };
+}
+
+export async function getPedidosPresencialEncerradosHoje() {
+  const { desde, ate } = hojeBrasiliaUTC();
+  const { data } = await supabase
+    .from('pedidos')
+    .select('*, pedido_itens(*, produtos(*)), comandas(nome_cliente, mesa_id, mesas(numero, nome))')
+    .eq('origem', 'presencial')
+    .eq('status', 'finalizado')
+    .not('encerrado_em', 'is', null)
+    .gte('encerrado_em', desde)
+    .lte('encerrado_em', ate)
+    .order('encerrado_em', { ascending: false });
+  return (data ?? []) as any[];
+}
+
 export async function getPedidosOnlinePendentes() {
   const { data } = await supabase.from('pedidos').select('*, pedido_itens(*, produtos(*))').eq('origem', 'online').eq('status', 'aguardando_aceite').order('created_at');
   return (data ?? []) as any[];
@@ -181,15 +204,14 @@ export async function getPedidosOnlineTodos() {
 }
 
 export async function getPedidosOnlineEncerradosHoje() {
-  const hoje = new Date().toISOString().slice(0, 10);
-  const desde = hoje + 'T00:00:00.000Z';
-  const ate = hoje + 'T23:59:59.999Z';
+  const { desde, ate } = hojeBrasiliaUTC();
   const { data } = await supabase.from('pedidos').select('*, pedido_itens(*, produtos(*))').eq('origem', 'online').eq('status', 'finalizado').not('encerrado_em', 'is', null).gte('encerrado_em', desde).lte('encerrado_em', ate).order('encerrado_em', { ascending: false });
   return (data ?? []) as any[];
 }
 
 export async function acceptPedidoOnline(pedidoId: string) {
-  await supabase.from('pedidos').update({ status: 'novo_pedido', updated_at: new Date().toISOString() }).eq('id', pedidoId);
+  const now = new Date().toISOString();
+  await supabase.from('pedidos').update({ status: 'novo_pedido', aceito_em: now, updated_at: now }).eq('id', pedidoId);
 }
 
 export async function setImprimidoEntregaPedido(pedidoId: string) {

@@ -129,6 +129,7 @@ export interface Database {
           tipo_entrega: 'entrega' | 'retirada' | null;
           ponto_referencia: string | null;
           imprimido_entrega_em: string | null;
+          aceito_em: string | null;
           created_at: string;
           updated_at: string;
         };

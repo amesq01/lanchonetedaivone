@@ -110,14 +110,26 @@ export default function AdminViagem() {
           <h1 className="text-2xl font-bold">Lanchonete & Sushi</h1>
           <p className="mt-2 text-lg">Pedido #{pedido.numero} - VIAGEM - {clienteNome}</p>
         </div>
-        <div className="border-t border-b border-stone-200 py-3 space-y-1">
-          {contaItens.itens.map((item: any, i: number) => (
-            <div key={i} className="flex justify-between text-sm">
-              <span>{item.codigo} - {item.descricao} - {item.quantidade}x</span>
-              <span>R$ {item.valor.toFixed(2)}</span>
-            </div>
-          ))}
-        </div>
+        <table className="w-full border-collapse border border-stone-200 text-sm mt-4">
+          <thead>
+            <tr className="bg-stone-100">
+              <th className="border border-stone-200 px-2 py-1.5 text-left font-semibold">Código</th>
+              <th className="border border-stone-200 px-2 py-1.5 text-left font-semibold">Produto</th>
+              <th className="border border-stone-200 px-2 py-1.5 text-center font-semibold">Quantidade</th>
+              <th className="border border-stone-200 px-2 py-1.5 text-right font-semibold">Valor</th>
+            </tr>
+          </thead>
+          <tbody>
+            {contaItens.itens.map((item: any, i: number) => (
+              <tr key={i}>
+                <td className="border border-stone-200 px-2 py-1">{item.codigo}</td>
+                <td className="border border-stone-200 px-2 py-1">{item.descricao}</td>
+                <td className="border border-stone-200 px-2 py-1 text-center">{item.quantidade}</td>
+                <td className="border border-stone-200 px-2 py-1 text-right">R$ {item.valor.toFixed(2)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
         <div className="mt-3 space-y-1 text-sm">
           <div className="flex justify-between">
             <span>Subtotal</span>

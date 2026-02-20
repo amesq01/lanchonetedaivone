@@ -1,14 +1,16 @@
-import { Outlet, useNavigate } from 'react-router-dom';
+import { Outlet } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { LogOut } from 'lucide-react';
 
 export default function CozinhaLayout() {
   const { profile, signOut } = useAuth();
-  const navigate = useNavigate();
 
   const handleSignOut = async () => {
-    await signOut();
-    navigate('/login');
+    try {
+      await signOut();
+    } finally {
+      window.location.replace('/login');
+    }
   };
 
   return (
@@ -18,6 +20,7 @@ export default function CozinhaLayout() {
         <div className="flex items-center gap-2">
           <span className="text-sm text-stone-500">{profile?.nome}</span>
           <button
+            type="button"
             onClick={handleSignOut}
             className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-stone-600 hover:bg-stone-100"
           >

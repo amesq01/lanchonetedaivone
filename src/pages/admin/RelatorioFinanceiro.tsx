@@ -1,6 +1,41 @@
 import { useEffect, useState } from 'react';
 import { getRelatorioFinanceiro } from '../../lib/api';
 
+const TIMEZONE_BR = 'America/Sao_Paulo';
+
+/** Retorna início e fim do período em UTC (meia-noite a meia-noite em Brasília, UTC-3). Formato para o backend: "YYYY-MM-DD HH:mm:ss". */
+function periodoParaUTC(periodo: 'dia' | 'mes' | 'ano', dataRef: string): { desde: string; ate: string } {
+  const fmt = (d: Date) => d.toISOString().slice(0, 19).replace('T', ' ');
+  if (periodo === 'dia') {
+    const [y, m, d] = dataRef.slice(0, 10).split('-').map(Number);
+    const desde = fmt(new Date(Date.UTC(y, m - 1, d, 3, 0, 0, 0)));
+    const ate = fmt(new Date(Date.UTC(y, m - 1, d + 1, 3, 0, 0, 0)));
+    return { desde, ate };
+  }
+  if (periodo === 'mes') {
+    const [y, m] = dataRef.slice(0, 7).split('-').map(Number);
+    const desde = fmt(new Date(Date.UTC(y, m - 1, 1, 3, 0, 0, 0)));
+    const ate = fmt(new Date(Date.UTC(y, m, 1, 3, 0, 0, 0)));
+    return { desde, ate };
+  }
+  const y = Number(dataRef.slice(0, 4));
+  const desde = fmt(new Date(Date.UTC(y, 0, 1, 3, 0, 0, 0)));
+  const ate = fmt(new Date(Date.UTC(y + 1, 0, 1, 3, 0, 0, 0)));
+  return { desde, ate };
+}
+
+function formatarDataBR(iso: string | null): string {
+  if (!iso) return '-';
+  return new Date(iso).toLocaleString('pt-BR', {
+    timeZone: TIMEZONE_BR,
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
 type Periodo = 'dia' | 'mes' | 'ano';
 
 export default function RelatorioFinanceiro() {
@@ -11,23 +46,7 @@ export default function RelatorioFinanceiro() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    let desde: string;
-    let ate: string;
-    const d = new Date(dataRef + 'T12:00:00');
-    if (periodo === 'dia') {
-      desde = d.toISOString().slice(0, 19).replace('T', ' ');
-      ate = new Date(d.getTime() + 24 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
-    } else if (periodo === 'mes') {
-      d.setDate(1);
-      desde = d.toISOString().slice(0, 19).replace('T', ' ');
-      d.setMonth(d.getMonth() + 1);
-      ate = d.toISOString().slice(0, 19).replace('T', ' ');
-    } else {
-      d.setMonth(0, 1);
-      desde = d.toISOString().slice(0, 19).replace('T', ' ');
-      d.setFullYear(d.getFullYear() + 1);
-      ate = d.toISOString().slice(0, 19).replace('T', ' ');
-    }
+    const { desde, ate } = periodoParaUTC(periodo, dataRef);
     setLoading(true);
     getRelatorioFinanceiro(desde, ate)
       .then((r) => {
@@ -89,7 +108,7 @@ export default function RelatorioFinanceiro() {
               <tbody>
                 {pedidos.map((p) => (
                   <tr key={p.id} className="border-b border-stone-100">
-                    <td className="px-4 py-2 text-sm">{p.encerrado_em ? new Date(p.encerrado_em).toLocaleString('pt-BR') : '-'}</td>
+                    <td className="px-4 py-2 text-sm">{formatarDataBR(p.encerrado_em)}</td>
                     <td className="px-4 py-2">{p.numero}</td>
                     <td className="px-4 py-2 text-sm">{p.origem}</td>
                     <td className="px-4 py-2 text-sm">{p.cliente_nome ?? '-'}</td>

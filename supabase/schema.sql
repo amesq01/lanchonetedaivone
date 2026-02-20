@@ -102,6 +102,7 @@ CREATE TABLE IF NOT EXISTS pedidos (
   tipo_entrega TEXT CHECK (tipo_entrega IS NULL OR tipo_entrega IN ('entrega', 'retirada')),
   ponto_referencia TEXT,
   imprimido_entrega_em TIMESTAMPTZ,
+  aceito_em TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );

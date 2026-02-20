@@ -7,6 +7,18 @@ const COLUNAS = [
   { key: 'finalizado', label: 'Finalizado' },
 ] as const;
 
+function pedidoGeradoHa(fromAt: string): string {
+  const min = Math.floor((Date.now() - new Date(fromAt).getTime()) / 60_000);
+  if (min < 1) return 'há menos de 1 min';
+  if (min === 1) return 'há 1 min';
+  return `há ${min} min`;
+}
+
+function dataRefPedido(p: any): string | null {
+  if (p.origem === 'online') return p.aceito_em ?? p.created_at ?? null;
+  return p.created_at ?? null;
+}
+
 function nomeClienteEMesa(p: any) {
   const nome = p.cliente_nome || (p.comandas as any)?.nome_cliente || '-';
   const comandas = p.comandas as any;
@@ -21,10 +33,17 @@ function nomeClienteEMesa(p: any) {
 export default function CozinhaKanban() {
   const [pedidos, setPedidos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [, setTick] = useState(0);
 
   useEffect(() => {
     load();
     const t = setInterval(load, 10000);
+    return () => clearInterval(t);
+  }, []);
+
+  // Atualiza "há X minutos" a cada minuto nas duas primeiras colunas
+  useEffect(() => {
+    const t = setInterval(() => setTick((n) => n + 1), 60_000);
     return () => clearInterval(t);
   }, []);
 
@@ -60,9 +79,14 @@ export default function CozinhaKanban() {
               <div key={p.id} className="rounded-lg bg-white p-3 shadow-sm border border-stone-200 flex-shrink-0">
                 <div className="flex items-center justify-between gap-2 mb-2">
                   <span className="font-medium text-stone-800">#{p.numero}</span>
-                  <span className={`text-xs px-2 py-0.5 rounded ${p.origem === 'online' ? 'bg-blue-100 text-blue-800' : p.origem === 'viagem' ? 'bg-amber-100 text-amber-800' : 'bg-stone-100 text-stone-600'}`}>
-                    {p.origem === 'online' ? 'ONLINE' : p.origem === 'viagem' ? 'VIAGEM' : 'Presencial'}
-                  </span>
+                  <div className="flex flex-col items-end">
+                    <span className={`text-xs px-2 py-0.5 rounded ${p.origem === 'online' ? 'bg-blue-100 text-blue-800' : p.origem === 'viagem' ? 'bg-amber-100 text-amber-800' : 'bg-stone-100 text-stone-600'}`}>
+                      {p.origem === 'online' ? 'ONLINE' : p.origem === 'viagem' ? 'VIAGEM' : 'Presencial'}
+                    </span>
+                    {(col.key === 'novo_pedido' || col.key === 'em_preparacao') && dataRefPedido(p) && (
+                      <span className="text-[10px] text-stone-500 mt-0.5">{pedidoGeradoHa(dataRefPedido(p)!)}</span>
+                    )}
+                  </div>
                 </div>
                 <p className="text-sm text-stone-600">{nomeClienteEMesa(p)}</p>
                 <ul className="text-sm text-stone-500 mt-1">
