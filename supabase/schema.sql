@@ -55,6 +55,7 @@ CREATE TABLE IF NOT EXISTS categorias (
 CREATE TABLE IF NOT EXISTS produtos (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   codigo TEXT NOT NULL UNIQUE,
+  nome TEXT DEFAULT '',
   descricao TEXT NOT NULL,
   acompanhamentos TEXT,
   valor DECIMAL(10,2) NOT NULL,

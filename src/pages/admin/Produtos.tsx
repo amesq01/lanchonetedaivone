@@ -11,6 +11,7 @@ export default function AdminProdutos() {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Produto | null>(null);
   const [codigo, setCodigo] = useState('');
+  const [nome, setNome] = useState('');
   const [descricao, setDescricao] = useState('');
   const [acompanhamentos, setAcompanhamentos] = useState('');
   const [valor, setValor] = useState('');
@@ -36,6 +37,7 @@ export default function AdminProdutos() {
     if (prod) {
       setEditing(prod);
       setCodigo(prod.codigo);
+      setNome(prod.nome ?? '');
       setDescricao(prod.descricao);
       setAcompanhamentos(prod.acompanhamentos ?? '');
       setValor(String(prod.valor));
@@ -47,6 +49,7 @@ export default function AdminProdutos() {
     } else {
       setEditing(null);
       setCodigo('');
+      setNome('');
       setDescricao('');
       setAcompanhamentos('');
       setValor('');
@@ -65,6 +68,7 @@ export default function AdminProdutos() {
     try {
       const payload = {
         codigo,
+        nome: nome.trim() || null,
         descricao,
         acompanhamentos: acompanhamentos || null,
         valor: Number(valor),
@@ -99,6 +103,7 @@ export default function AdminProdutos() {
           <thead className="border-b border-stone-200 bg-stone-50">
             <tr>
               <th className="px-4 py-3 text-left text-sm font-medium text-stone-600">Código</th>
+              <th className="px-4 py-3 text-left text-sm font-medium text-stone-600">Nome do produto</th>
               <th className="px-4 py-3 text-left text-sm font-medium text-stone-600">Descrição</th>
               <th className="px-4 py-3 text-left text-sm font-medium text-stone-600">Acompanhamentos</th>
               <th className="px-4 py-3 text-left text-sm font-medium text-stone-600">Valor</th>
@@ -114,6 +119,7 @@ export default function AdminProdutos() {
             {list.map((p) => (
               <tr key={p.id} className="border-b border-stone-100">
                 <td className="px-4 py-3">{p.codigo}</td>
+                <td className="px-4 py-3">{p.nome || '—'}</td>
                 <td className="px-4 py-3">{p.descricao}</td>
                 <td className="px-4 py-3 text-sm text-stone-500">{p.acompanhamentos ?? '-'}</td>
                 <td className="px-4 py-3">R$ {Number(p.valor).toFixed(2)}</td>
@@ -141,6 +147,10 @@ export default function AdminProdutos() {
               <div>
                 <label className="block text-sm font-medium text-stone-600">Código *</label>
                 <input value={codigo} onChange={(e) => setCodigo(e.target.value)} required disabled={!!editing} className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 disabled:bg-stone-100" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-stone-600">Nome do produto</label>
+                <input value={nome} onChange={(e) => setNome(e.target.value)} className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2" placeholder="Ex: X-Burger, Refrigerante 350ml" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-stone-600">Descrição *</label>

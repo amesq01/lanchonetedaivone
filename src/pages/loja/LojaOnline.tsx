@@ -173,8 +173,9 @@ function CardProduto({
         {produto.imagem_url ? <img src={produto.imagem_url} alt="" className="h-full w-full object-cover" /> : 'Sem imagem'}
       </div>
       <div className="mt-3 flex min-h-0 flex-1 flex-col">
-        <div className="font-medium text-stone-800 leading-tight">{produto.descricao}</div>
-        {produto.acompanhamentos ? <div className="mt-0.5 min-h-[1.25rem] text-xs text-stone-500 leading-tight">{produto.acompanhamentos}</div> : <div className="min-h-[1.25rem]" />}
+        <div className="font-medium text-stone-800 leading-tight">{produto.nome || produto.descricao}</div>
+        {produto.nome && produto.descricao ? <div className="mt-0.5 text-sm text-stone-500 leading-tight">{produto.descricao}</div> : null}
+        {produto.acompanhamentos ? <div className="mt-2 min-h-[1.25rem] text-xs text-stone-500 leading-tight"><span className="font-medium text-stone-600">Acompanhamentos/Ingredientes:</span> {produto.acompanhamentos}</div> : <div className="min-h-[1.25rem]" />}
         <div className="mt-2 font-semibold text-amber-600">R$ {Number(produto.valor).toFixed(2)}</div>
         <div className="mt-3 flex items-center gap-2">
           <span className="text-sm text-stone-600">Quantidade:</span>

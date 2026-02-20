@@ -77,6 +77,21 @@ export async function getMesasIdsComContaPendente(): Promise<Set<string>> {
   return mesaIds;
 }
 
+/** Contagens para badges da sidebar admin: mesas (conta pendente), viagem (pedidos prontos p/ encerrar), online (finalizados p/ encerrar), cozinha (novo + em preparação). */
+export async function getAdminSidebarCounts(): Promise<{ mesas: number; viagem: number; online: number; cozinha: number }> {
+  const [mesasSet, viagemList, onlineList, cozinhaList] = await Promise.all([
+    getMesasIdsComContaPendente(),
+    getPedidosViagemAbertos(),
+    getPedidosOnlineTodos(),
+    getPedidosCozinha(),
+  ]);
+  const comandaAberta = (p: any) => (Array.isArray(p.comandas) ? p.comandas[0]?.aberta : p.comandas?.aberta) !== false;
+  const viagem = (viagemList as any[]).filter((p) => p.status === 'finalizado' && comandaAberta(p)).length;
+  const online = (onlineList as any[]).filter((p) => p.status === 'finalizado' && !p.encerrado_em).length;
+  const cozinha = (cozinhaList as any[]).filter((p) => p.status === 'novo_pedido' || p.status === 'em_preparacao').length;
+  return { mesas: mesasSet.size, viagem, online, cozinha };
+}
+
 export async function openComanda(mesaId: string, atendenteId: string, nomeCliente: string) {
   const { data, error } = await (supabase as any).from('comandas').insert({ mesa_id: mesaId, atendente_id: atendenteId, nome_cliente: nomeCliente }).select().single();
   if (error) throw error;

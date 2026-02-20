@@ -75,6 +75,7 @@ export interface Database {
         Row: {
           id: string;
           codigo: string;
+          nome: string | null;
           descricao: string;
           acompanhamentos: string | null;
           valor: number;

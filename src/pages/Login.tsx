@@ -1,20 +1,38 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+
+const RELOAD_KEY = 'loginProfileReload';
 
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
-  const { signIn, user, profile, loading, profileFetched, profileError, refetchProfile } = useAuth();
+  const { signIn, user, profile, loading, profileFetched } = useAuth();
+
+  const loadingProfile = Boolean(user && !profile && !profileFetched);
+  const profileMissing = Boolean(user && profileFetched && !profile);
+
+  useEffect(() => {
+    if (loadingProfile) {
+      if (!sessionStorage.getItem(RELOAD_KEY)) {
+        sessionStorage.setItem(RELOAD_KEY, '1');
+        window.location.reload();
+      }
+    }
+  }, [loadingProfile]);
+
+  useEffect(() => {
+    if (user && (profile || profileMissing)) {
+      sessionStorage.removeItem(RELOAD_KEY);
+    }
+  }, [user, profile, profileMissing]);
 
   // Redireciona no render (mais confiável que useEffect): já logado com perfil carregado
   if (!loading && user && profile) {
     const to = profile.role === 'admin' ? '/admin' : profile.role === 'cozinha' ? '/cozinha' : '/pdv';
     return <Navigate to={to} replace />;
   }
-
-  const profileMissing = Boolean(user && profileFetched && !profile);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -54,30 +72,12 @@ export default function Login() {
           </div>
           {error && <p className="text-sm text-red-600">{error}</p>}
           {profileMissing && (
-            <div className="rounded-lg bg-amber-50 p-4 text-amber-800 text-sm space-y-3">
-              <p className="font-medium">Perfil não encontrado</p>
-              {profileError && (
-                <p className="text-red-700 bg-red-50 p-2 rounded text-xs">
-                  Erro ao buscar perfil: {profileError}
-                </p>
-              )}
-              <p>
-                Seu <strong>UID atual</strong> é: <code className="bg-amber-100 px-1 rounded break-all text-xs">{user?.id}</code>
-              </p>
-              <p>No Supabase, confira se existe uma linha na tabela <strong>profiles</strong> com <code className="bg-amber-100 px-1 rounded text-xs">id = este UID</code>. Se acabou de inserir, clique em &quot;Tentar novamente&quot;.</p>
-              <pre className="bg-amber-100 p-2 rounded text-xs overflow-x-auto">
-                INSERT INTO profiles (id, role, nome, email) VALUES (&apos;{user?.id}&apos;, &apos;admin&apos;, &apos;Seu Nome&apos;, &apos;{email}&apos;);
-              </pre>
-              <button
-                type="button"
-                onClick={() => refetchProfile()}
-                className="w-full rounded-lg border border-amber-600 py-2 text-amber-700 text-sm font-medium hover:bg-amber-100"
-              >
-                Tentar novamente
-              </button>
+            <div className="rounded-lg bg-red-50 p-4 text-red-800 text-sm">
+              <p className="font-medium">Erro ao realizar login.</p>
+              <p className="mt-1 text-red-700">Atualize a página e tente novamente.</p>
             </div>
           )}
-          {user && !profile && !profileFetched && (
+          {loadingProfile && (
             <p className="text-sm text-stone-500">Carregando perfil...</p>
           )}
           <button
