@@ -23,7 +23,6 @@ export default function AdminMesaDetail() {
   const [popupCancelar, setPopupCancelar] = useState<{ pedidoId: string } | null>(null);
   const [motivoCancelamento, setMotivoCancelamento] = useState('');
   const [popupPedidosNaoFinalizados, setPopupPedidosNaoFinalizados] = useState(false);
-  const [accordionFinalizados, setAccordionFinalizados] = useState(false);
 
   useEffect(() => {
     if (!mesaId) return;
@@ -109,8 +108,7 @@ export default function AdminMesaDetail() {
   if (!comanda) return <p className="text-stone-500">Mesa não está aberta.</p>;
 
   const formas = ['dinheiro', 'pix', 'cartão crédito', 'cartão débito'];
-  const pedidosEmAndamento = pedidos.filter((p) => p.status !== 'cancelado' && p.status !== 'finalizado');
-  const pedidosFinalizados = pedidos.filter((p) => p.status === 'finalizado');
+  const pedidosNaMesa = pedidos.filter((p) => p.status !== 'cancelado');
   const numerosPedidos = pedidos.filter((p) => p.status !== 'cancelado').map((p) => p.numero);
   const linhaTitulo = numerosPedidos.length > 0 ? `${numerosPedidos.join(', ')} - ${mesaNome} - ${comanda.nome_cliente}` : `${mesaNome} - ${comanda.nome_cliente}`;
   const cupomSelecionado = cupomDesconto ? cupons.find((c) => c.id === cupomDesconto) : null;
@@ -121,6 +119,10 @@ export default function AdminMesaDetail() {
   function totalPedido(p: any) {
     const sub = (p.pedido_itens ?? []).reduce((s: number, i: any) => s + (i.quantidade || 0) * Number(i.valor_unitario || 0), 0);
     return (Number.isFinite(sub) ? sub : 0);
+  }
+
+  function pedidoTemItemParaCozinha(p: any) {
+    return (p.pedido_itens ?? []).some((i: any) => Boolean(i.produtos?.vai_para_cozinha));
   }
 
   if (printMode && contaItens) {
@@ -191,49 +193,40 @@ export default function AdminMesaDetail() {
       </div>
       <div className="rounded-xl bg-white p-4 shadow-sm mb-6">
         <h3 className="font-semibold text-stone-800 mb-2">Pedidos</h3>
-        {pedidosEmAndamento.length === 0 ? (
-          <p className="text-sm text-stone-500 py-2">Nenhum pedido em andamento.</p>
+        {pedidosNaMesa.length === 0 ? (
+          <p className="text-sm text-stone-500 py-2">Nenhum pedido nesta mesa.</p>
         ) : (
-          pedidosEmAndamento.map((p) => (
-            <div key={p.id} className="border-b border-stone-100 py-2">
-              <div className="font-medium">Pedido #{p.numero}</div>
-              <ul className="text-sm text-stone-600">
-                {(p.pedido_itens ?? []).map((i: any) => (
-                  <li key={i.id}>{i.quantidade}x {i.produtos?.descricao} - R$ {(i.quantidade * i.valor_unitario).toFixed(2)}</li>
-                ))}
-              </ul>
-              {p.status === 'novo_pedido' && (
-                <button onClick={() => setPopupCancelar({ pedidoId: p.id })} className="mt-1 text-sm text-red-600 hover:underline">Cancelar pedido</button>
-              )}
-            </div>
-          ))
-        )}
-      </div>
-
-      <div className="mb-6">
-        <button onClick={() => setAccordionFinalizados(!accordionFinalizados)} className="flex w-full items-center justify-between rounded-lg bg-stone-100 px-4 py-2 text-left font-medium text-stone-700">
-          Pedidos finalizados
-          <span>{accordionFinalizados ? '−' : '+'}</span>
-        </button>
-        {accordionFinalizados && (
-          <div className="mt-2 rounded-xl bg-white p-4 shadow-sm border border-stone-100">
-            {pedidosFinalizados.length === 0 ? (
-              <p className="text-sm text-stone-500 py-2">Nenhum pedido finalizado nesta mesa.</p>
-            ) : (
-              <div className="space-y-3">
-                {pedidosFinalizados.map((p) => (
-                  <div key={p.id} className="border-b border-stone-100 pb-2 last:border-0">
-                    <div className="font-medium text-stone-800">Pedido #{p.numero}</div>
-                    <p className="text-sm text-amber-700">Total: R$ {totalPedido(p).toFixed(2)}</p>
-                    <ul className="text-sm text-stone-600 mt-1">
-                      {(p.pedido_itens ?? []).map((i: any) => (
-                        <li key={i.id}>{i.quantidade}x {i.produtos?.descricao}</li>
-                      ))}
-                    </ul>
+          <div className="space-y-4">
+            {pedidosNaMesa.map((p) => (
+              <div key={p.id} className="rounded-lg border border-stone-200 bg-stone-50/50 p-4 flex flex-wrap items-stretch justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold text-stone-800">Pedido #{p.numero}</div>
+                  <p className="text-sm font-medium text-amber-700 mt-0.5">Total: R$ {totalPedido(p).toFixed(2)}</p>
+                  <ul className="mt-2 text-sm text-stone-600">
+                    {(p.pedido_itens ?? []).map((i: any) => (
+                      <li key={i.id}>{i.quantidade}x {i.produtos?.descricao} - R$ {(i.quantidade * i.valor_unitario).toFixed(2)}</li>
+                    ))}
+                  </ul>
+                  {p.status === 'novo_pedido' && (
+                    <button onClick={() => setPopupCancelar({ pedidoId: p.id })} className="mt-2 text-sm text-red-600 hover:underline">Cancelar pedido</button>
+                  )}
+                </div>
+                {p.status === 'finalizado' && (
+                  <div className="min-w-[200px] w-[200px] flex flex-col items-center justify-center gap-2 shrink-0">
+                    <span className="rounded-lg border border-green-200 bg-green-50 px-4 py-2 text-sm text-green-700">
+                      Pronto – aguardando encerramento da mesa
+                    </span>
                   </div>
-                ))}
+                )}
+                {pedidoTemItemParaCozinha(p) && (p.status === 'novo_pedido' || p.status === 'em_preparacao') && (
+                  <div className="min-w-[200px] w-[200px] flex flex-col items-center justify-center gap-2 shrink-0">
+                    <span className="rounded-lg border border-stone-200 bg-stone-50 px-4 py-2 text-sm text-stone-500">
+                      Aguardando finalização na cozinha
+                    </span>
+                  </div>
+                )}
               </div>
-            )}
+            ))}
           </div>
         )}
       </div>

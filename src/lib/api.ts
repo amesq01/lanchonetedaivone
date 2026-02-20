@@ -61,6 +61,18 @@ export async function getViagemTemPedidosAbertos(): Promise<boolean> {
   return (data?.length ?? 0) > 0;
 }
 
+/** Mesa IDs (presencial) que têm comanda aberta com pelo menos um pedido finalizado = conta pendente de encerramento */
+export async function getMesasIdsComContaPendente(): Promise<Set<string>> {
+  const { data: comandas } = await supabase.from('comandas').select('id, mesa_id').eq('aberta', true);
+  if (!comandas?.length) return new Set();
+  const ids = comandas.map((c) => c.id);
+  const { data: pedidos } = await supabase.from('pedidos').select('comanda_id').in('comanda_id', ids).eq('status', 'finalizado');
+  const comandasComFinalizado = new Set((pedidos ?? []).map((p) => p.comanda_id));
+  const mesaIds = new Set<string>();
+  comandas.forEach((c) => { if (comandasComFinalizado.has(c.id)) mesaIds.add(c.mesa_id); });
+  return mesaIds;
+}
+
 export async function openComanda(mesaId: string, atendenteId: string, nomeCliente: string) {
   const { data, error } = await supabase.from('comandas').insert({ mesa_id: mesaId, atendente_id: atendenteId, nome_cliente: nomeCliente }).select().single();
   if (error) throw error;

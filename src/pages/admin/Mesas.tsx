@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { getMesas, initMesas, getConfig, getMesasIdsComPedidosAbertos, getViagemTemPedidosAbertos, getPedidosPresencialEncerradosHoje } from '../../lib/api';
+import { getMesas, initMesas, getConfig, getMesasIdsComPedidosAbertos, getMesasIdsComContaPendente, getViagemTemPedidosAbertos, getPedidosPresencialEncerradosHoje } from '../../lib/api';
 import type { Mesa } from '../../types/database';
 import { UtensilsCrossed, Truck } from 'lucide-react';
 
@@ -10,6 +10,7 @@ export default function AdminMesas() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [mesasComPedidosAbertos, setMesasComPedidosAbertos] = useState<Set<string>>(new Set());
+  const [mesasComContaPendente, setMesasComContaPendente] = useState<Set<string>>(new Set());
   const [viagemComPedidosAbertos, setViagemComPedidosAbertos] = useState(false);
   const [pedidosFinalizadosHoje, setPedidosFinalizadosHoje] = useState<any[]>([]);
   const [accordionFinalizados, setAccordionFinalizados] = useState(false);
@@ -18,6 +19,7 @@ export default function AdminMesas() {
     getConfig('quantidade_mesas').then(setQtd);
     getMesas().then(setMesas);
     getMesasIdsComPedidosAbertos().then(setMesasComPedidosAbertos);
+    getMesasIdsComContaPendente().then(setMesasComContaPendente);
     getViagemTemPedidosAbertos().then(setViagemComPedidosAbertos);
     getPedidosPresencialEncerradosHoje().then(setPedidosFinalizadosHoje);
   }
@@ -66,19 +68,24 @@ export default function AdminMesas() {
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {mesas.map((m) => {
           const temPedidosAbertos = m.is_viagem ? viagemComPedidosAbertos : mesasComPedidosAbertos.has(m.id);
+          const temContaPendente = !m.is_viagem && mesasComContaPendente.has(m.id);
+          const destacar = temPedidosAbertos || temContaPendente;
           return (
             <Link
               key={m.id}
               to={m.is_viagem ? '/admin/viagem' : `/admin/mesas/${m.id}`}
               className={`rounded-xl p-4 shadow-sm transition hover:shadow-md flex items-center gap-3 ${
-                temPedidosAbertos ? 'bg-amber-50 border-2 border-amber-300' : 'bg-white border border-stone-200'
+                destacar ? 'bg-amber-50 border-2 border-amber-300' : 'bg-white border border-stone-200'
               }`}
             >
               {m.is_viagem ? <Truck className="h-8 w-8 text-amber-600 flex-shrink-0" /> : <UtensilsCrossed className="h-8 w-8 text-stone-400 flex-shrink-0" />}
               <div className="min-w-0">
                 <div className="font-semibold text-stone-800">{m.nome}</div>
                 <div className="text-sm text-stone-500">{m.is_viagem ? 'Pedidos para viagem' : `Mesa ${m.numero}`}</div>
-                {temPedidosAbertos && <span className="inline-block mt-1 text-xs font-medium text-amber-700 bg-amber-100 px-2 py-0.5 rounded">Pedidos em aberto</span>}
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {temPedidosAbertos && <span className="inline-block text-xs font-medium text-amber-700 bg-amber-100 px-2 py-0.5 rounded">Pedidos em aberto</span>}
+                  {temContaPendente && <span className="inline-block text-xs font-medium text-amber-800 bg-amber-200 px-2 py-0.5 rounded">Conta pendente de encerramento</span>}
+                </div>
               </div>
             </Link>
           );
