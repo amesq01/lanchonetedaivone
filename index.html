@@ -1,13 +1,43 @@
 <!doctype html>
-<html lang="en">
+<html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>lanchonete-app</title>
+    <title>Lanchonete & Sushi</title>
+    <style>
+      @keyframes loading-plate-spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+      @keyframes loading-float{0%,100%{transform:translateY(0) rotate(-3deg)}50%{transform:translateY(-8px) rotate(3deg)}}
+      @keyframes loading-pulse-text{0%,100%{opacity:1}50%{opacity:.6}}
+      #root-initial-loader{position:fixed;inset:0;z-index:9999;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2rem;background:linear-gradient(to bottom,#fffbeb,#fff7ed,#fafaf9)}
+      #root-initial-loader .plate{position:absolute;border-radius:50%;border:4px dashed rgba(251,191,36,.6);opacity:.6;animation:loading-plate-spin 4s linear infinite}
+      #root-initial-loader .plate--outer{width:12rem;height:12rem}
+      #root-initial-loader .plate--inner{width:10rem;height:10rem;border-width:2px;border-style:solid;border-color:rgba(251,191,36,.4);animation-duration:6s;animation-direction:reverse}
+      #root-initial-loader .content{position:relative;z-index:10;display:flex;flex-direction:column;align-items:center;gap:1.5rem}
+      #root-initial-loader h1{font-size:1.5rem;font-weight:700;color:#1c1917;margin:0}
+      #root-initial-loader .sub{font-size:.875rem;font-weight:500;color:rgba(146,64,14,.9);margin:0;animation:loading-pulse-text 1.2s ease-in-out infinite}
+      #root-initial-loader .emojis{display:flex;align-items:center;justify-content:center;gap:1rem;font-size:2.25rem}
+      #root-initial-loader .emojis span{animation:loading-float 1.8s ease-in-out infinite}
+      #root-initial-loader .emojis span:nth-child(1){animation-delay:0s}
+      #root-initial-loader .emojis span:nth-child(2){animation-delay:.2s}
+      #root-initial-loader .emojis span:nth-child(3){animation-delay:.4s}
+      #root-initial-loader .emojis span:nth-child(4){animation-delay:.6s}
+      #root-initial-loader .sticks{animation:loading-float 2s ease-in-out infinite;opacity:.7;font-size:1.5rem;margin-top:.5rem}
+    </style>
   </head>
   <body>
-    <div id="root">Carregando...</div>
+    <div id="root">
+      <div id="root-initial-loader" aria-hidden="true">
+        <div class="plate plate--outer"></div>
+        <div class="plate plate--inner"></div>
+        <div class="content">
+          <h1>Lanchonete & Sushi</h1>
+          <p class="sub">Montando o cardápio...</p>
+          <div class="emojis"><span>🍔</span><span>🍣</span><span>🍤</span><span>🍟</span></div>
+          <div class="sticks">🥢</div>
+        </div>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

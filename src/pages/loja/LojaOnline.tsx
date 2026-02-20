@@ -8,6 +8,62 @@ import { getCart, type SavedItem } from './Carrinho';
 
 const CART_KEY = 'lanchonete_cart';
 
+function LojaLoading() {
+  const emojis = ['🍔', '🍣', '🍤', '🍟'];
+  return (
+    <div className="fixed inset-0 z-50 flex min-h-screen flex-col items-center justify-center gap-8 bg-gradient-to-b from-amber-50 via-orange-50 to-stone-100">
+      {/* Prato girando (decorativo) */}
+      <div
+        className="absolute h-48 w-48 rounded-full border-4 border-amber-200/60 border-dashed opacity-60"
+        style={{ animation: 'loading-plate-spin 4s linear infinite' }}
+      />
+      <div
+        className="absolute h-40 w-40 rounded-full border-2 border-amber-300/40"
+        style={{ animation: 'loading-plate-spin 6s linear infinite reverse' }}
+      />
+
+      <div
+        className="relative z-10 flex flex-col items-center gap-6"
+        style={{ animation: 'loading-bounce-in 0.6s ease-out both' }}
+      >
+        <h1 className="text-2xl font-bold tracking-tight text-stone-800 sm:text-3xl">
+          Lanchonete & Sushi
+        </h1>
+        <p
+          className="text-sm font-medium text-amber-800/90 sm:text-base"
+          style={{ animation: 'loading-pulse-text 1.2s ease-in-out infinite' }}
+        >
+          Montando o cardápio...
+        </p>
+
+        {/* Emojis flutuando em onda */}
+        <div className="flex items-center justify-center gap-4 sm:gap-6">
+          {emojis.map((emoji, i) => (
+            <span
+              key={i}
+              className="text-4xl drop-shadow-sm sm:text-5xl"
+              style={{
+                animation: 'loading-float 1.8s ease-in-out infinite',
+                animationDelay: `${i * 0.2}s`,
+              }}
+            >
+              {emoji}
+            </span>
+          ))}
+        </div>
+
+        {/* Hashi decorativo */}
+        <div
+          className="mt-2 flex gap-1 opacity-70"
+          style={{ animation: 'loading-float 2s ease-in-out infinite' }}
+        >
+          <span className="text-2xl">🥢</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function saveCart(items: SavedItem[]) {
   localStorage.setItem(CART_KEY, JSON.stringify(items));
 }
@@ -82,7 +138,7 @@ export default function LojaOnline() {
   const categoriaVazia =
     categoriaSelecionada !== null && byCategoria(categoriaSelecionada).length === 0;
 
-  if (loading) return <p className="p-4 text-stone-500">Carregando...</p>;
+  if (loading) return <LojaLoading />;
 
   return (
     <div className="min-h-screen bg-stone-50">

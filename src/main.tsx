@@ -8,8 +8,6 @@ if (!rootEl) {
 }
 const root: HTMLElement = rootEl;
 
-root.innerHTML = '<div style="padding:24px;font-family:system-ui;color:#444">Carregando...</div>';
-
 function showError(container: HTMLElement, msg: string, stack?: string) {
   container.innerHTML = `
     <div style="padding:24px;font-family:system-ui,sans-serif;background:#fafaf9;color:#1c1917;min-height:100vh">
@@ -22,11 +20,19 @@ function showError(container: HTMLElement, msg: string, stack?: string) {
 
 async function init() {
   try {
-    await import('./index.css');
-    const { BrowserRouter } = await import('react-router-dom');
-    const { ErrorBoundary } = await import('./ErrorBoundary');
-    const { AuthProvider } = await import('./contexts/AuthContext');
-    const { default: App } = await import('./App');
+    const [
+      _css,
+      { BrowserRouter },
+      { ErrorBoundary },
+      { AuthProvider },
+      { default: App },
+    ] = await Promise.all([
+      import('./index.css'),
+      import('react-router-dom'),
+      import('./ErrorBoundary'),
+      import('./contexts/AuthContext'),
+      import('./App'),
+    ]);
 
     createRoot(root).render(
       <StrictMode>
