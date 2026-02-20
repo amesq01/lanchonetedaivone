@@ -65,3 +65,10 @@ npm run dev
 - React Router 7
 - Supabase (Auth, Database, RLS)
 - Lucide React (ícones)
+
+
+-- Remove todos os pedidos (pedido_itens some por CASCADE)
+DELETE FROM pedidos;
+
+-- Reinicia a sequência para o próximo pedido ser #1
+ALTER SEQUENCE pedidos_numero_seq RESTART WITH 1;
