@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { getProdutos } from '../../lib/api';
+import { Trash2 } from 'lucide-react';
+import { getConfig, getProdutos, validarCupom } from '../../lib/api';
 import type { Produto } from '../../types/database';
 
 type Item = { produto: Produto; quantidade: number; observacao: string };
 
 const CART_KEY = 'lanchonete_cart';
+const CUPOM_KEY = 'lanchonete_cupom';
 
 export type SavedItem = { produto_id: string; quantidade: number; observacao: string };
 
@@ -20,6 +22,22 @@ export function getCart(): SavedItem[] {
   }
 }
 
+export function getCupomAplicado(): { codigo: string; porcentagem: number } | null {
+  try {
+    const raw = localStorage.getItem(CUPOM_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed?.codigo && typeof parsed.porcentagem === 'number') return parsed;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export function clearCupomAplicado() {
+  localStorage.removeItem(CUPOM_KEY);
+}
+
 function saveCart(items: Item[]) {
   const toSave = items.map((i) => ({ produto_id: i.produto.id, quantidade: i.quantidade, observacao: i.observacao }));
   localStorage.setItem(CART_KEY, JSON.stringify(toSave));
@@ -31,6 +49,15 @@ export default function LojaCarrinho() {
   const [produtos, setProdutos] = useState<Record<string, Produto>>({});
   const [itens, setItens] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
+  const [cupomInput, setCupomInput] = useState('');
+  const [cupomAplicado, setCupomAplicado] = useState<{ codigo: string; porcentagem: number } | null>(() => getCupomAplicado());
+  const [cupomErro, setCupomErro] = useState('');
+  const [cupomLoading, setCupomLoading] = useState(false);
+  const [taxaEntrega, setTaxaEntrega] = useState<number | null>(null);
+
+  useEffect(() => {
+    getConfig('taxa_entrega').then(setTaxaEntrega);
+  }, []);
 
   useEffect(() => {
     getProdutos(true).then((list) => {
@@ -78,7 +105,49 @@ export default function LojaCarrinho() {
     });
   };
 
-  const total = itens.reduce((s, i) => s + i.quantidade * Number(i.produto.valor), 0);
+  const removeItem = (index: number) => {
+    setItens((prev) => {
+      const next = prev.filter((_, i) => i !== index);
+      saveCart(next);
+      return next;
+    });
+  };
+
+  const rawSubtotal = itens.reduce((s, i) => s + i.quantidade * Number(i.produto.valor), 0);
+  const subtotal = Number.isFinite(rawSubtotal) ? rawSubtotal : 0;
+  const taxa = taxaEntrega !== null && Number.isFinite(taxaEntrega) ? taxaEntrega : 0;
+  const rawDesconto = cupomAplicado ? (subtotal * Number(cupomAplicado.porcentagem)) / 100 : 0;
+  const desconto = Number.isFinite(rawDesconto) ? rawDesconto : 0;
+  const total = Math.max(0, subtotal + taxa - desconto) || 0;
+
+  async function handleAplicarCupom() {
+    setCupomErro('');
+    if (!cupomInput.trim()) {
+      setCupomErro('Digite o código do cupom.');
+      return;
+    }
+    setCupomLoading(true);
+    try {
+      const result = await validarCupom(cupomInput.trim());
+      if ('error' in result) {
+        setCupomErro(result.error);
+        return;
+      }
+      const aplicado = { codigo: result.cupom.codigo, porcentagem: Number(result.cupom.porcentagem) };
+      setCupomAplicado(aplicado);
+      localStorage.setItem(CUPOM_KEY, JSON.stringify(aplicado));
+      setCupomInput('');
+    } finally {
+      setCupomLoading(false);
+    }
+  }
+
+  function handleRemoverCupom() {
+    setCupomAplicado(null);
+    setCupomErro('');
+    setCupomInput('');
+    localStorage.removeItem(CUPOM_KEY);
+  }
 
   if (loading) return <p className="p-4 text-stone-500">Carregando...</p>;
 
@@ -111,16 +180,64 @@ export default function LojaCarrinho() {
                       <button type="button" onClick={() => updateQtd(i, 1)} className="w-8 h-8 rounded border border-stone-300 text-stone-600">+</button>
                     </div>
                   </div>
-                  <div className="text-right font-medium text-amber-600">R$ {(item.quantidade * Number(item.produto.valor)).toFixed(2)}</div>
+                  <div className="flex flex-col items-end gap-1">
+                    <span className="font-medium text-amber-600">R$ {(item.quantidade * Number(item.produto.valor)).toFixed(2)}</span>
+                    <button type="button" onClick={() => removeItem(i)} className="p-1.5 rounded text-stone-400 hover:bg-red-50 hover:text-red-600" title="Remover item" aria-label="Remover item">
+                      <Trash2 size={18} />
+                    </button>
+                  </div>
                 </li>
               ))}
             </ul>
-            <div className="mt-6 rounded-xl bg-white p-4 shadow-sm border border-stone-100">
-              <div className="flex justify-between text-lg font-semibold text-stone-800">
-                <span>Total</span>
-                <span>R$ {total.toFixed(2)}</span>
+            <div className="mt-6 rounded-xl bg-white p-4 shadow-sm border border-stone-100 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-stone-600 mb-2">Cupom de desconto</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={cupomInput}
+                    onChange={(e) => { setCupomInput(e.target.value); setCupomErro(''); }}
+                    placeholder="Código do cupom"
+                    className="flex-1 rounded-lg border border-stone-300 px-3 py-2"
+                    disabled={!!cupomAplicado}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAplicarCupom}
+                    disabled={cupomLoading || !!cupomAplicado}
+                    className="rounded-lg bg-stone-700 px-4 py-2 text-white font-medium hover:bg-stone-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {cupomLoading ? 'Verificando...' : cupomAplicado ? 'Aplicado' : 'Aplicar cupom'}
+                  </button>
+                </div>
+                {cupomErro && <p className="mt-1 text-sm text-red-600">{cupomErro}</p>}
+                {cupomAplicado && (
+                  <p className="mt-1 text-sm text-green-600">
+                    Cupom {cupomAplicado.codigo} aplicado ({cupomAplicado.porcentagem}% de desconto). <button type="button" onClick={handleRemoverCupom} className="underline hover:no-underline">Remover</button>
+                  </p>
+                )}
               </div>
-              <Link to="/checkout" className="mt-4 block w-full rounded-lg bg-amber-600 py-3 text-center font-medium text-white hover:bg-amber-700">
+              <div className="space-y-1 pt-2 border-t border-stone-200">
+                <div className="flex justify-between text-sm text-stone-600">
+                  <span>Subtotal</span>
+                  <span>R$ {subtotal.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-sm text-stone-600">
+                  <span>Taxa de entrega</span>
+                  <span>R$ {(Number.isFinite(taxa) ? taxa : 0).toFixed(2)}</span>
+                </div>
+                {desconto > 0 && (
+                  <div className="flex justify-between text-sm text-amber-700">
+                    <span>Desconto (cupom)</span>
+                    <span>- R$ {desconto.toFixed(2)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-lg font-semibold text-stone-800 pt-1">
+                  <span>Total</span>
+                  <span>R$ {(Number.isFinite(total) ? total : 0).toFixed(2)}</span>
+                </div>
+              </div>
+              <Link to="/checkout" className="block w-full rounded-lg bg-amber-600 py-3 text-center font-medium text-white hover:bg-amber-700">
                 Finalizar pedido
               </Link>
             </div>

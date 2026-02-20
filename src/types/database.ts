@@ -61,6 +61,16 @@ export interface Database {
         };
         Update: Partial<Database['public']['Tables']['comandas']['Insert']>;
       };
+      categorias: {
+        Row: {
+          id: string;
+          nome: string;
+          ordem: number;
+          created_at: string;
+        };
+        Insert: Omit<Database['public']['Tables']['categorias']['Row'], 'created_at'> & { created_at?: string };
+        Update: Partial<Database['public']['Tables']['categorias']['Insert']>;
+      };
       produtos: {
         Row: {
           id: string;
@@ -72,6 +82,7 @@ export interface Database {
           ativo: boolean;
           imagem_url: string | null;
           vai_para_cozinha: boolean;
+          categoria_id: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -116,6 +127,8 @@ export interface Database {
           cancelado_por: string | null;
           cancelado_em: string | null;
           tipo_entrega: 'entrega' | 'retirada' | null;
+          ponto_referencia: string | null;
+          imprimido_entrega_em: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -145,6 +158,7 @@ export interface Database {
 export type Profile = Database['public']['Tables']['profiles']['Row'];
 export type Mesa = Database['public']['Tables']['mesas']['Row'];
 export type Comanda = Database['public']['Tables']['comandas']['Row'];
+export type Categoria = Database['public']['Tables']['categorias']['Row'];
 export type Produto = Database['public']['Tables']['produtos']['Row'];
 export type Cupom = Database['public']['Tables']['cupons']['Row'];
 export type Pedido = Database['public']['Tables']['pedidos']['Row'];

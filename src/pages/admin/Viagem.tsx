@@ -90,6 +90,13 @@ export default function AdminViagem() {
   const prontosEncerrar = pedidos.filter((p) => p.status === 'finalizado' && comandaAberta(p));
   const finalizadosEncerrados = pedidos.filter((p) => p.status === 'finalizado' && !comandaAberta(p));
 
+  function totalPedido(p: any) {
+    const subtotal = (p.pedido_itens ?? []).reduce((s: number, i: any) => s + (i.quantidade || 0) * Number(i.valor_unitario || 0), 0);
+    const desconto = Number(p.desconto ?? 0);
+    const taxa = Number(p.taxa_entrega ?? 0);
+    return Math.max(0, subtotal - desconto + taxa);
+  }
+
   const cupomSelecionado = cupomDesconto ? cupons.find((c) => c.id === cupomDesconto) : null;
   const subtotalPrint = contaItensPedido?.total ?? 0;
   const valorDescontoPrint = cupomSelecionado ? (subtotalPrint * Number(cupomSelecionado.porcentagem)) / 100 : 0;
@@ -143,47 +150,44 @@ export default function AdminViagem() {
 
       <div className="space-y-4">
         {emPreparacao.map((p) => (
-          <div key={p.id} className="rounded-xl bg-white p-4 shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <span className="font-semibold text-stone-800">Pedido #{p.numero}</span>
-                <span className="ml-2 text-stone-600">- {p.cliente_nome || (p.comandas as any)?.nome_cliente}</span>
-              </div>
-              <div className="flex gap-2">
-                <button onClick={() => handleAbrirImprimir(p)} className="rounded-lg border border-stone-300 px-3 py-1.5 text-sm hover:bg-stone-50">
-                  Imprimir conta
-                </button>
-                <span className="text-sm text-stone-400 py-1.5">Finalize na cozinha para encerrar</span>
-              </div>
+          <div key={p.id} className="rounded-xl bg-white p-4 shadow-sm flex flex-wrap items-stretch justify-between gap-4">
+            <div className="flex-1 min-w-0">
+              <div className="font-semibold text-stone-800">Pedido #{p.numero}</div>
+              <p className="text-sm font-medium text-amber-700 mt-0.5">Total: R$ {totalPedido(p).toFixed(2)}</p>
+              <span className="text-stone-600">- {p.cliente_nome || (p.comandas as any)?.nome_cliente}</span>
+              <ul className="mt-2 text-sm text-stone-600">
+                {(p.pedido_itens ?? []).map((i: any) => (
+                  <li key={i.id}>{i.quantidade}x {i.produtos?.descricao}</li>
+                ))}
+              </ul>
             </div>
-            <ul className="mt-2 text-sm text-stone-600">
-              {(p.pedido_itens ?? []).map((i: any) => (
-                <li key={i.id}>{i.quantidade}x {i.produtos?.descricao}</li>
-              ))}
-            </ul>
+            <div className="min-w-[200px] w-[200px] flex flex-col items-center justify-center gap-2 shrink-0">
+              <span className="rounded-lg border border-stone-200 bg-stone-50 px-4 py-2 text-sm text-stone-500">
+                Aguardando finalização na cozinha
+              </span>
+            </div>
           </div>
         ))}
         {prontosEncerrar.map((p) => (
-          <div key={p.id} className="rounded-xl bg-white p-4 shadow-sm border-l-4 border-amber-500">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <span className="font-semibold text-stone-800">Pedido #{p.numero}</span>
-                <span className="ml-2 text-stone-600">- {p.cliente_nome || (p.comandas as any)?.nome_cliente}</span>
-              </div>
-              <div className="flex gap-2">
-                <button onClick={() => handleAbrirImprimir(p)} className="rounded-lg border border-stone-300 px-3 py-1.5 text-sm hover:bg-stone-50">
-                  Imprimir conta
-                </button>
-                <button onClick={() => handleEncerrarPedido(p)} className="rounded-lg bg-amber-600 px-3 py-1.5 text-sm text-white hover:bg-amber-700">
-                  Encerrar pedido
-                </button>
-              </div>
+          <div key={p.id} className="rounded-xl bg-white p-4 shadow-sm border-l-4 border-amber-500 flex flex-wrap items-stretch justify-between gap-4">
+            <div className="flex-1 min-w-0">
+              <div className="font-semibold text-stone-800">Pedido #{p.numero}</div>
+              <p className="text-sm font-medium text-amber-700 mt-0.5">Total: R$ {totalPedido(p).toFixed(2)}</p>
+              <span className="text-stone-600">- {p.cliente_nome || (p.comandas as any)?.nome_cliente}</span>
+              <ul className="mt-2 text-sm text-stone-600">
+                {(p.pedido_itens ?? []).map((i: any) => (
+                  <li key={i.id}>{i.quantidade}x {i.produtos?.descricao}</li>
+                ))}
+              </ul>
             </div>
-            <ul className="mt-2 text-sm text-stone-600">
-              {(p.pedido_itens ?? []).map((i: any) => (
-                <li key={i.id}>{i.quantidade}x {i.produtos?.descricao}</li>
-              ))}
-            </ul>
+            <div className="min-w-[200px] w-[200px] flex flex-col items-center justify-center gap-2 shrink-0">
+              <button onClick={() => handleAbrirImprimir(p)} className="rounded-lg border border-stone-300 px-4 py-2 text-sm text-stone-700 hover:bg-stone-50">
+                Imprimir conta
+              </button>
+              <button onClick={() => handleEncerrarPedido(p)} className="rounded-lg bg-amber-600 px-4 py-2 text-sm text-white hover:bg-amber-700">
+                Encerrar pedido
+              </button>
+            </div>
           </div>
         ))}
       </div>
@@ -196,8 +200,9 @@ export default function AdminViagem() {
         {accordionFinalizados && (
           <div className="mt-2 space-y-2">
             {finalizadosEncerrados.map((p) => (
-              <div key={p.id} className="rounded-lg border border-stone-200 bg-white px-4 py-2 text-sm">
-                #{p.numero} - {(p.comandas as any)?.nome_cliente ?? p.cliente_nome} - {p.forma_pagamento ? `R$ (${p.forma_pagamento})` : ''}
+              <div key={p.id} className="rounded-lg border border-stone-200 bg-white px-4 py-2 text-sm flex flex-wrap justify-between items-center gap-2">
+                <span>#{p.numero} - {(p.comandas as any)?.nome_cliente ?? p.cliente_nome} - {p.forma_pagamento ?? '-'}</span>
+                <span className="font-medium text-amber-700">R$ {totalPedido(p).toFixed(2)}</span>
               </div>
             ))}
           </div>

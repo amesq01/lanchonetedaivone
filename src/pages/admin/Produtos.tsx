@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
+import { getCategorias } from '../../lib/api';
 import type { Produto } from '../../types/database';
+import type { Categoria } from '../../types/database';
 
 export default function AdminProdutos() {
   const [list, setList] = useState<Produto[]>([]);
+  const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Produto | null>(null);
@@ -14,15 +17,17 @@ export default function AdminProdutos() {
   const [quantidade, setQuantidade] = useState(0);
   const [ativo, setAtivo] = useState(true);
   const [vaiParaCozinha, setVaiParaCozinha] = useState(true);
+  const [categoriaId, setCategoriaId] = useState('');
   const [imagemUrl, setImagemUrl] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     load();
+    getCategorias().then(setCategorias);
   }, []);
 
   async function load() {
-    const { data } = await supabase.from('produtos').select('*').order('codigo');
+    const { data } = await supabase.from('produtos').select('*, categorias(nome)').order('codigo');
     setList((data ?? []) as Produto[]);
     setLoading(false);
   }
@@ -37,6 +42,7 @@ export default function AdminProdutos() {
       setQuantidade(prod.quantidade);
       setAtivo(prod.ativo);
       setVaiParaCozinha(prod.vai_para_cozinha !== false);
+      setCategoriaId((prod as any).categoria_id ?? '');
       setImagemUrl(prod.imagem_url ?? '');
     } else {
       setEditing(null);
@@ -47,6 +53,7 @@ export default function AdminProdutos() {
       setQuantidade(0);
       setAtivo(true);
       setVaiParaCozinha(true);
+      setCategoriaId('');
       setImagemUrl('');
     }
     setOpen(true);
@@ -65,6 +72,7 @@ export default function AdminProdutos() {
         ativo,
         imagem_url: imagemUrl.trim() || null,
         vai_para_cozinha: vaiParaCozinha,
+        categoria_id: categoriaId || null,
         updated_at: new Date().toISOString(),
       };
       if (editing) await supabase.from('produtos').update(payload).eq('id', editing.id);
@@ -96,6 +104,7 @@ export default function AdminProdutos() {
               <th className="px-4 py-3 text-left text-sm font-medium text-stone-600">Valor</th>
               <th className="px-4 py-3 text-left text-sm font-medium text-stone-600">Qtd</th>
               <th className="px-4 py-3 text-left text-sm font-medium text-stone-600">Ativo</th>
+              <th className="px-4 py-3 text-left text-sm font-medium text-stone-600">Categoria</th>
               <th className="px-4 py-3 text-left text-sm font-medium text-stone-600">Cozinha</th>
               <th className="px-4 py-3 text-left text-sm font-medium text-stone-600">Foto</th>
               <th className="px-4 py-3"></th>
@@ -110,6 +119,7 @@ export default function AdminProdutos() {
                 <td className="px-4 py-3">R$ {Number(p.valor).toFixed(2)}</td>
                 <td className="px-4 py-3">{p.quantidade}</td>
                 <td className="px-4 py-3">{p.ativo ? 'Sim' : 'Não'}</td>
+                <td className="px-4 py-3">{(p as any).categorias?.nome ?? '-'}</td>
                 <td className="px-4 py-3">{p.vai_para_cozinha !== false ? 'Sim' : 'Não'}</td>
                 <td className="px-4 py-3">
                   {p.imagem_url ? <img src={p.imagem_url} alt="" className="w-10 h-10 rounded object-cover" /> : <span className="text-stone-400 text-xs">—</span>}
@@ -156,6 +166,15 @@ export default function AdminProdutos() {
               <div className="flex items-center gap-2">
                 <input type="checkbox" id="ativo" checked={ativo} onChange={(e) => setAtivo(e.target.checked)} className="rounded border-stone-300" />
                 <label htmlFor="ativo" className="text-sm text-stone-600">Ativo</label>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-stone-600">Categoria (loja online)</label>
+                <select value={categoriaId} onChange={(e) => setCategoriaId(e.target.value)} className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2">
+                  <option value="">Nenhuma</option>
+                  {categorias.map((c) => (
+                    <option key={c.id} value={c.id}>{c.nome}</option>
+                  ))}
+                </select>
               </div>
               <div className="flex items-center gap-2">
                 <input type="checkbox" id="vai_para_cozinha" checked={vaiParaCozinha} onChange={(e) => setVaiParaCozinha(e.target.checked)} className="rounded border-stone-300" />

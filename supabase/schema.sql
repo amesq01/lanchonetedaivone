@@ -43,6 +43,14 @@ CREATE TABLE IF NOT EXISTS comandas (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Categorias (loja online)
+CREATE TABLE IF NOT EXISTS categorias (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  nome TEXT NOT NULL UNIQUE,
+  ordem INT NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- Produtos
 CREATE TABLE IF NOT EXISTS produtos (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -54,6 +62,7 @@ CREATE TABLE IF NOT EXISTS produtos (
   ativo BOOLEAN DEFAULT TRUE,
   imagem_url TEXT,
   vai_para_cozinha BOOLEAN DEFAULT TRUE,
+  categoria_id UUID REFERENCES categorias(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -91,6 +100,8 @@ CREATE TABLE IF NOT EXISTS pedidos (
   cancelado_por UUID REFERENCES auth.users(id),
   cancelado_em TIMESTAMPTZ,
   tipo_entrega TEXT CHECK (tipo_entrega IS NULL OR tipo_entrega IN ('entrega', 'retirada')),
+  ponto_referencia TEXT,
+  imprimido_entrega_em TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
