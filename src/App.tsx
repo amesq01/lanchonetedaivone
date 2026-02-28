@@ -30,8 +30,9 @@ import LojaCheckout from './pages/loja/Checkout';
 import LojaObrigado from './pages/loja/Obrigado';
 
 function ProtectedRoute({ children, role }: { children: React.ReactNode; role?: 'admin' | 'atendente' | 'cozinha' }) {
-  const { user, profile, loading } = useAuth();
+  const { user, profile, loading, profileFetched } = useAuth();
   if (loading) return <div className="flex min-h-screen items-center justify-center">Carregando...</div>;
+  if (user && !profileFetched) return <div className="flex min-h-screen items-center justify-center">Carregando perfil...</div>;
   if (!user || !profile) return <Navigate to="/login" replace />;
   if (role === 'admin' && (profile.role === 'atendente' || profile.role === 'cozinha')) return <Navigate to={profile.role === 'cozinha' ? '/cozinha' : '/pdv'} replace />;
   if (role === 'cozinha' && profile.role !== 'cozinha' && profile.role !== 'admin') return <Navigate to="/" replace />;

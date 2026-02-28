@@ -1,8 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-
-const RELOAD_KEY = 'loginProfileReload';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -13,22 +11,7 @@ export default function Login() {
   const loadingProfile = Boolean(user && !profile && !profileFetched);
   const profileMissing = Boolean(user && profileFetched && !profile);
 
-  useEffect(() => {
-    if (loadingProfile) {
-      if (!sessionStorage.getItem(RELOAD_KEY)) {
-        sessionStorage.setItem(RELOAD_KEY, '1');
-        window.location.reload();
-      }
-    }
-  }, [loadingProfile]);
-
-  useEffect(() => {
-    if (user && (profile || profileMissing)) {
-      sessionStorage.removeItem(RELOAD_KEY);
-    }
-  }, [user, profile, profileMissing]);
-
-  // Redireciona no render (mais confiável que useEffect): já logado com perfil carregado
+  // Redireciona no render: já logado com perfil carregado (ex.: refresh da página)
   if (!loading && user && profile) {
     const to = profile.role === 'admin' ? '/admin' : profile.role === 'cozinha' ? '/cozinha' : '/pdv';
     return <Navigate to={to} replace />;
@@ -37,12 +20,15 @@ export default function Login() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    const { error: err } = await signIn(email, password);
+    const { error: err, profile: profileData } = await signIn(email, password);
     if (err) {
       setError(err.message);
       return;
     }
-    // Não redireciona aqui: o useEffect acima redireciona quando profile carregar
+    if (profileData) {
+      const to = profileData.role === 'admin' ? '/admin' : profileData.role === 'cozinha' ? '/cozinha' : '/pdv';
+      window.location.replace(to);
+    }
   };
 
   return (
