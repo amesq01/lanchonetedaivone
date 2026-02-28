@@ -84,7 +84,7 @@ export async function getMesasIdsComContaPendente(): Promise<Set<string>> {
   return mesaIds;
 }
 
-/** Contagens para badges da sidebar admin: mesas (conta pendente), viagem (pedidos prontos p/ encerrar), online (finalizados p/ encerrar), cozinha (novo + em preparação). */
+/** Contagens para badges da sidebar admin: mesas (conta pendente), viagem (pedidos prontos p/ encerrar), online (aguardando aceite + em andamento + finalizados p/ encerrar), cozinha (novo + em preparação). */
 export async function getAdminSidebarCounts(): Promise<{ mesas: number; viagem: number; online: number; cozinha: number }> {
   const [mesasSet, viagemList, onlineList, cozinhaList] = await Promise.all([
     getMesasIdsComContaPendente(),
@@ -94,7 +94,9 @@ export async function getAdminSidebarCounts(): Promise<{ mesas: number; viagem: 
   ]);
   const comandaAberta = (p: any) => (Array.isArray(p.comandas) ? p.comandas[0]?.aberta : p.comandas?.aberta) !== false;
   const viagem = (viagemList as any[]).filter((p) => p.status === 'finalizado' && comandaAberta(p)).length;
-  const online = (onlineList as any[]).filter((p) => p.status === 'finalizado' && !p.encerrado_em).length;
+  const online = (onlineList as any[]).filter(
+    (p) => p.status === 'aguardando_aceite' || p.status === 'novo_pedido' || p.status === 'em_preparacao' || (p.status === 'finalizado' && !p.encerrado_em)
+  ).length;
   const cozinha = (cozinhaList as any[]).filter((p) => p.status === 'novo_pedido' || p.status === 'em_preparacao').length;
   return { mesas: mesasSet.size, viagem, online, cozinha };
 }
@@ -256,7 +258,17 @@ export async function getPedidosOnlineEncerradosHoje() {
 
 export async function acceptPedidoOnline(pedidoId: string) {
   const now = new Date().toISOString();
-  await (supabase as any).from('pedidos').update({ status: 'novo_pedido', aceito_em: now, updated_at: now }).eq('id', pedidoId);
+  const { data: itens } = await supabase.from('pedido_itens').select('produto_id').eq('pedido_id', pedidoId);
+  const ids = [...new Set((itens ?? []).map((i: any) => i.produto_id))];
+  let temItemParaCozinha = false;
+  if (ids.length > 0) {
+    const { data: produtos } = await supabase.from('produtos').select('id, vai_para_cozinha').in('id', ids);
+    const byId: Record<string, { vai_para_cozinha: boolean }> = {};
+    (produtos ?? []).forEach((p: any) => { byId[p.id] = p; });
+    temItemParaCozinha = (itens as any[]).some((i) => Boolean(byId[i.produto_id]?.vai_para_cozinha));
+  }
+  const status = temItemParaCozinha ? 'novo_pedido' : 'finalizado';
+  await (supabase as any).from('pedidos').update({ status, aceito_em: now, updated_at: now }).eq('id', pedidoId);
 }
 
 export async function setImprimidoEntregaPedido(pedidoId: string) {
@@ -449,8 +461,8 @@ export async function getRelatorioFinanceiro(desde: string, ate: string) {
   return { pedidos: resultado, totalGeral };
 }
 
-/** Aplica desconto (de cupom) nos pedidos da comanda para refletir no relatório. Chamado ao imprimir conta com cupom. */
-export async function applyDescontoComanda(comandaId: string, cupomId: string, valorDescontoTotal: number) {
+/** Aplica desconto nos pedidos da comanda (cupom and/or manual). cupomId pode ser null para só desconto manual. */
+export async function applyDescontoComanda(comandaId: string, cupomId: string | null, valorDescontoTotal: number) {
   const { data } = await supabase.from('pedidos').select('id').eq('comanda_id', comandaId).neq('status', 'cancelado');
   const pedidos = (data ?? []) as { id: string }[];
   if (!pedidos.length) return;

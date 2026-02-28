@@ -1,13 +1,17 @@
 import { useEffect, useState } from 'react';
-import { getPedidosOnlinePendentes, getPedidosOnlineTodos, getPedidosOnlineEncerradosHoje, acceptPedidoOnline, setImprimidoEntregaPedido, encerrarPedidoOnline } from '../../lib/api';
+import { getPedidosOnlinePendentes, getPedidosOnlineTodos, getPedidosOnlineEncerradosHoje, acceptPedidoOnline, setImprimidoEntregaPedido, encerrarPedidoOnline, updatePedidoStatus } from '../../lib/api';
+import { useAuth } from '../../contexts/AuthContext';
 
 export default function AdminPedidosOnline() {
+  const { profile } = useAuth();
   const [pendentes, setPendentes] = useState<any[]>([]);
   const [todos, setTodos] = useState<any[]>([]);
   const [encerradosHoje, setEncerradosHoje] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [accordionEncerrados, setAccordionEncerrados] = useState(false);
   const [printPedido, setPrintPedido] = useState<any | null>(null);
+  const [popupCancelar, setPopupCancelar] = useState<{ pedidoId: string } | null>(null);
+  const [motivoCancelamento, setMotivoCancelamento] = useState('');
 
   async function load() {
     const [pend, all, encerrados] = await Promise.all([
@@ -44,6 +48,17 @@ export default function AdminPedidosOnline() {
     load();
   }
 
+  async function confirmarCancelarPedido() {
+    if (!popupCancelar || !motivoCancelamento.trim()) return;
+    await updatePedidoStatus(popupCancelar.pedidoId, 'cancelado', {
+      motivo_cancelamento: motivoCancelamento.trim(),
+      cancelado_por: profile?.id,
+    });
+    setPopupCancelar(null);
+    setMotivoCancelamento('');
+    load();
+  }
+
   const statusLabel: Record<string, string> = {
     novo_pedido: 'Novo (cozinha)',
     em_preparacao: 'Em preparação',
@@ -65,6 +80,10 @@ export default function AdminPedidosOnline() {
 
   if (printPedido) {
     const p = printPedido;
+    const subtotal = (p.pedido_itens ?? []).reduce((s: number, i: any) => s + (i.quantidade || 0) * Number(i.valor_unitario || 0), 0);
+    const desconto = Number(p.desconto ?? 0);
+    const taxa = Number(p.taxa_entrega ?? 0);
+    const total = Math.max(0, subtotal - desconto + taxa);
     return (
       <div className="bg-white p-6 text-stone-800 print:block">
         <h1 className="text-xl font-bold">Pedido para entrega #{p.numero}</h1>
@@ -94,8 +113,11 @@ export default function AdminPedidosOnline() {
             ))}
           </tbody>
         </table>
-        <div className="mt-3 text-right font-bold text-base pt-2 border-t border-stone-200">
-          Total: R$ {totalPedido(p).toFixed(2)}
+        <div className="mt-3 space-y-1 text-sm">
+          <div className="flex justify-between"><span>Subtotal</span><span>R$ {subtotal.toFixed(2)}</span></div>
+          {desconto > 0 && <div className="flex justify-between text-amber-700"><span>Desconto</span><span>- R$ {desconto.toFixed(2)}</span></div>}
+          {taxa > 0 && <div className="flex justify-between"><span>Taxa de entrega</span><span>R$ {taxa.toFixed(2)}</span></div>}
+          <div className="flex justify-between font-bold text-base pt-2 border-t border-stone-200"><span>Total</span><span>R$ {total.toFixed(2)}</span></div>
         </div>
       </div>
     );
@@ -125,9 +147,14 @@ export default function AdminPedidosOnline() {
                     ))}
                   </ul>
                 </div>
-                <button onClick={() => handleAceitar(p.id)} className="rounded-lg bg-green-600 px-4 py-2 text-white hover:bg-green-700">
-                  Aceitar pedido
-                </button>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => handleAceitar(p.id)} className="rounded-lg bg-green-600 px-4 py-2 text-white hover:bg-green-700">
+                    Aceitar pedido
+                  </button>
+                  <button onClick={() => setPopupCancelar({ pedidoId: p.id })} className="rounded-lg border border-red-300 px-4 py-2 text-red-700 hover:bg-red-50">
+                    Cancelar pedido
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -180,12 +207,29 @@ export default function AdminPedidosOnline() {
                       Aguardando finalização na cozinha
                     </span>
                   )}
+                  <button onClick={() => setPopupCancelar({ pedidoId: p.id })} className="rounded-lg border border-red-300 px-4 py-2 text-sm text-red-700 hover:bg-red-50">
+                    Cancelar pedido
+                  </button>
                 </div>
               </div>
             ))}
           </div>
         )}
       </section>
+
+      {popupCancelar && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
+            <h3 className="font-semibold text-stone-800 mb-2">Cancelar pedido</h3>
+            <p className="text-sm text-stone-600 mb-2">Informe o motivo do cancelamento (obrigatório para relatório):</p>
+            <textarea value={motivoCancelamento} onChange={(e) => setMotivoCancelamento(e.target.value)} className="w-full rounded-lg border border-stone-300 px-3 py-2 mb-4 min-h-[80px]" placeholder="Ex: Cliente desistiu" required />
+            <div className="flex gap-2">
+              <button onClick={confirmarCancelarPedido} disabled={!motivoCancelamento.trim()} className="flex-1 rounded-lg bg-red-600 py-2 text-white hover:bg-red-700 disabled:opacity-50">Confirmar cancelamento</button>
+              <button onClick={() => { setPopupCancelar(null); setMotivoCancelamento(''); }} className="rounded-lg border border-stone-300 px-4 py-2 text-stone-600">Voltar</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div>
         <button onClick={() => setAccordionEncerrados(!accordionEncerrados)} className="flex w-full items-center justify-between rounded-lg bg-stone-100 px-4 py-2 text-left font-medium text-stone-700">

@@ -21,6 +21,7 @@ export default function AdminMesaDetail() {
   const [popupImprimir, setPopupImprimir] = useState(false);
   const [cupons, setCupons] = useState<Cupom[]>([]);
   const [cupomDesconto, setCupomDesconto] = useState<string>('');
+  const [descontoManual, setDescontoManual] = useState('');
   const [popupCancelar, setPopupCancelar] = useState<{ pedidoId: string } | null>(null);
   const [motivoCancelamento, setMotivoCancelamento] = useState('');
   const [popupPedidosNaoFinalizados, setPopupPedidosNaoFinalizados] = useState(false);
@@ -48,8 +49,8 @@ export default function AdminMesaDetail() {
   const handleImprimirConta = async () => {
     setPopupImprimir(false);
     if (comanda) {
-      if (cupomSelecionado && valorDesconto > 0) {
-        await applyDescontoComanda(comanda.id, cupomSelecionado.id, valorDesconto);
+      if (valorDesconto > 0) {
+        await applyDescontoComanda(comanda.id, cupomSelecionado?.id ?? null, valorDesconto);
       } else {
         await clearDescontoComanda(comanda.id);
       }
@@ -119,7 +120,9 @@ export default function AdminMesaDetail() {
   const linhaTitulo = numerosPedidos.length > 0 ? `${numerosPedidos.join(', ')} - ${mesaNome} - ${comanda.nome_cliente}` : `${mesaNome} - ${comanda.nome_cliente}`;
   const cupomSelecionado = cupomDesconto ? cupons.find((c) => c.id === cupomDesconto) : null;
   const subtotal = contaItens?.total ?? 0;
-  const valorDesconto = cupomSelecionado ? (subtotal * Number(cupomSelecionado.porcentagem)) / 100 : 0;
+  const valorCupom = cupomSelecionado ? (subtotal * Number(cupomSelecionado.porcentagem)) / 100 : 0;
+  const valorManual = Math.max(0, Number(descontoManual) || 0);
+  const valorDesconto = Math.min(subtotal, valorCupom + valorManual);
   const totalComDesconto = subtotal - valorDesconto;
 
   function totalPedido(p: any) {
@@ -184,10 +187,16 @@ export default function AdminMesaDetail() {
             <span>Subtotal</span>
             <span>R$ {subtotal.toFixed(2)}</span>
           </div>
-          {cupomSelecionado && valorDesconto > 0 && (
+          {valorCupom > 0 && cupomSelecionado && (
             <div className="flex justify-between text-amber-700">
-              <span>Desconto ({cupomSelecionado.codigo} - {cupomSelecionado.porcentagem}%)</span>
-              <span>- R$ {valorDesconto.toFixed(2)}</span>
+              <span>Desconto cupom ({cupomSelecionado.codigo} - {cupomSelecionado.porcentagem}%)</span>
+              <span>- R$ {valorCupom.toFixed(2)}</span>
+            </div>
+          )}
+          {valorManual > 0 && (
+            <div className="flex justify-between text-amber-700">
+              <span>Desconto</span>
+              <span>- R$ {valorManual.toFixed(2)}</span>
             </div>
           )}
           <div className="flex justify-between font-bold text-base mt-2 pt-2 border-t border-stone-200">
@@ -287,20 +296,30 @@ export default function AdminMesaDetail() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
             <h3 className="font-semibold text-stone-800 mb-4">Imprimir conta</h3>
-            <label className="block text-sm font-medium text-stone-600 mb-2">Desconto (cupom)</label>
+            <label className="block text-sm font-medium text-stone-600 mb-1">Cupom</label>
             <select
               value={cupomDesconto}
               onChange={(e) => setCupomDesconto(e.target.value)}
-              className="w-full rounded-lg border border-stone-300 px-3 py-2 mb-4"
+              className="w-full rounded-lg border border-stone-300 px-3 py-2 mb-3"
             >
               <option value="">Nenhum</option>
               {cupons.map((c) => (
                 <option key={c.id} value={c.id}>{c.codigo} ({c.porcentagem}%)</option>
               ))}
             </select>
-            {cupomSelecionado && contaItens && (
+            <label className="block text-sm font-medium text-stone-600 mb-1">Desconto (R$)</label>
+            <input
+              type="number"
+              min={0}
+              step={0.50}
+              value={descontoManual}
+              onChange={(e) => setDescontoManual(e.target.value)}
+              placeholder="0,00"
+              className="w-full rounded-lg border border-stone-300 px-3 py-2 mb-3"
+            />
+            {contaItens && (valorCupom > 0 || valorManual > 0) && (
               <p className="text-sm text-stone-500 mb-2">
-                Desconto: R$ {((contaItens.total * Number(cupomSelecionado.porcentagem)) / 100).toFixed(2)} — Total: R$ {(contaItens.total - (contaItens.total * Number(cupomSelecionado.porcentagem)) / 100).toFixed(2)}
+                Desconto: R$ {valorDesconto.toFixed(2)} — Total: R$ {totalComDesconto.toFixed(2)}
               </p>
             )}
             <div className="flex gap-2 mt-4">

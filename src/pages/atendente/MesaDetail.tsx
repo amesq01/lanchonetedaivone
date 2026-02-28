@@ -217,12 +217,6 @@ export default function AtendenteMesaDetail() {
         ))}
       </div>
 
-      {pedidosAtivos.length > 0 && (
-        <button type="button" className="mt-4 w-full rounded-lg border-2 border-dashed border-amber-400 py-3 text-amber-700 font-medium hover:bg-amber-50">
-          Adicionar outro pedido
-        </button>
-      )}
-
       {popupFecharMesa && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">

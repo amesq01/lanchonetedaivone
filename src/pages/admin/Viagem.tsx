@@ -12,9 +12,10 @@ export default function AdminViagem() {
   const [popupImprimir, setPopupImprimir] = useState<any | null>(null);
   const [contaItensPedido, setContaItensPedido] = useState<{ itens: { codigo: string; descricao: string; quantidade: number; valor: number }[]; total: number } | null>(null);
   const [cupomDesconto, setCupomDesconto] = useState('');
+  const [descontoManual, setDescontoManual] = useState('');
   const [cupons, setCupons] = useState<Cupom[]>([]);
   const [printMode, setPrintMode] = useState(false);
-  const [printData, setPrintData] = useState<{ pedido: any; contaItens: { itens: any[]; total: number }; valorDesconto: number; cupomSelecionado: Cupom | null } | null>(null);
+  const [printData, setPrintData] = useState<{ pedido: any; contaItens: { itens: any[]; total: number }; valorDesconto: number; valorCupom: number; valorManual: number; cupomSelecionado: Cupom | null } | null>(null);
 
   useEffect(() => {
     load();
@@ -49,9 +50,11 @@ export default function AdminViagem() {
     const cupomSelecionado = cupomDesconto ? cupons.find((c) => c.id === cupomDesconto) : null;
     let contaParaPrint = contaItensPedido ?? await getTotalPedido(popupImprimir.id);
     const subtotal = contaParaPrint.total;
-    const valorDesconto = cupomSelecionado ? (subtotal * Number(cupomSelecionado.porcentagem)) / 100 : 0;
-    if (cupomSelecionado && valorDesconto > 0) {
-      await applyDescontoComanda(popupImprimir.comanda_id, cupomSelecionado.id, valorDesconto);
+    const valorCupom = cupomSelecionado ? (subtotal * Number(cupomSelecionado.porcentagem)) / 100 : 0;
+    const valorManual = Math.max(0, Number(descontoManual) || 0);
+    const valorDesconto = Math.min(subtotal, valorCupom + valorManual);
+    if (valorDesconto > 0) {
+      await applyDescontoComanda(popupImprimir.comanda_id, cupomSelecionado?.id ?? null, valorDesconto);
       contaParaPrint = await getTotalPedido(popupImprimir.id);
       setContaItensPedido(contaParaPrint);
     } else {
@@ -61,6 +64,8 @@ export default function AdminViagem() {
       pedido: popupImprimir,
       contaItens: { itens: contaParaPrint.itens, total: subtotal - valorDesconto },
       valorDesconto,
+      valorCupom,
+      valorManual,
       cupomSelecionado: cupomSelecionado ?? null,
     });
     setPrintMode(true);
@@ -102,10 +107,12 @@ export default function AdminViagem() {
 
   const cupomSelecionado = cupomDesconto ? cupons.find((c) => c.id === cupomDesconto) : null;
   const subtotalPrint = contaItensPedido?.total ?? 0;
-  const valorDescontoPrint = cupomSelecionado ? (subtotalPrint * Number(cupomSelecionado.porcentagem)) / 100 : 0;
+  const valorCupomPrint = cupomSelecionado ? (subtotalPrint * Number(cupomSelecionado.porcentagem)) / 100 : 0;
+  const valorManualPrint = Math.max(0, Number(descontoManual) || 0);
+  const valorDescontoPrint = Math.min(subtotalPrint, valorCupomPrint + valorManualPrint);
 
   if (printMode && printData) {
-    const { pedido, contaItens, valorDesconto, cupomSelecionado: cupom } = printData;
+    const { pedido, contaItens, valorDesconto, valorCupom, valorManual, cupomSelecionado: cupom } = printData;
     const clienteNome = pedido.cliente_nome || (pedido.comandas as any)?.nome_cliente || '-';
     return (
       <div className="bg-white p-6 text-stone-800">
@@ -138,10 +145,16 @@ export default function AdminViagem() {
             <span>Subtotal</span>
             <span>R$ {(contaItens.total + valorDesconto).toFixed(2)}</span>
           </div>
-          {cupom && valorDesconto > 0 && (
+          {valorCupom > 0 && cupom && (
             <div className="flex justify-between text-amber-700">
-              <span>Desconto ({cupom.codigo} - {cupom.porcentagem}%)</span>
-              <span>- R$ {valorDesconto.toFixed(2)}</span>
+              <span>Desconto cupom ({cupom.codigo} - {cupom.porcentagem}%)</span>
+              <span>- R$ {valorCupom.toFixed(2)}</span>
+            </div>
+          )}
+          {valorManual > 0 && (
+            <div className="flex justify-between text-amber-700">
+              <span>Desconto</span>
+              <span>- R$ {valorManual.toFixed(2)}</span>
             </div>
           )}
           <div className="flex justify-between font-bold text-base mt-2 pt-2 border-t border-stone-200">
@@ -228,18 +241,28 @@ export default function AdminViagem() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
             <h3 className="font-semibold text-stone-800 mb-4">Imprimir conta - Pedido #{popupImprimir.numero}</h3>
-            <label className="block text-sm font-medium text-stone-600 mb-2">Desconto (cupom)</label>
+            <label className="block text-sm font-medium text-stone-600 mb-1">Cupom</label>
             <select
               value={cupomDesconto}
               onChange={(e) => setCupomDesconto(e.target.value)}
-              className="w-full rounded-lg border border-stone-300 px-3 py-2 mb-4"
+              className="w-full rounded-lg border border-stone-300 px-3 py-2 mb-3"
             >
               <option value="">Nenhum</option>
               {cupons.map((c) => (
                 <option key={c.id} value={c.id}>{c.codigo} ({c.porcentagem}%)</option>
               ))}
             </select>
-            {cupomSelecionado && contaItensPedido && (
+            <label className="block text-sm font-medium text-stone-600 mb-1">Desconto (R$)</label>
+            <input
+              type="number"
+              min={0}
+              step={0.50}
+              value={descontoManual}
+              onChange={(e) => setDescontoManual(e.target.value)}
+              placeholder="0,00"
+              className="w-full rounded-lg border border-stone-300 px-3 py-2 mb-3"
+            />
+            {contaItensPedido && (valorCupomPrint > 0 || valorManualPrint > 0) && (
               <p className="text-sm text-stone-500 mb-2">
                 Desconto: R$ {valorDescontoPrint.toFixed(2)} — Total: R$ {(contaItensPedido.total - valorDescontoPrint).toFixed(2)}
               </p>
