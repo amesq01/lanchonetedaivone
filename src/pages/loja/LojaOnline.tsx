@@ -72,6 +72,7 @@ export default function LojaOnline() {
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [loading, setLoading] = useState(true);
+  const [erro, setErro] = useState<string | null>(null);
   const [cartCount, setCartCount] = useState(0);
   const [qtyByProd, setQtyByProd] = useState<Record<string, number>>({});
   const [categoriaSelecionada, setCategoriaSelecionada] = useState<string | null>(null);
@@ -81,20 +82,32 @@ export default function LojaOnline() {
     setCartCount(cart.reduce((s, i) => s + i.quantidade, 0));
   }, []);
 
-  useEffect(() => {
-    getCategorias().then(setCategorias);
-    getProdutos(true).then((list) => {
-      setProdutos(list);
-      const cart = getCart();
-      const byProd: Record<string, number> = {};
-      cart.forEach((i) => {
-        byProd[i.produto_id] = (byProd[i.produto_id] ?? 0) + i.quantidade;
+  const carregarCardapio = useCallback(() => {
+    setErro(null);
+    setLoading(true);
+    Promise.all([getCategorias(), getProdutos(true)])
+      .then(([cats, list]) => {
+        setCategorias(cats);
+        setProdutos(list);
+        const cart = getCart();
+        const byProd: Record<string, number> = {};
+        cart.forEach((i) => {
+          byProd[i.produto_id] = (byProd[i.produto_id] ?? 0) + i.quantidade;
+        });
+        setQtyByProd(byProd);
+        setCartCount(cart.reduce((s, i) => s + i.quantidade, 0));
+      })
+      .catch((e) => {
+        setErro(e?.message ?? 'Não foi possível carregar o cardápio.');
+      })
+      .finally(() => {
+        setLoading(false);
       });
-      setQtyByProd(byProd);
-      setCartCount(cart.reduce((s, i) => s + i.quantidade, 0));
-      setLoading(false);
-    });
   }, []);
+
+  useEffect(() => {
+    carregarCardapio();
+  }, [carregarCardapio]);
 
   useEffect(() => {
     const onStorage = () => refreshCartCount();
@@ -138,7 +151,22 @@ export default function LojaOnline() {
   const categoriaVazia =
     categoriaSelecionada !== null && byCategoria(categoriaSelecionada).length === 0;
 
-  if (loading) return <LojaLoading />;
+  if (loading && !erro) return <LojaLoading />;
+
+  if (erro) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-stone-50 px-4">
+        <p className="text-center text-stone-600">{erro}</p>
+        <button
+          type="button"
+          onClick={carregarCardapio}
+          className="rounded-lg bg-amber-600 px-4 py-2 text-white font-medium hover:bg-amber-700"
+        >
+          Tentar novamente
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-stone-50">

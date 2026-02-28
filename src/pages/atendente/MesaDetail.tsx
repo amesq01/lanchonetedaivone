@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Plus, ChevronDown, ChevronUp } from 'lucide-react';
 import { getMesas, getComandaByMesa, getProdutos, createPedidoPresencial, getPedidosByComanda, updatePedidoStatus, closeComanda } from '../../lib/api';
@@ -25,6 +25,19 @@ export default function AtendenteMesaDetail() {
   const [popupCancelar, setPopupCancelar] = useState<{ pedidoId: string } | null>(null);
   const [motivoCancelamento, setMotivoCancelamento] = useState('');
   const [fechando, setFechando] = useState(false);
+  /** Mesa foi encerrada ou reaberta por outro atendente; não permite lançar pedido. */
+  const [comandaInvalidada, setComandaInvalidada] = useState(false);
+
+  const revalidarComanda = useCallback(() => {
+    if (!mesaId || !comandaId) return;
+    getComandaByMesa(mesaId).then((c) => {
+      if (!c) {
+        setComandaInvalidada(true);
+        return;
+      }
+      if (c.id !== comandaId) setComandaInvalidada(true);
+    });
+  }, [mesaId, comandaId]);
 
   useEffect(() => {
     if (!mesaId) return;
@@ -34,16 +47,30 @@ export default function AtendenteMesaDetail() {
     });
     getComandaByMesa(mesaId).then((c) => {
       if (!c) {
+        setComandaId(null);
         setLoading(false);
         return;
       }
       setComandaId(c.id);
       setClienteNome(c.nome_cliente);
+      setComandaInvalidada(false);
       getPedidosByComanda(c.id).then(setPedidos);
       setLoading(false);
     });
     getProdutos(true).then(setProdutos);
   }, [mesaId]);
+
+  useEffect(() => {
+    if (!mesaId || !comandaId) return;
+    const t = setInterval(revalidarComanda, 15000);
+    return () => clearInterval(t);
+  }, [mesaId, comandaId, revalidarComanda]);
+
+  useEffect(() => {
+    const onFocus = () => revalidarComanda();
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [revalidarComanda]);
 
   const filtrados = search.trim()
     ? produtos.filter((p) => (p.nome?.toLowerCase().includes(search.toLowerCase())) || p.descricao.toLowerCase().includes(search.toLowerCase()) || p.codigo.toLowerCase().includes(search.toLowerCase()))
@@ -79,6 +106,7 @@ export default function AtendenteMesaDetail() {
 
   const finalizarPedido = async () => {
     if (!comandaId || carrinho.length === 0) return;
+    if (comandaInvalidada) return;
     setEnviando(true);
     try {
       const itens = carrinho.map((i) => ({
@@ -90,6 +118,11 @@ export default function AtendenteMesaDetail() {
       await createPedidoPresencial(comandaId, itens);
       setCarrinho([]);
       getPedidosByComanda(comandaId).then(setPedidos);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg.includes('encerrada') || msg.includes('encerrado') || msg.includes('não é possível')) {
+        setComandaInvalidada(true);
+      }
     } finally {
       setEnviando(false);
     }
@@ -126,12 +159,26 @@ export default function AtendenteMesaDetail() {
 
   return (
     <div className="max-w-2xl mx-auto">
+      {comandaInvalidada && (
+        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-4 flex flex-wrap items-center justify-between gap-2">
+          <p className="text-amber-800 font-medium">
+            Esta mesa foi encerrada ou reaberta por outro atendente. Não é possível lançar novos pedidos aqui.
+          </p>
+          <button
+            type="button"
+            onClick={() => navigate('/pdv/mesas')}
+            className="rounded-lg bg-amber-600 px-4 py-2 text-white font-medium hover:bg-amber-700"
+          >
+            Voltar às mesas
+          </button>
+        </div>
+      )}
       <div className="mb-4 flex items-center justify-between flex-wrap gap-2">
         <div>
           <h1 className="text-xl font-bold text-stone-800">{mesaNome}</h1>
           <p className="text-stone-600">Cliente: {clienteNome}</p>
         </div>
-        {podeFecharMesa && (
+        {podeFecharMesa && !comandaInvalidada && (
           <button onClick={() => setPopupFecharMesa(true)} className="rounded-lg border border-stone-300 px-4 py-2 text-stone-600 hover:bg-stone-50 text-sm">
             Fechar mesa (sem pedidos)
           </button>
@@ -187,7 +234,7 @@ export default function AtendenteMesaDetail() {
                 ))}
               </ul>
               <div className="p-3 border-t border-stone-100">
-                <button onClick={finalizarPedido} disabled={enviando} className="w-full rounded-lg bg-amber-600 py-2 font-medium text-white hover:bg-amber-700 disabled:opacity-50">
+                <button onClick={finalizarPedido} disabled={enviando || comandaInvalidada} className="w-full rounded-lg bg-amber-600 py-2 font-medium text-white hover:bg-amber-700 disabled:opacity-50">
                   {enviando ? 'Enviando...' : 'Finalizar pedido'}
                 </button>
               </div>

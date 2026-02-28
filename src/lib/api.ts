@@ -140,7 +140,18 @@ export async function nextPedidoNumero(): Promise<number> {
   return data as number;
 }
 
+/** Verifica se a comanda existe e está aberta; lança se estiver fechada ou não existir. */
+export async function getComandaAbertaOuErro(comandaId: string) {
+  const { data, error } = await supabase.from('comandas').select('id, aberta').eq('id', comandaId).maybeSingle();
+  if (error) throw error;
+  if (!data) throw new Error('Comanda não encontrada.');
+  const row = data as { id: string; aberta: boolean };
+  if (row.aberta !== true) throw new Error('Esta mesa já foi encerrada. Não é possível incluir novos pedidos.');
+  return row;
+}
+
 export async function createPedidoPresencial(comandaId: string, itens: { produto_id: string; quantidade: number; valor_unitario: number; observacao?: string }[]) {
+  await getComandaAbertaOuErro(comandaId);
   const numero = await nextPedidoNumero();
   const { data: pedido, error: e1 } = await (supabase as any).from('pedidos').insert({ numero, comanda_id: comandaId, origem: 'presencial', status: 'novo_pedido' }).select().single();
   if (e1) throw e1;
