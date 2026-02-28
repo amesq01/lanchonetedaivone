@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { getPedidosOnlinePendentes, getPedidosOnlineTodos, getPedidosOnlineEncerradosHoje, acceptPedidoOnline, setImprimidoEntregaPedido, encerrarPedidoOnline, updatePedidoStatus } from '../../lib/api';
+import { printPedidoEntrega } from '../../lib/printPdf';
 import { useAuth } from '../../contexts/AuthContext';
 
 export default function AdminPedidosOnline() {
@@ -9,7 +10,6 @@ export default function AdminPedidosOnline() {
   const [encerradosHoje, setEncerradosHoje] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [accordionEncerrados, setAccordionEncerrados] = useState(false);
-  const [printPedido, setPrintPedido] = useState<any | null>(null);
   const [popupCancelar, setPopupCancelar] = useState<{ pedidoId: string } | null>(null);
   const [motivoCancelamento, setMotivoCancelamento] = useState('');
 
@@ -35,12 +35,8 @@ export default function AdminPedidosOnline() {
   }
 
   function handleImprimirEntrega(p: any) {
-    setPrintPedido(p);
-    setTimeout(() => {
-      window.print();
-      setPrintPedido(null);
-      setImprimidoEntregaPedido(p.id).then(load);
-    }, 200);
+    printPedidoEntrega(p);
+    setImprimidoEntregaPedido(p.id).then(load);
   }
 
   async function handleEncerrar(pedidoId: string) {
@@ -77,51 +73,6 @@ export default function AdminPedidosOnline() {
   }
 
   if (loading) return <p className="text-stone-500">Carregando...</p>;
-
-  if (printPedido) {
-    const p = printPedido;
-    const subtotal = (p.pedido_itens ?? []).reduce((s: number, i: any) => s + (i.quantidade || 0) * Number(i.valor_unitario || 0), 0);
-    const desconto = Number(p.desconto ?? 0);
-    const taxa = Number(p.taxa_entrega ?? 0);
-    const total = Math.max(0, subtotal - desconto + taxa);
-    return (
-      <div className="bg-white p-6 text-stone-800 print:block">
-        <h1 className="text-xl font-bold">Pedido para entrega #{p.numero}</h1>
-        <p className="mt-2 font-medium">{p.cliente_nome}</p>
-        <p className="text-sm">{p.cliente_whatsapp}</p>
-        <p className="mt-2">{p.cliente_endereco}</p>
-        {p.ponto_referencia && <p className="text-sm text-stone-600">Ref: {p.ponto_referencia}</p>}
-        <p className="mt-2 text-sm">Pagamento: {p.forma_pagamento} {p.troco_para ? `- Troco para R$ ${Number(p.troco_para).toFixed(2)}` : ''}</p>
-        {p.observacoes && <p className="text-sm italic mt-1">{p.observacoes}</p>}
-        <table className="mt-4 w-full border-collapse border border-stone-200 text-sm">
-          <thead>
-            <tr className="bg-stone-100">
-              <th className="border border-stone-200 px-2 py-1.5 text-left font-semibold">Código</th>
-              <th className="border border-stone-200 px-2 py-1.5 text-left font-semibold">Produto</th>
-              <th className="border border-stone-200 px-2 py-1.5 text-center font-semibold">Quantidade</th>
-              <th className="border border-stone-200 px-2 py-1.5 text-right font-semibold">Valor</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(p.pedido_itens ?? []).map((i: any) => (
-              <tr key={i.id}>
-                <td className="border border-stone-200 px-2 py-1">{i.produtos?.codigo ?? '-'}</td>
-                <td className="border border-stone-200 px-2 py-1">{(i.produtos?.nome || i.produtos?.descricao) ?? '-'}{i.observacao ? ` (${i.observacao})` : ''}</td>
-                <td className="border border-stone-200 px-2 py-1 text-center">{i.quantidade}</td>
-                <td className="border border-stone-200 px-2 py-1 text-right">R$ {((i.quantidade || 0) * Number(i.valor_unitario || 0)).toFixed(2)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <div className="mt-3 space-y-1 text-sm">
-          <div className="flex justify-between"><span>Subtotal</span><span>R$ {subtotal.toFixed(2)}</span></div>
-          {desconto > 0 && <div className="flex justify-between text-amber-700"><span>Desconto</span><span>- R$ {desconto.toFixed(2)}</span></div>}
-          {taxa > 0 && <div className="flex justify-between"><span>Taxa de entrega</span><span>R$ {taxa.toFixed(2)}</span></div>}
-          <div className="flex justify-between font-bold text-base pt-2 border-t border-stone-200"><span>Total</span><span>R$ {total.toFixed(2)}</span></div>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="no-print">

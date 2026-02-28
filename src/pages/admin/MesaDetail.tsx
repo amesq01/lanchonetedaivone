@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getComandaByMesa, getComandaWithPedidos, getTotalComanda, closeComanda, getMesas, updatePedidoStatus, getCuponsAtivos, applyDescontoComanda, clearDescontoComanda } from '../../lib/api';
+import { printContaMesa } from '../../lib/printPdf';
 import { useAuth } from '../../contexts/AuthContext';
 import type { Comanda } from '../../types/database';
 import type { Cupom } from '../../types/database';
@@ -17,7 +18,6 @@ export default function AdminMesaDetail() {
   const [popupPagamento, setPopupPagamento] = useState(false);
   const [formaPagamento, setFormaPagamento] = useState('');
   const [contaItens, setContaItens] = useState<{ itens: { codigo: string; descricao: string; quantidade: number; valor: number }[]; total: number } | null>(null);
-  const [printMode, setPrintMode] = useState(false);
   const [popupImprimir, setPopupImprimir] = useState(false);
   const [cupons, setCupons] = useState<Cupom[]>([]);
   const [cupomDesconto, setCupomDesconto] = useState<string>('');
@@ -48,19 +48,47 @@ export default function AdminMesaDetail() {
 
   const handleImprimirConta = async () => {
     setPopupImprimir(false);
-    if (comanda) {
-      if (valorDesconto > 0) {
-        await applyDescontoComanda(comanda.id, cupomSelecionado?.id ?? null, valorDesconto);
-      } else {
-        await clearDescontoComanda(comanda.id);
-      }
-      getTotalComanda(comanda.id).then(setContaItens);
+    if (!comanda) return;
+    if (valorDesconto > 0) {
+      await applyDescontoComanda(comanda.id, cupomSelecionado?.id ?? null, valorDesconto);
+    } else {
+      await clearDescontoComanda(comanda.id);
     }
-    setPrintMode(true);
-    setTimeout(() => {
-      window.print();
-      setPrintMode(false);
-    }, 150);
+    const contaAtual = await getTotalComanda(comanda.id);
+    setContaItens(contaAtual);
+    const numeros = pedidos.filter((p) => p.status !== 'cancelado').map((p) => p.numero);
+    const titulo = numeros.length > 0 ? `${numeros.join(', ')} - ${mesaNome} - ${comanda.nome_cliente}` : `${mesaNome} - ${comanda.nome_cliente}`;
+    const sub = contaAtual?.total ?? 0;
+    const vCupom = cupomSelecionado ? (sub * Number(cupomSelecionado.porcentagem)) / 100 : 0;
+    const vManual = Math.max(0, Number(descontoManual) || 0);
+    const desc = Math.min(sub, vCupom + vManual);
+    const totalFinal = sub - desc;
+    type ItemConta = { codigo: string; descricao: string; quantidade: number; valor: number };
+    const itens: ItemConta[] = contaAtual
+      ? isMesaViagem
+        ? contaAtual.itens
+        : (() => {
+            const map = new Map<string, ItemConta>();
+            for (const i of contaAtual.itens) {
+              const key = `${i.codigo}|${i.descricao}`;
+              const exist = map.get(key);
+              if (exist) {
+                exist.quantidade += i.quantidade;
+                exist.valor += i.valor;
+              } else map.set(key, { ...i });
+            }
+            return Array.from(map.values());
+          })()
+      : [];
+    printContaMesa({
+      titulo,
+      itens,
+      subtotal: sub,
+      valorCupom: vCupom,
+      valorManual: vManual,
+      total: totalFinal,
+      cupomCodigo: cupomSelecionado?.codigo,
+    });
   };
 
   const handleEncerrar = async () => {
@@ -116,8 +144,6 @@ export default function AdminMesaDetail() {
 
   const formas = ['dinheiro', 'pix', 'cartão crédito', 'cartão débito'];
   const pedidosNaMesa = pedidos.filter((p) => p.status !== 'cancelado');
-  const numerosPedidos = pedidos.filter((p) => p.status !== 'cancelado').map((p) => p.numero);
-  const linhaTitulo = numerosPedidos.length > 0 ? `${numerosPedidos.join(', ')} - ${mesaNome} - ${comanda.nome_cliente}` : `${mesaNome} - ${comanda.nome_cliente}`;
   const cupomSelecionado = cupomDesconto ? cupons.find((c) => c.id === cupomDesconto) : null;
   const subtotal = contaItens?.total ?? 0;
   const valorCupom = cupomSelecionado ? (subtotal * Number(cupomSelecionado.porcentagem)) / 100 : 0;
@@ -152,64 +178,6 @@ export default function AdminMesaDetail() {
           return Array.from(map.values());
         })()
     : [];
-
-  if (printMode && contaItens) {
-    return (
-      <div className="bg-white p-6 text-stone-800">
-        <div className="text-center mb-6">
-          <h1 className="text-2xl font-bold">Lanchonete & Sushi</h1>
-          <p className="mt-2 text-lg">{linhaTitulo}</p>
-        </div>
-        <table className="w-full border-collapse border border-stone-200 text-sm mt-4">
-          <thead>
-            <tr className="bg-stone-100">
-              <th className="border border-stone-200 px-2 py-1.5 text-left font-semibold">Código</th>
-              <th className="border border-stone-200 px-2 py-1.5 text-left font-semibold">Produto</th>
-              <th className="border border-stone-200 px-2 py-1.5 text-center font-semibold">Qtd</th>
-              <th className="border border-stone-200 px-2 py-1.5 text-right font-semibold">Valor unit.</th>
-              <th className="border border-stone-200 px-2 py-1.5 text-right font-semibold">Valor</th>
-            </tr>
-          </thead>
-          <tbody>
-            {itensParaExibir.map((item, i) => (
-              <tr key={i}>
-                <td className="border border-stone-200 px-2 py-1">{item.codigo}</td>
-                <td className="border border-stone-200 px-2 py-1">{item.descricao}</td>
-                <td className="border border-stone-200 px-2 py-1 text-center">{item.quantidade}</td>
-                <td className="border border-stone-200 px-2 py-1 text-right">R$ {(item.quantidade > 0 ? item.valor / item.quantidade : 0).toFixed(2)}</td>
-                <td className="border border-stone-200 px-2 py-1 text-right">R$ {item.valor.toFixed(2)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <div className="mt-3 space-y-1 text-sm">
-          <div className="flex justify-between">
-            <span>Subtotal</span>
-            <span>R$ {subtotal.toFixed(2)}</span>
-          </div>
-          {valorCupom > 0 && cupomSelecionado && (
-            <div className="flex justify-between text-amber-700">
-              <span>Desconto cupom ({cupomSelecionado.codigo} - {cupomSelecionado.porcentagem}%)</span>
-              <span>- R$ {valorCupom.toFixed(2)}</span>
-            </div>
-          )}
-          {valorManual > 0 && (
-            <div className="flex justify-between text-amber-700">
-              <span>Desconto</span>
-              <span>- R$ {valorManual.toFixed(2)}</span>
-            </div>
-          )}
-          <div className="flex justify-between font-bold text-base mt-2 pt-2 border-t border-stone-200">
-            <span>Total</span>
-            <span>R$ {totalComDesconto.toFixed(2)}</span>
-          </div>
-        </div>
-        <footer className="text-center mt-8 pt-4 text-stone-500 text-sm">
-          Obrigado! Volte sempre.
-        </footer>
-      </div>
-    );
-  }
 
   return (
     <div className="no-print">

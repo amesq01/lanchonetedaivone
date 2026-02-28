@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { getPedidosViagemAbertos, getTotalComanda, getCuponsAtivos, applyDescontoComanda, clearDescontoComanda } from '../../lib/api';
+import { printContaViagem } from '../../lib/printPdf';
 import { supabase } from '../../lib/supabase';
 import type { Cupom } from '../../types/database';
 
@@ -14,8 +15,6 @@ export default function AdminViagem() {
   const [cupomDesconto, setCupomDesconto] = useState('');
   const [descontoManual, setDescontoManual] = useState('');
   const [cupons, setCupons] = useState<Cupom[]>([]);
-  const [printMode, setPrintMode] = useState(false);
-  const [printData, setPrintData] = useState<{ pedido: any; contaItens: { itens: any[]; total: number }; valorDesconto: number; valorCupom: number; valorManual: number; cupomSelecionado: Cupom | null } | null>(null);
 
   useEffect(() => {
     load();
@@ -60,21 +59,17 @@ export default function AdminViagem() {
     } else {
       await clearDescontoComanda(popupImprimir.comanda_id);
     }
-    setPrintData({
-      pedido: popupImprimir,
-      contaItens: { itens: contaParaPrint.itens, total: subtotal - valorDesconto },
-      valorDesconto,
+    setPopupImprimir(null);
+    printContaViagem({
+      pedidoNumero: popupImprimir.numero,
+      clienteNome: popupImprimir.cliente_nome || (popupImprimir.comandas as any)?.nome_cliente || '-',
+      itens: contaParaPrint.itens,
+      subtotal,
       valorCupom,
       valorManual,
-      cupomSelecionado: cupomSelecionado ?? null,
+      total: subtotal - valorDesconto,
+      cupomCodigo: cupomSelecionado?.codigo,
     });
-    setPrintMode(true);
-    setPopupImprimir(null);
-    setTimeout(() => {
-      window.print();
-      setPrintMode(false);
-      setPrintData(null);
-    }, 150);
   };
 
   const handleEncerrarPedido = (pedido: any) => {
@@ -110,64 +105,6 @@ export default function AdminViagem() {
   const valorCupomPrint = cupomSelecionado ? (subtotalPrint * Number(cupomSelecionado.porcentagem)) / 100 : 0;
   const valorManualPrint = Math.max(0, Number(descontoManual) || 0);
   const valorDescontoPrint = Math.min(subtotalPrint, valorCupomPrint + valorManualPrint);
-
-  if (printMode && printData) {
-    const { pedido, contaItens, valorDesconto, valorCupom, valorManual, cupomSelecionado: cupom } = printData;
-    const clienteNome = pedido.cliente_nome || (pedido.comandas as any)?.nome_cliente || '-';
-    return (
-      <div className="bg-white p-6 text-stone-800">
-        <div className="text-center mb-6">
-          <h1 className="text-2xl font-bold">Lanchonete & Sushi</h1>
-          <p className="mt-2 text-lg">Pedido #{pedido.numero} - VIAGEM - {clienteNome}</p>
-        </div>
-        <table className="w-full border-collapse border border-stone-200 text-sm mt-4">
-          <thead>
-            <tr className="bg-stone-100">
-              <th className="border border-stone-200 px-2 py-1.5 text-left font-semibold">Código</th>
-              <th className="border border-stone-200 px-2 py-1.5 text-left font-semibold">Produto</th>
-              <th className="border border-stone-200 px-2 py-1.5 text-center font-semibold">Quantidade</th>
-              <th className="border border-stone-200 px-2 py-1.5 text-right font-semibold">Valor</th>
-            </tr>
-          </thead>
-          <tbody>
-            {contaItens.itens.map((item: any, i: number) => (
-              <tr key={i}>
-                <td className="border border-stone-200 px-2 py-1">{item.codigo}</td>
-                <td className="border border-stone-200 px-2 py-1">{item.descricao}</td>
-                <td className="border border-stone-200 px-2 py-1 text-center">{item.quantidade}</td>
-                <td className="border border-stone-200 px-2 py-1 text-right">R$ {item.valor.toFixed(2)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <div className="mt-3 space-y-1 text-sm">
-          <div className="flex justify-between">
-            <span>Subtotal</span>
-            <span>R$ {(contaItens.total + valorDesconto).toFixed(2)}</span>
-          </div>
-          {valorCupom > 0 && cupom && (
-            <div className="flex justify-between text-amber-700">
-              <span>Desconto cupom ({cupom.codigo} - {cupom.porcentagem}%)</span>
-              <span>- R$ {valorCupom.toFixed(2)}</span>
-            </div>
-          )}
-          {valorManual > 0 && (
-            <div className="flex justify-between text-amber-700">
-              <span>Desconto</span>
-              <span>- R$ {valorManual.toFixed(2)}</span>
-            </div>
-          )}
-          <div className="flex justify-between font-bold text-base mt-2 pt-2 border-t border-stone-200">
-            <span>Total</span>
-            <span>R$ {contaItens.total.toFixed(2)}</span>
-          </div>
-        </div>
-        <footer className="text-center mt-8 pt-4 text-stone-500 text-sm">
-          Obrigado! Volte sempre.
-        </footer>
-      </div>
-    );
-  }
 
   if (loading) return <p className="text-stone-500">Carregando...</p>;
 
