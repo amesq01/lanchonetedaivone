@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { getMesas, getComandaByMesa, openComanda } from '../../lib/api';
+import { getMesas, getMesaIdsComComandaAberta, openComanda } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
 import type { Mesa } from '../../types/database';
 
@@ -19,14 +19,11 @@ export default function AtendenteMesas() {
   }, []);
 
   async function load() {
-    const list = await getMesas();
+    const [list, ocup] = await Promise.all([
+      getMesas(),
+      getMesaIdsComComandaAberta(),
+    ]);
     setMesas(list.filter((m) => !m.is_viagem));
-    const ocup: Set<string> = new Set();
-    for (const m of list) {
-      if (m.is_viagem) continue;
-      const c = await getComandaByMesa(m.id);
-      if (c) ocup.add(m.id);
-    }
     setOcupadas(ocup);
     setLoading(false);
   }

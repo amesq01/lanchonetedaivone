@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { getPedidosViagemAbertos, getTotalComanda, getCuponsAtivos, applyDescontoComanda } from '../../lib/api';
+import { getPedidosViagemAbertos, getTotalComanda, getCuponsAtivos, applyDescontoComanda, clearDescontoComanda } from '../../lib/api';
 import { supabase } from '../../lib/supabase';
 import type { Cupom } from '../../types/database';
 
@@ -54,6 +54,8 @@ export default function AdminViagem() {
       await applyDescontoComanda(popupImprimir.comanda_id, cupomSelecionado.id, valorDesconto);
       contaParaPrint = await getTotalPedido(popupImprimir.id);
       setContaItensPedido(contaParaPrint);
+    } else {
+      await clearDescontoComanda(popupImprimir.comanda_id);
     }
     setPrintData({
       pedido: popupImprimir,
@@ -170,7 +172,7 @@ export default function AdminViagem() {
               <span className="text-stone-600">- {p.cliente_nome || (p.comandas as any)?.nome_cliente}</span>
               <ul className="mt-2 text-sm text-stone-600">
                 {(p.pedido_itens ?? []).map((i: any) => (
-                  <li key={i.id}>{i.quantidade}x {i.produtos?.descricao}</li>
+                  <li key={i.id}>{i.quantidade}x {i.produtos?.nome || i.produtos?.descricao}</li>
                 ))}
               </ul>
             </div>
@@ -189,7 +191,7 @@ export default function AdminViagem() {
               <span className="text-stone-600">- {p.cliente_nome || (p.comandas as any)?.nome_cliente}</span>
               <ul className="mt-2 text-sm text-stone-600">
                 {(p.pedido_itens ?? []).map((i: any) => (
-                  <li key={i.id}>{i.quantidade}x {i.produtos?.descricao}</li>
+                  <li key={i.id}>{i.quantidade}x {i.produtos?.nome || i.produtos?.descricao}</li>
                 ))}
               </ul>
             </div>

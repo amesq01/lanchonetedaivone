@@ -15,7 +15,7 @@ export default function AtendenteLayout() {
     try {
       await signOut();
     } finally {
-      navigate('/login', { replace: true });
+      navigate('/login', { replace: true, state: { fromLogout: true } });
     }
   };
 

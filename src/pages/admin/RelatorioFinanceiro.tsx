@@ -56,35 +56,69 @@ export default function RelatorioFinanceiro() {
       .finally(() => setLoading(false));
   }, [periodo, dataRef]);
 
-  const labelData = periodo === 'dia' ? 'Data' : periodo === 'mes' ? 'Mês (ano-mês)' : 'Ano';
+  const tituloPeriodo =
+    periodo === 'dia'
+      ? new Date(dataRef.slice(0, 10) + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })
+      : periodo === 'mes'
+        ? new Date(dataRef.slice(0, 7) + '-01T12:00:00').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+        : dataRef.slice(0, 4);
 
   return (
     <div>
       <h1 className="text-2xl font-bold text-stone-800 mb-4">Relatório financeiro</h1>
-      <div className="flex flex-wrap gap-4 mb-6">
-        <div>
-          <label className="block text-sm font-medium text-stone-600">Período</label>
-          <select value={periodo} onChange={(e) => setPeriodo(e.target.value as Periodo)} className="mt-1 rounded-lg border border-stone-300 px-3 py-2">
-            <option value="dia">Diário</option>
-            <option value="mes">Mensal</option>
-            <option value="ano">Anual</option>
-          </select>
+      <div className="mb-6 flex flex-wrap items-end gap-6">
+        <div className="flex gap-2">
+          {(['dia', 'mes', 'ano'] as const).map((t) => (
+            <button
+              key={t}
+              onClick={() => setPeriodo(t)}
+              className={`rounded-lg border px-4 py-2 text-sm font-medium ${
+                periodo === t ? 'border-amber-500 bg-amber-50 text-amber-800' : 'border-stone-200 bg-white text-stone-600 hover:bg-stone-50'
+              }`}
+            >
+              {t === 'dia' ? 'Diário' : t === 'mes' ? 'Mensal' : 'Anual'}
+            </button>
+          ))}
         </div>
-        <div>
-          <label className="block text-sm font-medium text-stone-600">{labelData}</label>
-          <input
-            type={periodo === 'ano' ? 'number' : periodo === 'mes' ? 'month' : 'date'}
-            value={periodo === 'ano' ? dataRef.slice(0, 4) : periodo === 'mes' ? dataRef.slice(0, 7) : dataRef.slice(0, 10)}
-            onChange={(e) => {
-              const v = e.target.value;
-              if (periodo === 'ano') setDataRef(v + '-01-01');
-              else if (periodo === 'mes') setDataRef(v + '-01');
-              else setDataRef(v);
-            }}
-            className="mt-1 rounded-lg border border-stone-300 px-3 py-2"
-          />
-        </div>
+        {periodo === 'dia' && (
+          <div>
+            <label className="block text-sm font-medium text-stone-600">Data</label>
+            <input
+              type="date"
+              value={dataRef.slice(0, 10)}
+              onChange={(e) => setDataRef(e.target.value)}
+              className="mt-1 rounded-lg border border-stone-300 px-3 py-2"
+            />
+          </div>
+        )}
+        {periodo === 'mes' && (
+          <div>
+            <label className="block text-sm font-medium text-stone-600">Mês</label>
+            <input
+              type="month"
+              value={dataRef.slice(0, 7)}
+              onChange={(e) => setDataRef(e.target.value + '-01')}
+              className="mt-1 rounded-lg border border-stone-300 px-3 py-2"
+            />
+          </div>
+        )}
+        {periodo === 'ano' && (
+          <div>
+            <label className="block text-sm font-medium text-stone-600">Ano</label>
+            <input
+              type="number"
+              min={2020}
+              max={2030}
+              value={dataRef.slice(0, 4)}
+              onChange={(e) => setDataRef(e.target.value + '-01-01')}
+              className="mt-1 w-24 rounded-lg border border-stone-300 px-3 py-2"
+            />
+          </div>
+        )}
       </div>
+      <p className="text-sm text-stone-500 mb-4">
+        Período: <strong>{tituloPeriodo}</strong> (horário de Brasília)
+      </p>
       {loading ? (
         <p className="text-stone-500">Carregando...</p>
       ) : (

@@ -49,7 +49,7 @@ export default function RelatorioCancelamentos() {
     tipo === 'dia'
       ? new Date(dataRef + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })
       : tipo === 'mes'
-        ? new Date(mesRef + '-01').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+        ? new Date(mesRef + '-01T12:00:00').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
         : anoRef;
 
   return (
@@ -60,7 +60,16 @@ export default function RelatorioCancelamentos() {
           {(['dia', 'mes', 'ano'] as const).map((t) => (
             <button
               key={t}
-              onClick={() => setTipo(t)}
+              onClick={() => {
+                if (t === 'mes') {
+                  if (tipo === 'dia') setMesRef(dataRef.slice(0, 7));
+                  else if (tipo === 'ano') setMesRef(anoRef + '-01');
+                } else if (t === 'ano') {
+                  if (tipo === 'dia') setAnoRef(dataRef.slice(0, 4));
+                  else if (tipo === 'mes') setAnoRef(mesRef.slice(0, 4));
+                }
+                setTipo(t);
+              }}
               className={`rounded-lg border px-4 py-2 text-sm font-medium ${
                 tipo === t ? 'border-amber-500 bg-amber-50 text-amber-800' : 'border-stone-200 bg-white text-stone-600 hover:bg-stone-50'
               }`}

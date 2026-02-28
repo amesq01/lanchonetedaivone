@@ -22,7 +22,7 @@ export default function AtendenteViagemNovo() {
   }, []);
 
   const filtrados = search.trim()
-    ? produtos.filter((p) => p.descricao.toLowerCase().includes(search.toLowerCase()) || p.codigo.toLowerCase().includes(search.toLowerCase()))
+    ? produtos.filter((p) => (p.nome?.toLowerCase().includes(search.toLowerCase())) || p.descricao.toLowerCase().includes(search.toLowerCase()) || p.codigo.toLowerCase().includes(search.toLowerCase()))
     : [];
 
   const addItem = (produto: Produto, qtd = 1, obs = '') => {
@@ -98,7 +98,7 @@ export default function AtendenteViagemNovo() {
                   {p.imagem_url ? <img src={p.imagem_url} alt="" className="w-full h-full object-cover" /> : <span className="text-stone-400 text-xs">IMG</span>}
                 </div>
                 <span className="text-sm font-medium text-stone-500">{p.codigo}</span>
-                <span className="text-stone-800 truncate">{p.descricao}</span>
+                <span className="text-stone-800 truncate">{p.nome || p.descricao}</span>
                 <span className="ml-auto text-amber-600 font-medium">R$ {Number(p.valor).toFixed(2)}</span>
               </button>
             ))}
@@ -118,7 +118,7 @@ export default function AtendenteViagemNovo() {
                   {item.produto.imagem_url ? <img src={item.produto.imagem_url} alt="" className="w-full h-full object-cover" /> : <span className="text-stone-400 text-xs">IMG</span>}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="font-medium text-stone-800">{item.produto.codigo} - {item.produto.descricao}</div>
+                  <div className="font-medium text-stone-800">{item.produto.codigo} - {item.produto.nome || item.produto.descricao}</div>
                   <input type="text" value={item.observacao} onChange={(e) => setObs(i, e.target.value)} placeholder="Observação" className="mt-1 w-full text-sm rounded border border-stone-200 px-2 py-1" />
                 </div>
                 <div className="flex items-center gap-1">

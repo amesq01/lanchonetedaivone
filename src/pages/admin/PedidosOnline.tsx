@@ -87,7 +87,7 @@ export default function AdminPedidosOnline() {
             {(p.pedido_itens ?? []).map((i: any) => (
               <tr key={i.id}>
                 <td className="border border-stone-200 px-2 py-1">{i.produtos?.codigo ?? '-'}</td>
-                <td className="border border-stone-200 px-2 py-1">{i.produtos?.descricao ?? '-'}{i.observacao ? ` (${i.observacao})` : ''}</td>
+                <td className="border border-stone-200 px-2 py-1">{(i.produtos?.nome || i.produtos?.descricao) ?? '-'}{i.observacao ? ` (${i.observacao})` : ''}</td>
                 <td className="border border-stone-200 px-2 py-1 text-center">{i.quantidade}</td>
                 <td className="border border-stone-200 px-2 py-1 text-right">R$ {((i.quantidade || 0) * Number(i.valor_unitario || 0)).toFixed(2)}</td>
               </tr>
@@ -121,7 +121,7 @@ export default function AdminPedidosOnline() {
                   {p.observacoes && <p className="text-sm italic text-stone-500">{p.observacoes}</p>}
                   <ul className="mt-2 text-sm">
                     {(p.pedido_itens ?? []).map((i: any) => (
-                      <li key={i.id}>{i.quantidade}x {i.produtos?.descricao} {i.observacao ? `(${i.observacao})` : ''}</li>
+                      <li key={i.id}>{i.quantidade}x {i.produtos?.nome || i.produtos?.descricao} {i.observacao ? `(${i.observacao})` : ''}</li>
                     ))}
                   </ul>
                 </div>
@@ -152,7 +152,7 @@ export default function AdminPedidosOnline() {
                   <p className="text-sm">Pagamento: {p.forma_pagamento} {p.troco_para ? `- Troco para R$ ${p.troco_para}` : ''}</p>
                   <ul className="mt-2 text-sm">
                     {(p.pedido_itens ?? []).map((i: any) => (
-                      <li key={i.id}>{i.quantidade}x {i.produtos?.descricao} {i.observacao ? `(${i.observacao})` : ''}</li>
+                      <li key={i.id}>{i.quantidade}x {i.produtos?.nome || i.produtos?.descricao} {i.observacao ? `(${i.observacao})` : ''}</li>
                     ))}
                   </ul>
                 </div>

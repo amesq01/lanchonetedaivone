@@ -39,8 +39,15 @@ export async function initMesas(quantidade: number) {
 }
 
 export async function getComandaByMesa(mesaId: string) {
-  const { data } = await supabase.from('comandas').select('*').eq('mesa_id', mesaId).eq('aberta', true).single();
+  const { data } = await supabase.from('comandas').select('*').eq('mesa_id', mesaId).eq('aberta', true).maybeSingle();
   return data as Database['public']['Tables']['comandas']['Row'] | null;
+}
+
+/** Mesa IDs que têm comanda aberta (uma única requisição em vez de N) */
+export async function getMesaIdsComComandaAberta(): Promise<Set<string>> {
+  const { data } = await supabase.from('comandas').select('mesa_id').eq('aberta', true);
+  const rows = (data ?? []) as { mesa_id: string }[];
+  return new Set(rows.map((r) => r.mesa_id));
 }
 
 /** Mesa IDs que têm comanda aberta com pelo menos um pedido não finalizado/cancelado */
@@ -105,7 +112,7 @@ export async function closeComanda(comandaId: string, formaPagamento: string) {
 }
 
 export async function getComandaWithPedidos(comandaId: string) {
-  const { data: comanda } = await supabase.from('comandas').select('*').eq('id', comandaId).single();
+  const { data: comanda } = await supabase.from('comandas').select('*').eq('id', comandaId).maybeSingle();
   if (!comanda) return null;
   const { data: pedidos } = await supabase.from('pedidos').select('*, pedido_itens(*, produtos(*))').eq('comanda_id', comandaId).order('created_at', { ascending: false });
   return { comanda, pedidos: pedidos ?? [] };
@@ -190,7 +197,11 @@ export async function getPedidosByComanda(comandaId: string) {
 }
 
 export async function getPedidosCozinha() {
-  const { data } = await supabase.from('pedidos').select('*, pedido_itens(*, produtos(*)), comandas(nome_cliente, mesa_id, mesas(numero, nome))').in('status', ['novo_pedido', 'em_preparacao', 'finalizado']).order('created_at');
+  const { data } = await supabase
+    .from('pedidos')
+    .select('id, numero, status, origem, cliente_nome, encerrado_em, updated_at, aceito_em, created_at, comanda_id, pedido_itens(id, quantidade, observacao, produtos(id, nome, descricao, vai_para_cozinha)), comandas(nome_cliente, mesa_id, mesas(numero, nome))')
+    .in('status', ['novo_pedido', 'em_preparacao', 'finalizado'])
+    .order('created_at');
   const list = (data ?? []) as any[];
   return list.filter((p) => {
     const itens = p.pedido_itens ?? [];
@@ -200,8 +211,6 @@ export async function getPedidosCozinha() {
 }
 
 export async function getPedidosViagemAbertos() {
-  const { data: mesaViagem } = await supabase.from('mesas').select('id').eq('is_viagem', true).single();
-  if (!mesaViagem) return [];
   const { data } = await supabase.from('pedidos').select('*, pedido_itens(*, produtos(*)), comandas(nome_cliente, aberta)').eq('origem', 'viagem').neq('status', 'cancelado').order('created_at', { ascending: false });
   return (data ?? []) as any[];
 }
@@ -337,13 +346,13 @@ export async function getTotalComanda(comandaId: string): Promise<{ itens: { des
   const { data: pedidosData } = await supabase.from('pedidos').select('id').eq('comanda_id', comandaId).neq('status', 'cancelado');
   const pedidos = (pedidosData ?? []) as { id: string }[];
   if (!pedidos.length) return { itens: [], total: 0 };
-  const { data: itensData } = await supabase.from('pedido_itens').select('*, produtos(codigo, descricao)').in('pedido_id', pedidos.map((p) => p.id));
+  const { data: itensData } = await supabase.from('pedido_itens').select('*, produtos(codigo, descricao, nome)').in('pedido_id', pedidos.map((p) => p.id));
   const itens = (itensData ?? []) as any[];
   const list: { descricao: string; codigo: string; quantidade: number; valor: number }[] = [];
   let total = 0;
   for (const i of itens) {
     const prod = i.produtos;
-    const linha = { descricao: prod?.descricao ?? '', codigo: prod?.codigo ?? '', quantidade: i.quantidade, valor: i.quantidade * i.valor_unitario };
+    const linha = { descricao: (prod?.nome ?? prod?.descricao) ?? '', codigo: prod?.codigo ?? '', quantidade: i.quantidade, valor: i.quantidade * i.valor_unitario };
     list.push(linha);
     total += linha.valor;
   }
@@ -450,6 +459,19 @@ export async function applyDescontoComanda(comandaId: string, cupomId: string, v
     await (supabase as any).from('pedidos').update({
       desconto: valorPorPedido,
       cupom_id: cupomId,
+      updated_at: new Date().toISOString(),
+    }).eq('id', p.id);
+  }
+}
+
+/** Remove o desconto dos pedidos da comanda. Chamado ao imprimir conta sem cupom. */
+export async function clearDescontoComanda(comandaId: string) {
+  const { data } = await supabase.from('pedidos').select('id').eq('comanda_id', comandaId).neq('status', 'cancelado');
+  const pedidos = (data ?? []) as { id: string }[];
+  for (const p of pedidos) {
+    await (supabase as any).from('pedidos').update({
+      desconto: 0,
+      cupom_id: null,
       updated_at: new Date().toISOString(),
     }).eq('id', p.id);
   }

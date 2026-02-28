@@ -1,21 +1,34 @@
-import { useState } from 'react';
-import { Navigate } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+
+function getRedirectPath(profile: { role: string }) {
+  return profile.role === 'admin' ? '/admin' : profile.role === 'cozinha' ? '/cozinha' : '/pdv';
+}
 
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const navigate = useNavigate();
+  const location = useLocation();
+  const redirectDone = useRef(false);
   const { signIn, user, profile, loading, profileFetched } = useAuth();
+
+  useEffect(() => {
+    if ((location.state as { fromLogout?: boolean })?.fromLogout) {
+      window.location.reload();
+    }
+  }, [location.state]);
 
   const loadingProfile = Boolean(user && !profile && !profileFetched);
   const profileMissing = Boolean(user && profileFetched && !profile);
 
-  // Redireciona no render: já logado com perfil carregado (ex.: refresh da página)
-  if (!loading && user && profile) {
-    const to = profile.role === 'admin' ? '/admin' : profile.role === 'cozinha' ? '/cozinha' : '/pdv';
-    return <Navigate to={to} replace />;
-  }
+  useEffect(() => {
+    if (loading || !user || !profile || redirectDone.current) return;
+    redirectDone.current = true;
+    navigate(getRedirectPath(profile), { replace: true });
+  }, [loading, user, profile, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -26,8 +39,7 @@ export default function Login() {
       return;
     }
     if (profileData) {
-      const to = profileData.role === 'admin' ? '/admin' : profileData.role === 'cozinha' ? '/cozinha' : '/pdv';
-      window.location.replace(to);
+      window.location.replace(getRedirectPath(profileData));
     }
   };
 

@@ -1,17 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { getMesas, getPedidosViagemAbertos } from '../../lib/api';
+import { getPedidosViagemAbertos } from '../../lib/api';
 
 export default function AtendenteViagem() {
-  const [, setMesaViagemId] = useState<string | null>(null);
   const [pedidos, setPedidos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    getMesas().then((mesas) => {
-      const v = mesas.find((m) => m.is_viagem);
-      setMesaViagemId(v?.id ?? null);
-    });
     load();
   }, []);
 
@@ -37,7 +32,7 @@ export default function AtendenteViagem() {
             <div className="text-sm text-stone-600">{p.cliente_nome}</div>
             <ul className="text-sm text-stone-500 mt-1">
               {(p.pedido_itens ?? []).map((i: any) => (
-                <li key={i.id}>{i.quantidade}x {i.produtos?.descricao}</li>
+                <li key={i.id}>{i.quantidade}x {i.produtos?.nome || i.produtos?.descricao}</li>
               ))}
             </ul>
           </div>

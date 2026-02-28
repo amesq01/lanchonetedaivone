@@ -10,7 +10,7 @@ export default function CozinhaLayout() {
     try {
       await signOut();
     } finally {
-      navigate('/login', { replace: true });
+      navigate('/login', { replace: true, state: { fromLogout: true } });
     }
   };
 

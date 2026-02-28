@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getComandaByMesa, getComandaWithPedidos, getTotalComanda, closeComanda, getMesas, updatePedidoStatus, getCuponsAtivos, applyDescontoComanda } from '../../lib/api';
+import { getComandaByMesa, getComandaWithPedidos, getTotalComanda, closeComanda, getMesas, updatePedidoStatus, getCuponsAtivos, applyDescontoComanda, clearDescontoComanda } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
 import type { Comanda } from '../../types/database';
 import type { Cupom } from '../../types/database';
@@ -12,6 +12,7 @@ export default function AdminMesaDetail() {
   const [comanda, setComanda] = useState<Comanda | null>(null);
   const [pedidos, setPedidos] = useState<any[]>([]);
   const [mesaNome, setMesaNome] = useState('');
+  const [isMesaViagem, setIsMesaViagem] = useState(false);
   const [loading, setLoading] = useState(true);
   const [popupPagamento, setPopupPagamento] = useState(false);
   const [formaPagamento, setFormaPagamento] = useState('');
@@ -29,6 +30,7 @@ export default function AdminMesaDetail() {
     getMesas().then((mesas) => {
       const m = mesas.find((x) => x.id === mesaId);
       setMesaNome(m?.nome ?? '');
+      setIsMesaViagem(m?.is_viagem ?? false);
     });
     getComandaByMesa(mesaId).then((c) => {
       setComanda(c);
@@ -45,8 +47,12 @@ export default function AdminMesaDetail() {
 
   const handleImprimirConta = async () => {
     setPopupImprimir(false);
-    if (comanda && cupomSelecionado && contaItens && valorDesconto > 0) {
-      await applyDescontoComanda(comanda.id, cupomSelecionado.id, valorDesconto);
+    if (comanda) {
+      if (cupomSelecionado && valorDesconto > 0) {
+        await applyDescontoComanda(comanda.id, cupomSelecionado.id, valorDesconto);
+      } else {
+        await clearDescontoComanda(comanda.id);
+      }
       getTotalComanda(comanda.id).then(setContaItens);
     }
     setPrintMode(true);
@@ -125,6 +131,25 @@ export default function AdminMesaDetail() {
     return (p.pedido_itens ?? []).some((i: any) => Boolean(i.produtos?.vai_para_cozinha));
   }
 
+  /** Unifica itens iguais (mesmo código e descrição) somando quantidade e valor. Usado na conta da mesa (exceto viagem). */
+  type ItemConta = { codigo: string; descricao: string; quantidade: number; valor: number };
+  const itensParaExibir: ItemConta[] = contaItens
+    ? isMesaViagem
+      ? contaItens.itens
+      : (() => {
+          const map = new Map<string, ItemConta>();
+          for (const i of contaItens.itens) {
+            const key = `${i.codigo}|${i.descricao}`;
+            const exist = map.get(key);
+            if (exist) {
+              exist.quantidade += i.quantidade;
+              exist.valor += i.valor;
+            } else map.set(key, { ...i });
+          }
+          return Array.from(map.values());
+        })()
+    : [];
+
   if (printMode && contaItens) {
     return (
       <div className="bg-white p-6 text-stone-800">
@@ -137,16 +162,18 @@ export default function AdminMesaDetail() {
             <tr className="bg-stone-100">
               <th className="border border-stone-200 px-2 py-1.5 text-left font-semibold">Código</th>
               <th className="border border-stone-200 px-2 py-1.5 text-left font-semibold">Produto</th>
-              <th className="border border-stone-200 px-2 py-1.5 text-center font-semibold">Quantidade</th>
+              <th className="border border-stone-200 px-2 py-1.5 text-center font-semibold">Qtd</th>
+              <th className="border border-stone-200 px-2 py-1.5 text-right font-semibold">Valor unit.</th>
               <th className="border border-stone-200 px-2 py-1.5 text-right font-semibold">Valor</th>
             </tr>
           </thead>
           <tbody>
-            {contaItens.itens.map((item, i) => (
+            {itensParaExibir.map((item, i) => (
               <tr key={i}>
                 <td className="border border-stone-200 px-2 py-1">{item.codigo}</td>
                 <td className="border border-stone-200 px-2 py-1">{item.descricao}</td>
                 <td className="border border-stone-200 px-2 py-1 text-center">{item.quantidade}</td>
+                <td className="border border-stone-200 px-2 py-1 text-right">R$ {(item.quantidade > 0 ? item.valor / item.quantidade : 0).toFixed(2)}</td>
                 <td className="border border-stone-200 px-2 py-1 text-right">R$ {item.valor.toFixed(2)}</td>
               </tr>
             ))}
@@ -204,7 +231,7 @@ export default function AdminMesaDetail() {
                   <p className="text-sm font-medium text-amber-700 mt-0.5">Total: R$ {totalPedido(p).toFixed(2)}</p>
                   <ul className="mt-2 text-sm text-stone-600">
                     {(p.pedido_itens ?? []).map((i: any) => (
-                      <li key={i.id}>{i.quantidade}x {i.produtos?.descricao} - R$ {(i.quantidade * i.valor_unitario).toFixed(2)}</li>
+                      <li key={i.id}>{i.quantidade}x {i.produtos?.nome || i.produtos?.descricao} - R$ {(i.quantidade * i.valor_unitario).toFixed(2)}</li>
                     ))}
                   </ul>
                   {p.status === 'novo_pedido' && (
@@ -242,7 +269,7 @@ export default function AdminMesaDetail() {
               </tr>
             </thead>
             <tbody>
-              {contaItens.itens.map((item, i) => (
+              {itensParaExibir.map((item, i) => (
                 <tr key={i} className="border-b border-stone-100">
                   <td className="py-2">{item.codigo}</td>
                   <td className="py-2">{item.descricao}</td>
