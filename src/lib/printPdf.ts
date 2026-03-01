@@ -183,7 +183,7 @@ export function printContaViagem(opts: {
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(...BLACK);
   doc.text(`Pedido #${opts.pedidoNumero} - VIAGEM`, PAPER_WIDTH_MM / 2, y, { align: 'center' });
-  y +=1;
+  y +=8;
   doc.text(`${opts.clienteNome}`, PAPER_WIDTH_MM / 2, y, { align: 'center' });
 
   y += 8;
