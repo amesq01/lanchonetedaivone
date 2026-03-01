@@ -213,7 +213,7 @@ export default function LojaOnline() {
         {exibirSemCategoria && (
           <section className="mb-8">
             <h2 className="mb-4 text-lg font-semibold text-stone-800">Cardápio</h2>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 sm:items-stretch">
+            <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 items-stretch">
               {byCategoria(null).map((p) => (
                 <CardProduto key={p.id} produto={p} qty={qtyByProd[p.id] ?? 0} onQtyChange={(q) => updateQtyInCart(p, q)} onRemove={() => removeFromCart(p)} />
               ))}
@@ -223,7 +223,7 @@ export default function LojaOnline() {
         {categoriasComProdutos.filter(exibirCategoria).map((cat) => (
           <section key={cat.id} className="mb-8">
             <h2 className="mb-4 text-lg font-semibold text-stone-800">{cat.nome}</h2>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 sm:items-stretch">
+            <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 items-stretch">
               {byCategoria(cat.id).map((p) => (
                 <CardProduto key={p.id} produto={p} qty={qtyByProd[p.id] ?? 0} onQtyChange={(q) => updateQtyInCart(p, q)} onRemove={() => removeFromCart(p)} />
               ))}
@@ -252,24 +252,34 @@ function CardProduto({
 }) {
   const quantidade = Math.max(0, qty);
   return (
-    <div className="flex h-full flex-col rounded-2xl border border-stone-100 bg-white p-4 shadow-sm transition hover:shadow-md hover:border-amber-200">
+    <div className="flex h-full min-h-0 flex-col rounded-2xl border border-stone-100 bg-white p-4 shadow-sm transition hover:shadow-md hover:border-amber-200">
+      {/* Imagem: altura fixa por aspect-ratio */}
       <div className="aspect-square w-full flex-shrink-0 overflow-hidden rounded-xl bg-stone-100 flex items-center justify-center text-stone-400 text-sm">
         {produto.imagem_url ? <img src={produto.imagem_url} alt="" className="h-full w-full object-cover" /> : 'Sem imagem'}
       </div>
-      <div className="mt-3 flex min-h-0 flex-1 flex-col">
-        <div className="font-medium text-stone-800 leading-tight">{produto.nome || produto.descricao}</div>
-        {produto.nome && produto.descricao ? <div className="mt-0.5 text-sm text-stone-500 leading-tight">{produto.descricao}</div> : null}
-        {produto.acompanhamentos ? <div className="mt-2 min-h-[1.25rem] text-xs text-stone-500 leading-tight"><span className="font-medium text-stone-600">Acompanhamentos/Ingredientes:</span> {produto.acompanhamentos}</div> : <div className="min-h-[1.25rem]" />}
-        <div className="mt-2 font-semibold text-amber-600">R$ {Number(produto.valor).toFixed(2)}</div>
-        <div className="mt-3 flex items-center gap-2">
-          <span className="text-sm text-stone-600">Quantidade:</span>
-          <button type="button" onClick={() => onQtyChange(Math.max(0, qty - 1))} className="h-8 w-8 flex-shrink-0 rounded border border-stone-300 text-stone-600 hover:bg-stone-50">−</button>
-          <span className="w-8 flex-shrink-0 text-center font-medium">{quantidade}</span>
-          <button type="button" onClick={() => onQtyChange(qty + 1)} className="h-8 w-8 flex-shrink-0 rounded border border-stone-300 text-stone-600 hover:bg-stone-50">+</button>
+      {/* Conteúdo: preenche o resto e empurra preço/qty/botão para baixo */}
+      <div className="mt-3 flex min-h-0 flex-1 flex-col gap-3">
+        {/* Bloco de texto (cresce para igualar altura dos cards) */}
+        <div className="flex min-h-0 flex-1 flex-col gap-1">
+          <div className="font-medium text-stone-800 leading-tight line-clamp-2">{produto.nome || produto.descricao}</div>
+          {produto.nome && produto.descricao ? <div className="text-sm text-stone-500 leading-tight line-clamp-2">{produto.descricao}</div> : null}
+          {produto.ingredientes ? <div className="min-h-[1.25rem] text-xs text-stone-500 leading-tight line-clamp-2"><span className="font-medium text-stone-600">Ingredientes:</span> {produto.ingredientes}</div> : <div className="min-h-[1.25rem]" />}
+          {produto.acompanhamentos ? <div className="min-h-[1.25rem] text-xs text-stone-500 leading-tight line-clamp-2"><span className="font-medium text-stone-600">Acompanhamentos:</span> {produto.acompanhamentos}</div> : <div className="min-h-[1.25rem]" />}
         </div>
-        <button type="button" onClick={onRemove} disabled={quantidade === 0} className="mt-3 w-full flex-shrink-0 rounded-lg border border-red-300 bg-white py-2 text-red-600 font-medium hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed">
-          Remover do carrinho
-        </button>
+        {/* Preço, quantidade e botão: sempre no mesmo alinhamento */}
+        <div className="flex flex-shrink-0 flex-col gap-3 pt-0">
+          <div className="font-semibold text-amber-600">R$ {Number(produto.valor).toFixed(2)}</div>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-stone-600"><span className="sm:hidden">Qtd:</span><span className="hidden sm:inline">Quantidade:</span></span>
+            <button type="button" onClick={() => onQtyChange(Math.max(0, qty - 1))} className="h-8 w-8 flex-shrink-0 rounded border border-stone-300 text-stone-600 hover:bg-stone-50">−</button>
+            <span className="w-8 flex-shrink-0 text-center font-medium">{quantidade}</span>
+            <button type="button" onClick={() => onQtyChange(qty + 1)} className="h-8 w-8 flex-shrink-0 rounded border border-stone-300 text-stone-600 hover:bg-stone-50">+</button>
+          </div>
+          <button type="button" onClick={onRemove} disabled={quantidade === 0} className="w-full flex-shrink-0 rounded-lg border border-red-300 bg-white py-2 text-red-600 font-medium hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5">
+            <span className="sm:hidden">Remover do <ShoppingCart className="h-4 w-4 inline-block" /></span>
+            <span className="hidden sm:inline">Remover do carrinho</span>
+          </button>
+        </div>
       </div>
     </div>
   );
