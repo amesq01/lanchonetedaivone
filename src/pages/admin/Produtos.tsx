@@ -13,6 +13,7 @@ export default function AdminProdutos() {
   const [codigo, setCodigo] = useState('');
   const [nome, setNome] = useState('');
   const [descricao, setDescricao] = useState('');
+  const [ingredientes, setIngredientes] = useState('');
   const [acompanhamentos, setAcompanhamentos] = useState('');
   const [valor, setValor] = useState('');
   const [quantidade, setQuantidade] = useState(0);
@@ -39,6 +40,7 @@ export default function AdminProdutos() {
       setCodigo(prod.codigo);
       setNome(prod.nome ?? '');
       setDescricao(prod.descricao);
+      setIngredientes(prod.ingredientes ?? '');
       setAcompanhamentos(prod.acompanhamentos ?? '');
       setValor(String(prod.valor));
       setQuantidade(prod.quantidade);
@@ -51,6 +53,7 @@ export default function AdminProdutos() {
       setCodigo('');
       setNome('');
       setDescricao('');
+      setIngredientes('');
       setAcompanhamentos('');
       setValor('');
       setQuantidade(0);
@@ -70,6 +73,7 @@ export default function AdminProdutos() {
         codigo,
         nome: nome.trim() || null,
         descricao,
+        ingredientes: ingredientes.trim() || null,
         acompanhamentos: acompanhamentos || null,
         valor: Number(valor),
         quantidade,
@@ -105,6 +109,7 @@ export default function AdminProdutos() {
               <th className="px-4 py-3 text-left text-sm font-medium text-stone-600">Código</th>
               <th className="px-4 py-3 text-left text-sm font-medium text-stone-600">Nome do produto</th>
               <th className="px-4 py-3 text-left text-sm font-medium text-stone-600">Descrição</th>
+              <th className="px-4 py-3 text-left text-sm font-medium text-stone-600">Ingredientes</th>
               <th className="px-4 py-3 text-left text-sm font-medium text-stone-600">Acompanhamentos</th>
               <th className="px-4 py-3 text-left text-sm font-medium text-stone-600">Valor</th>
               <th className="px-4 py-3 text-left text-sm font-medium text-stone-600">Qtd</th>
@@ -121,6 +126,7 @@ export default function AdminProdutos() {
                 <td className="px-4 py-3">{p.codigo}</td>
                 <td className="px-4 py-3">{p.nome || '—'}</td>
                 <td className="px-4 py-3">{p.descricao}</td>
+                <td className="px-4 py-3 text-sm text-stone-500">{p.ingredientes ?? '-'}</td>
                 <td className="px-4 py-3 text-sm text-stone-500">{p.acompanhamentos ?? '-'}</td>
                 <td className="px-4 py-3">R$ {Number(p.valor).toFixed(2)}</td>
                 <td className="px-4 py-3">{p.quantidade}</td>
@@ -155,6 +161,10 @@ export default function AdminProdutos() {
               <div>
                 <label className="block text-sm font-medium text-stone-600">Descrição *</label>
                 <input value={descricao} onChange={(e) => setDescricao(e.target.value)} required className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-stone-600">Ingredientes</label>
+                <input value={ingredientes} onChange={(e) => setIngredientes(e.target.value)} className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2" placeholder="Ex: Pão, carne, queijo, alface" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-stone-600">Acompanhamentos</label>

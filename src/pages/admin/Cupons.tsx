@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
-import { reporUsosCupom } from '../../lib/api';
+import { reporUsosCupom, deleteCupom } from '../../lib/api';
 import type { Cupom } from '../../types/database';
 
 export default function AdminCupons() {
@@ -10,11 +10,13 @@ export default function AdminCupons() {
   const [editing, setEditing] = useState<Cupom | null>(null);
   const [codigo, setCodigo] = useState('');
   const [porcentagem, setPorcentagem] = useState('');
+  const [valorMaximo, setValorMaximo] = useState('');
   const [validoAte, setValidoAte] = useState('');
   const [quantidadeUsos, setQuantidadeUsos] = useState('1');
   const [usosRestantes, setUsosRestantes] = useState('1');
   const [ativo, setAtivo] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [excluindo, setExcluindo] = useState<Cupom | null>(null);
 
   useEffect(() => {
     load();
@@ -31,6 +33,7 @@ export default function AdminCupons() {
       setEditing(c);
       setCodigo(c.codigo);
       setPorcentagem(String(c.porcentagem));
+      setValorMaximo(c.valor_maximo != null ? String(c.valor_maximo) : '');
       setValidoAte(new Date(c.valido_ate).toISOString().slice(0, 10));
       setQuantidadeUsos(String(c.quantidade_usos));
       setUsosRestantes(String(c.usos_restantes));
@@ -39,6 +42,7 @@ export default function AdminCupons() {
       setEditing(null);
       setCodigo('');
       setPorcentagem('');
+      setValorMaximo('');
       setValidoAte('');
       setQuantidadeUsos('1');
       setUsosRestantes('1');
@@ -56,6 +60,7 @@ export default function AdminCupons() {
       if (editing) {
         await (supabase as any).from('cupons').update({
           porcentagem: Number(porcentagem),
+          valor_maximo: valorMaximo.trim() ? Number(valorMaximo) : null,
           valido_ate: validoAte,
           quantidade_usos: q,
           usos_restantes: Math.min(restantes, q),
@@ -65,6 +70,7 @@ export default function AdminCupons() {
         await (supabase as any).from('cupons').insert({
           codigo: codigo.trim(),
           porcentagem: Number(porcentagem),
+          valor_maximo: valorMaximo.trim() ? Number(valorMaximo) : null,
           valido_ate: validoAte,
           quantidade_usos: q,
           usos_restantes: q,
@@ -83,6 +89,17 @@ export default function AdminCupons() {
     load();
   }
 
+  async function handleExcluir(c: Cupom) {
+    if (!window.confirm(`Excluir o cupom "${c.codigo}"? Esta ação não pode ser desfeita.`)) return;
+    setExcluindo(c);
+    try {
+      await deleteCupom(c.id);
+      load();
+    } finally {
+      setExcluindo(null);
+    }
+  }
+
   if (loading) return <p className="text-stone-500">Carregando...</p>;
 
   return (
@@ -99,6 +116,7 @@ export default function AdminCupons() {
             <tr>
               <th className="px-4 py-3 text-left text-sm font-medium text-stone-600">Código</th>
               <th className="px-4 py-3 text-left text-sm font-medium text-stone-600">Desconto %</th>
+              <th className="px-4 py-3 text-left text-sm font-medium text-stone-600">Valor máx.</th>
               <th className="px-4 py-3 text-left text-sm font-medium text-stone-600">Válido até</th>
               <th className="px-4 py-3 text-left text-sm font-medium text-stone-600">Usos restantes</th>
               <th className="px-4 py-3 text-left text-sm font-medium text-stone-600">Ativo</th>
@@ -110,6 +128,7 @@ export default function AdminCupons() {
               <tr key={c.id} className="border-b border-stone-100">
                 <td className="px-4 py-3 font-medium">{c.codigo}</td>
                 <td className="px-4 py-3">{Number(c.porcentagem)}%</td>
+                <td className="px-4 py-3">{c.valor_maximo != null ? `R$ ${Number(c.valor_maximo).toFixed(2)}` : '—'}</td>
                 <td className="px-4 py-3">{new Date(c.valido_ate).toLocaleDateString('pt-BR')}</td>
                 <td className="px-4 py-3">
                   <span className={c.usos_restantes <= 0 ? 'text-red-600 font-medium' : ''}>
@@ -117,9 +136,10 @@ export default function AdminCupons() {
                   </span>
                 </td>
                 <td className="px-4 py-3">{c.ativo ? 'Sim' : 'Não'}</td>
-                <td className="px-4 py-3 flex gap-2">
+                <td className="px-4 py-3 flex gap-2 flex-wrap">
                   <button onClick={() => openForm(c)} className="text-amber-600 hover:underline text-sm">Editar</button>
                   <button onClick={() => handleReporUsos(c)} className="text-stone-600 hover:underline text-sm">Repor usos</button>
+                  <button onClick={() => handleExcluir(c)} disabled={excluindo?.id === c.id} className="text-red-600 hover:underline text-sm disabled:opacity-50">Excluir</button>
                 </td>
               </tr>
             ))}
@@ -139,6 +159,10 @@ export default function AdminCupons() {
               <div>
                 <label className="block text-sm font-medium text-stone-600">Porcentagem de desconto *</label>
                 <input type="number" min="0" max="100" step="0.01" value={porcentagem} onChange={(e) => setPorcentagem(e.target.value)} required className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-stone-600">Valor máximo do desconto (R$)</label>
+                <input type="number" step="0.01" min="0" value={valorMaximo} onChange={(e) => setValorMaximo(e.target.value)} className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2" placeholder="Deixe vazio para sem limite" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-stone-600">Válido até *</label>

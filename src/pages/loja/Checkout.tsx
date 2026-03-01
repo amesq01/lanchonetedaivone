@@ -28,7 +28,7 @@ export default function LojaCheckout() {
   const [trocoPara, setTrocoPara] = useState('');
   const [observacoes, setObservacoes] = useState('');
   const [cupom, setCupom] = useState(() => getCupomAplicado()?.codigo ?? '');
-  const [cupomValidado, setCupomValidado] = useState<{ codigo: string; porcentagem: number } | null>(null);
+  const [cupomValidado, setCupomValidado] = useState<{ codigo: string; porcentagem: number; valorMaximo?: number } | null>(null);
   const [cupomErro, setCupomErro] = useState('');
   const [cupomLoading, setCupomLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -58,7 +58,11 @@ export default function LojaCheckout() {
       const result = await validarCupom(codigo);
       setCupomLoading(false);
       if ('cupom' in result) {
-        setCupomValidado({ codigo: result.cupom.codigo, porcentagem: Number(result.cupom.porcentagem) });
+        setCupomValidado({
+          codigo: result.cupom.codigo,
+          porcentagem: Number(result.cupom.porcentagem),
+          ...(result.cupom.valor_maximo != null && { valorMaximo: Number(result.cupom.valor_maximo) }),
+        });
         setCupomErro('');
       } else {
         setCupomValidado(null);
@@ -74,7 +78,8 @@ export default function LojaCheckout() {
   produtos.forEach((p) => { byId[p.id] = Number.isFinite(Number(p.valor)) ? Number(p.valor) : 0; });
   const rawSubtotal = cart.reduce((s, i) => s + (byId[i.produto_id] ?? 0) * (i.quantidade || 0), 0);
   const subtotal = Number.isFinite(rawSubtotal) ? rawSubtotal : 0;
-  const rawDesconto = cupomValidado ? (subtotal * Number(cupomValidado.porcentagem)) / 100 : 0;
+  let rawDesconto = cupomValidado ? (subtotal * Number(cupomValidado.porcentagem)) / 100 : 0;
+  if (cupomValidado?.valorMaximo != null) rawDesconto = Math.min(rawDesconto, cupomValidado.valorMaximo);
   const desconto = Number.isFinite(rawDesconto) ? rawDesconto : 0;
   const taxaNum = tipoEntrega === 'entrega' ? Number(taxaEntrega) : 0;
   const taxa = Number.isFinite(taxaNum) ? taxaNum : 0;

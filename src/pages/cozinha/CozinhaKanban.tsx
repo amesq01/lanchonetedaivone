@@ -54,6 +54,16 @@ function pedidoGeradoHa(fromAt: string): string {
   return `há ${min} min`;
 }
 
+function finalizadoHa(encerradoEm: string): string {
+  const min = Math.floor((Date.now() - new Date(encerradoEm).getTime()) / 60_000);
+  if (min < 1) return 'Finalizado há menos de 1 min';
+  if (min === 1) return 'Finalizado há 1 min';
+  if (min < 60) return `Finalizado há ${min} min`;
+  const horas = Math.floor(min / 60);
+  if (horas === 1) return 'Finalizado há 1 hora';
+  return `Finalizado há ${horas} horas`;
+}
+
 function dataRefPedido(p: any): string | null {
   if (p.origem === 'online') return p.aceito_em ?? p.created_at ?? null;
   return p.created_at ?? null;
@@ -156,7 +166,9 @@ export default function CozinhaKanban() {
 
   const porColuna = (key: string) => {
     if (key === 'finalizado') {
-      return pedidos.filter((p) => p.status === 'finalizado' && (p.encerrado_em ? new Date(p.encerrado_em).toDateString() === hoje : new Date(p.updated_at).toDateString() === hoje));
+      const list = pedidos.filter((p) => p.status === 'finalizado' && (p.encerrado_em ? new Date(p.encerrado_em).toDateString() === hoje : new Date(p.updated_at).toDateString() === hoje));
+      const dataFinalizado = (p: any) => new Date(p.encerrado_em ?? p.updated_at).getTime();
+      return [...list].sort((a, b) => dataFinalizado(b) - dataFinalizado(a));
     }
     return pedidos.filter((p) => p.status === key);
   };
@@ -195,6 +207,9 @@ export default function CozinhaKanban() {
                     </span>
                     {(col.key === 'novo_pedido' || col.key === 'em_preparacao') && dataRefPedido(p) && (
                       <span className="text-[10px] text-stone-500 mt-0.5">{pedidoGeradoHa(dataRefPedido(p)!)}</span>
+                    )}
+                    {col.key === 'finalizado' && (p.encerrado_em ?? p.updated_at) && (
+                      <span className="text-[10px] text-stone-500 mt-0.5">{finalizadoHa(p.encerrado_em ?? p.updated_at)}</span>
                     )}
                   </div>
                 </div>

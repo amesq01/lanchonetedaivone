@@ -22,7 +22,7 @@ export function getCart(): SavedItem[] {
   }
 }
 
-export function getCupomAplicado(): { codigo: string; porcentagem: number } | null {
+export function getCupomAplicado(): { codigo: string; porcentagem: number; valorMaximo?: number } | null {
   try {
     const raw = localStorage.getItem(CUPOM_KEY);
     if (!raw) return null;
@@ -50,7 +50,7 @@ export default function LojaCarrinho() {
   const [itens, setItens] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
   const [cupomInput, setCupomInput] = useState('');
-  const [cupomAplicado, setCupomAplicado] = useState<{ codigo: string; porcentagem: number } | null>(() => getCupomAplicado());
+  const [cupomAplicado, setCupomAplicado] = useState<{ codigo: string; porcentagem: number; valorMaximo?: number } | null>(() => getCupomAplicado());
   const [cupomErro, setCupomErro] = useState('');
   const [cupomLoading, setCupomLoading] = useState(false);
   const [taxaEntrega, setTaxaEntrega] = useState<number | null>(null);
@@ -116,7 +116,8 @@ export default function LojaCarrinho() {
   const rawSubtotal = itens.reduce((s, i) => s + i.quantidade * Number(i.produto.valor), 0);
   const subtotal = Number.isFinite(rawSubtotal) ? rawSubtotal : 0;
   const taxa = taxaEntrega !== null && Number.isFinite(taxaEntrega) ? taxaEntrega : 0;
-  const rawDesconto = cupomAplicado ? (subtotal * Number(cupomAplicado.porcentagem)) / 100 : 0;
+  let rawDesconto = cupomAplicado ? (subtotal * Number(cupomAplicado.porcentagem)) / 100 : 0;
+  if (cupomAplicado?.valorMaximo != null) rawDesconto = Math.min(rawDesconto, cupomAplicado.valorMaximo);
   const desconto = Number.isFinite(rawDesconto) ? rawDesconto : 0;
   const total = Math.max(0, subtotal + taxa - desconto) || 0;
 
@@ -133,7 +134,11 @@ export default function LojaCarrinho() {
         setCupomErro(result.error);
         return;
       }
-      const aplicado = { codigo: result.cupom.codigo, porcentagem: Number(result.cupom.porcentagem) };
+      const aplicado = {
+        codigo: result.cupom.codigo,
+        porcentagem: Number(result.cupom.porcentagem),
+        ...(result.cupom.valor_maximo != null && { valorMaximo: Number(result.cupom.valor_maximo) }),
+      };
       setCupomAplicado(aplicado);
       localStorage.setItem(CUPOM_KEY, JSON.stringify(aplicado));
       setCupomInput('');

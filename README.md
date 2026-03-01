@@ -1,4 +1,4 @@
-# Lanchonete & Sushi - PDV e Loja Online
+# Lanchonete Terra e Mar - PDV e Loja Online
 
 Aplicação React (Vite + TypeScript + Tailwind) para lanchonete com atendimento **presencial** (mesas + viagem) e **online**, usando **Supabase** para banco de dados e autenticação.
 

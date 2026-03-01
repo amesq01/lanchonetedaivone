@@ -49,7 +49,8 @@ export default function AdminViagem() {
     const cupomSelecionado = cupomDesconto ? cupons.find((c) => c.id === cupomDesconto) : null;
     let contaParaPrint = contaItensPedido ?? await getTotalPedido(popupImprimir.id);
     const subtotal = contaParaPrint.total;
-    const valorCupom = cupomSelecionado ? (subtotal * Number(cupomSelecionado.porcentagem)) / 100 : 0;
+    let valorCupom = cupomSelecionado ? (subtotal * Number(cupomSelecionado.porcentagem)) / 100 : 0;
+    if (cupomSelecionado?.valor_maximo != null) valorCupom = Math.min(valorCupom, Number(cupomSelecionado.valor_maximo));
     const valorManual = Math.max(0, Number(descontoManual) || 0);
     const valorDesconto = Math.min(subtotal, valorCupom + valorManual);
     if (valorDesconto > 0) {
@@ -102,7 +103,8 @@ export default function AdminViagem() {
 
   const cupomSelecionado = cupomDesconto ? cupons.find((c) => c.id === cupomDesconto) : null;
   const subtotalPrint = contaItensPedido?.total ?? 0;
-  const valorCupomPrint = cupomSelecionado ? (subtotalPrint * Number(cupomSelecionado.porcentagem)) / 100 : 0;
+  let valorCupomPrint = cupomSelecionado ? (subtotalPrint * Number(cupomSelecionado.porcentagem)) / 100 : 0;
+  if (cupomSelecionado?.valor_maximo != null) valorCupomPrint = Math.min(valorCupomPrint, Number(cupomSelecionado.valor_maximo));
   const valorManualPrint = Math.max(0, Number(descontoManual) || 0);
   const valorDescontoPrint = Math.min(subtotalPrint, valorCupomPrint + valorManualPrint);
 
@@ -175,8 +177,8 @@ export default function AdminViagem() {
       </div>
 
       {popupImprimir && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl border border-stone-200">
             <h3 className="font-semibold text-stone-800 mb-4">Imprimir conta - Pedido #{popupImprimir.numero}</h3>
             <label className="block text-sm font-medium text-stone-600 mb-1">Cupom</label>
             <select

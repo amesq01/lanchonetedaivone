@@ -40,7 +40,9 @@ type Periodo = 'dia' | 'mes' | 'ano';
 
 export default function RelatorioFinanceiro() {
   const [periodo, setPeriodo] = useState<Periodo>('dia');
-  const [dataRef, setDataRef] = useState(() => new Date().toISOString().slice(0, 10));
+  const [dataRef, setDataRef] = useState(() =>
+    new Date().toLocaleDateString('en-CA', { timeZone: TIMEZONE_BR })
+  );
   const [pedidos, setPedidos] = useState<any[]>([]);
   const [totalGeral, setTotalGeral] = useState(0);
   const [loading, setLoading] = useState(false);

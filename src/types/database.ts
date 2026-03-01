@@ -77,6 +77,7 @@ export interface Database {
           codigo: string;
           nome: string | null;
           descricao: string;
+          ingredientes: string | null;
           acompanhamentos: string | null;
           valor: number;
           quantidade: number;
@@ -98,6 +99,7 @@ export interface Database {
           id: string;
           codigo: string;
           porcentagem: number;
+          valor_maximo: number | null;
           valido_ate: string;
           quantidade_usos: number;
           usos_restantes: number;

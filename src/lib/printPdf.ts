@@ -36,7 +36,7 @@ function openAndPrint(doc: jsPDF) {
   const blob = doc.output('blob');
   const url = URL.createObjectURL(blob);
   const iframe = document.createElement('iframe');
-  iframe.style.cssText = 'position:fixed;left:0;top:0;width:100%;height:100%;border:none;z-index:9999;opacity:0;pointer-events:none;';
+  iframe.style.cssText = 'position:fixed;left:0;top:0;width:100%;height:100%;border:none;z-index:9999;opacity:0;pointer-events:none;background:transparent;';
   document.body.appendChild(iframe);
   iframe.onload = () => {
     const win = iframe.contentWindow;
@@ -65,7 +65,7 @@ export function printContaMesa(opts: {
   let y = 10;
   doc.setTextColor(...BLACK);
   doc.setFontSize(14);
-  doc.text('Lanchonete & Sushi', PAPER_WIDTH_MM / 2, y, { align: 'center' });
+  doc.text('Lanchonete Terra e Mar', PAPER_WIDTH_MM / 2, y, { align: 'center' });
   y += 8;
   doc.setFontSize(11);
   doc.setFont('helvetica', 'normal');
@@ -86,12 +86,20 @@ export function printContaMesa(opts: {
     ]),
     margin: { left: MARGIN_MM, right: MARGIN_MM },
     tableWidth: CONTENT_WIDTH,
-    headStyles: { fontStyle: 'bold', fontSize: 9, textColor: BLACK, halign: 'center', fillColor: false },
-    bodyStyles: { fontSize: 9, textColor: BLACK },
+    headStyles: {
+      fontStyle: 'bold',
+      fontSize: 9,
+      textColor: BLACK,
+      halign: 'center',
+      fillColor: false,
+      lineWidth: { top: 0, right: 0, bottom: 0.2, left: 0 },
+    },
+    bodyStyles: { fontSize: 9, textColor: BLACK, fillColor: false },
+    alternateRowStyles: { fillColor: false },
     columnStyles: {
       0: { cellWidth: 10 },
-      1: { cellWidth: 24 },
-      2: { cellWidth: 8 },
+      1: { cellWidth: 22 },
+      2: { cellWidth: 12, halign: 'center' },
       3: { cellWidth: 14 },
       4: { cellWidth: 14 },
     },
@@ -101,7 +109,7 @@ export function printContaMesa(opts: {
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
   doc.setTextColor(...BLACK);
-  doc.text(`Subtotal: ${opts.subtotal.toFixed(2)}`, MARGIN_MM, y);
+  doc.text(`Subtotal: R$ ${opts.subtotal.toFixed(2)}`, MARGIN_MM, y);
   y += 5;
   if (opts.valorCupom > 0 && opts.cupomCodigo) {
     doc.text(`Desconto cupom (${opts.cupomCodigo}): - ${opts.valorCupom.toFixed(2)}`, MARGIN_MM, y);
@@ -112,7 +120,7 @@ export function printContaMesa(opts: {
     y += 5;
   }
   doc.setFontSize(12);
-  doc.text(`TOTAL: ${opts.total.toFixed(2)}`, MARGIN_MM, y + 2);
+  doc.text(`TOTAL: R$ ${opts.total.toFixed(2)}`, MARGIN_MM, y + 2);
   y += 12;
   addFooter(doc, y);
   openAndPrint(doc);
@@ -133,7 +141,7 @@ export function printContaViagem(opts: {
   let y = 10;
   doc.setTextColor(...BLACK);
   doc.setFontSize(14);
-  doc.text('Lanchonete & Sushi', PAPER_WIDTH_MM / 2, y, { align: 'center' });
+  doc.text('Lanchonete Terra e Mar', PAPER_WIDTH_MM / 2, y, { align: 'center' });
   y += 8;
   doc.setFontSize(11);
   doc.setFont('helvetica', 'normal');
@@ -143,22 +151,32 @@ export function printContaViagem(opts: {
 
   autoTable(doc, {
     startY: y,
-    head: [['Cod', 'Produto', 'Qtd', 'Valor']],
+    head: [['Cod', 'Produto', 'Qtd', 'Valor unit.', 'Valor']],
     body: opts.itens.map((i) => [
       i.codigo,
       i.descricao,
       String(i.quantidade),
+      (i.quantidade > 0 ? i.valor / i.quantidade : 0).toFixed(2),
       i.valor.toFixed(2),
     ]),
     margin: { left: MARGIN_MM, right: MARGIN_MM },
     tableWidth: CONTENT_WIDTH,
-    headStyles: { fontStyle: 'bold', fontSize: 9, textColor: BLACK, halign: 'center', fillColor: false },
-    bodyStyles: { fontSize: 9, textColor: BLACK },
+    headStyles: {
+      fontStyle: 'bold',
+      fontSize: 9,
+      textColor: BLACK,
+      halign: 'center',
+      fillColor: false,
+      lineWidth: { top: 0, right: 0, bottom: 0.2, left: 0 },
+    },
+    bodyStyles: { fontSize: 9, textColor: BLACK, fillColor: false },
+    alternateRowStyles: { fillColor: false },
     columnStyles: {
       0: { cellWidth: 10 },
-      1: { cellWidth: 26 },
-      2: { cellWidth: 10 },
-      3: { cellWidth: 18 },
+      1: { cellWidth: 22 },
+      2: { cellWidth: 12, halign: 'center' },
+      3: { cellWidth: 14 },
+      4: { cellWidth: 14 },
     },
   });
   y = (doc as any).lastAutoTable.finalY + 6;
@@ -166,7 +184,7 @@ export function printContaViagem(opts: {
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
   doc.setTextColor(...BLACK);
-  doc.text(`Subtotal: ${opts.subtotal.toFixed(2)}`, MARGIN_MM, y);
+  doc.text(`Subtotal: R$ ${opts.subtotal.toFixed(2)}`, MARGIN_MM, y);
   y += 5;
   if (opts.valorCupom > 0 && opts.cupomCodigo) {
     doc.text(`Desconto cupom (${opts.cupomCodigo}): - ${opts.valorCupom.toFixed(2)}`, MARGIN_MM, y);
@@ -177,7 +195,7 @@ export function printContaViagem(opts: {
     y += 5;
   }
   doc.setFontSize(12);
-  doc.text(`TOTAL: ${opts.total.toFixed(2)}`, MARGIN_MM, y + 2);
+  doc.text(`TOTAL: R$ ${opts.total.toFixed(2)}`, MARGIN_MM, y + 2);
   y += 12;
   addFooter(doc, y);
   openAndPrint(doc);
@@ -253,12 +271,20 @@ export function printPedidoEntrega(pedido: {
     ]),
     margin: { left: MARGIN_MM, right: MARGIN_MM },
     tableWidth: CONTENT_WIDTH,
-    headStyles: { fontStyle: 'bold', fontSize: 9, textColor: BLACK, halign: 'center', fillColor: false },
-    bodyStyles: { fontSize: 9, textColor: BLACK },
+    headStyles: {
+      fontStyle: 'bold',
+      fontSize: 9,
+      textColor: BLACK,
+      halign: 'center',
+      fillColor: false,
+      lineWidth: { top: 0, right: 0, bottom: 0.2, left: 0 },
+    },
+    bodyStyles: { fontSize: 9, textColor: BLACK, fillColor: false },
+    alternateRowStyles: { fillColor: false },
     columnStyles: {
       0: { cellWidth: 10 },
-      1: { cellWidth: 26 },
-      2: { cellWidth: 10 },
+      1: { cellWidth: 24 },
+      2: { cellWidth: 12, halign: 'center' },
       3: { cellWidth: 18 },
     },
   });
@@ -267,7 +293,7 @@ export function printPedidoEntrega(pedido: {
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
   doc.setTextColor(...BLACK);
-  doc.text(`Subtotal: ${subtotal.toFixed(2)}`, MARGIN_MM, y);
+  doc.text(`Subtotal: R$ ${subtotal.toFixed(2)}`, MARGIN_MM, y);
   y += 4;
   if (desconto > 0) {
     doc.text(`Desconto: - ${desconto.toFixed(2)}`, MARGIN_MM, y);
@@ -278,7 +304,7 @@ export function printPedidoEntrega(pedido: {
     y += 4;
   }
   doc.setFontSize(12);
-  doc.text(`TOTAL: ${total.toFixed(2)}`, MARGIN_MM, y + 2);
+  doc.text(`TOTAL: R$ ${total.toFixed(2)}`, MARGIN_MM, y + 2);
   y += 10;
   addFooter(doc, y);
   openAndPrint(doc);

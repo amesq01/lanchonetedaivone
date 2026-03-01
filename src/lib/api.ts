@@ -310,10 +310,11 @@ export async function createPedidoOnline(payload: {
   if (payload.cupom_codigo) {
     const codigoTrim = payload.cupom_codigo.trim();
     const { data: cupomData } = await supabase.from('cupons').select('*').ilike('codigo', codigoTrim).eq('ativo', true).maybeSingle();
-    const cupom = cupomData as { valido_ate: string; usos_restantes: number; porcentagem: number } | null;
+    const cupom = cupomData as { valido_ate: string; usos_restantes: number; porcentagem: number; valor_maximo?: number | null } | null;
     if (cupom && new Date(cupom.valido_ate) >= new Date() && Number(cupom.usos_restantes) > 0) {
       const subTotal = payload.itens.reduce((s, i) => s + i.quantidade * i.valor_unitario, 0);
       desconto = (subTotal * Number(cupom.porcentagem)) / 100;
+      if (cupom.valor_maximo != null) desconto = Math.min(desconto, Number(cupom.valor_maximo));
     }
   }
   const { data: pedido, error: e1 } = await (supabase as any).from('pedidos').insert({
@@ -349,6 +350,13 @@ export async function reporUsosCupom(cupomId: string) {
   const cupom = cupomData as { quantidade_usos: number } | null;
   if (!cupom) return;
   await (supabase as any).from('cupons').update({ usos_restantes: Number(cupom.quantidade_usos) }).eq('id', cupomId);
+}
+
+/** Remove referências ao cupom nos pedidos e exclui o cupom. */
+export async function deleteCupom(cupomId: string) {
+  await (supabase as any).from('pedidos').update({ cupom_id: null }).eq('cupom_id', cupomId);
+  const { error } = await supabase.from('cupons').delete().eq('id', cupomId);
+  if (error) throw error;
 }
 
 /** Valida cupom por código no banco. Retorna o cupom se válido ou mensagem de erro. */

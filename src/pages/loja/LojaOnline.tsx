@@ -27,7 +27,7 @@ function LojaLoading() {
         style={{ animation: 'loading-bounce-in 0.6s ease-out both' }}
       >
         <h1 className="text-2xl font-bold tracking-tight text-stone-800 sm:text-3xl">
-          Lanchonete & Sushi
+          Lanchonete Terra e Mar
         </h1>
         <p
           className="text-sm font-medium text-amber-800/90 sm:text-base"
@@ -173,7 +173,7 @@ export default function LojaOnline() {
       <header className="sticky top-0 z-10 border-b border-stone-200 bg-white/95 backdrop-blur">
         <div className="mx-auto max-w-4xl px-4 py-4">
           <div className="flex items-center justify-between">
-            <h1 className="text-xl font-bold text-stone-800">Lanchonete & Sushi</h1>
+            <h1 className="text-xl font-bold text-stone-800">Lanchonete Terra e Mar</h1>
             <Link
               to="/carrinho"
               className="flex items-center gap-2 rounded-full bg-amber-600 pl-3 pr-4 py-2 text-white hover:bg-amber-700 sm:pl-4"

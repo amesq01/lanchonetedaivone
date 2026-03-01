@@ -57,9 +57,15 @@ export default function AdminMesaDetail() {
     const contaAtual = await getTotalComanda(comanda.id);
     setContaItens(contaAtual);
     const numeros = pedidos.filter((p) => p.status !== 'cancelado').map((p) => p.numero);
-    const titulo = numeros.length > 0 ? `${numeros.join(', ')} - ${mesaNome} - ${comanda.nome_cliente}` : `${mesaNome} - ${comanda.nome_cliente}`;
+    const titulo =
+      numeros.length === 0
+        ? `${mesaNome} - ${comanda.nome_cliente}`
+        : numeros.length === 1
+          ? `Pedido ${numeros[0]} - ${mesaNome} - ${comanda.nome_cliente}`
+          : `Pedidos ${numeros.join(', ')} - ${mesaNome} - ${comanda.nome_cliente}`;
     const sub = contaAtual?.total ?? 0;
-    const vCupom = cupomSelecionado ? (sub * Number(cupomSelecionado.porcentagem)) / 100 : 0;
+    let vCupom = cupomSelecionado ? (sub * Number(cupomSelecionado.porcentagem)) / 100 : 0;
+    if (cupomSelecionado?.valor_maximo != null) vCupom = Math.min(vCupom, Number(cupomSelecionado.valor_maximo));
     const vManual = Math.max(0, Number(descontoManual) || 0);
     const desc = Math.min(sub, vCupom + vManual);
     const totalFinal = sub - desc;
@@ -146,7 +152,8 @@ export default function AdminMesaDetail() {
   const pedidosNaMesa = pedidos.filter((p) => p.status !== 'cancelado');
   const cupomSelecionado = cupomDesconto ? cupons.find((c) => c.id === cupomDesconto) : null;
   const subtotal = contaItens?.total ?? 0;
-  const valorCupom = cupomSelecionado ? (subtotal * Number(cupomSelecionado.porcentagem)) / 100 : 0;
+  let valorCupom = cupomSelecionado ? (subtotal * Number(cupomSelecionado.porcentagem)) / 100 : 0;
+  if (cupomSelecionado?.valor_maximo != null) valorCupom = Math.min(valorCupom, Number(cupomSelecionado.valor_maximo));
   const valorManual = Math.max(0, Number(descontoManual) || 0);
   const valorDesconto = Math.min(subtotal, valorCupom + valorManual);
   const totalComDesconto = subtotal - valorDesconto;
@@ -261,8 +268,8 @@ export default function AdminMesaDetail() {
       )}
 
       {popupImprimir && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl border border-stone-200">
             <h3 className="font-semibold text-stone-800 mb-4">Imprimir conta</h3>
             <label className="block text-sm font-medium text-stone-600 mb-1">Cupom</label>
             <select
