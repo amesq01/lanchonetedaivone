@@ -60,7 +60,7 @@ const TABLE_STYLES = {
     textColor: BLACK,
     halign: 'center' as const,
     fillColor: undefined as [number, number, number] | undefined,
-    lineWidth: { top: 0, right: 0, bottom: 0.8, left: 0 },
+    lineWidth: { top: 0, right: 0, bottom: 0.4, left: 0 },
   },
   bodyStyles: { fontSize: 9, textColor: BLACK, fillColor: undefined as [number, number, number] | undefined },
   alternateRowStyles: { fillColor: undefined as [number, number, number] | undefined },
@@ -182,7 +182,10 @@ export function printContaViagem(opts: {
   doc.setFontSize(11);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(...BLACK);
-  doc.text(`Pedido #${opts.pedidoNumero} - VIAGEM - ${opts.clienteNome}`, PAPER_WIDTH_MM / 2, y, { align: 'center' });
+  doc.text(`Pedido #${opts.pedidoNumero} - VIAGEM`, PAPER_WIDTH_MM / 2, y, { align: 'center' });
+  y +=1;
+  doc.text(`${opts.clienteNome}`, PAPER_WIDTH_MM / 2, y, { align: 'center' });
+
   y += 8;
   if (opts.clienteTelefone) {
     doc.setFontSize(10);
