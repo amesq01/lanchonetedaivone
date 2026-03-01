@@ -209,6 +209,12 @@ export async function getPedidosByComanda(comandaId: string) {
   return (data ?? []) as any[];
 }
 
+/** Busca o status atual de um pedido (para verificação em tempo real). */
+export async function getPedidoStatus(pedidoId: string): Promise<{ status: string } | null> {
+  const { data } = await supabase.from('pedidos').select('status').eq('id', pedidoId).single();
+  return data as { status: string } | null;
+}
+
 export async function getPedidosCozinha() {
   const { data } = await supabase
     .from('pedidos')
@@ -528,7 +534,7 @@ export async function getRelatorioCancelamentos(desde: string, ate: string) {
 
 /** Marca notificação como vista. */
 export async function marcarNotificacaoComoVista(notificacaoId: string) {
-  await supabase.from('notificacoes').update({ visto: true }).eq('id', notificacaoId);
+  await (supabase as any).from('notificacoes').update({ visto: true }).eq('id', notificacaoId);
 }
 
 /** Busca notificações não vistas do atendente. */

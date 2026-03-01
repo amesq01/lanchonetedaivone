@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Plus, ChevronDown, ChevronUp } from 'lucide-react';
-import { getMesas, getComandaByMesa, getProdutos, createPedidoPresencial, getPedidosByComanda, updatePedidoStatus, closeComanda } from '../../lib/api';
+import { getMesas, getComandaByMesa, getProdutos, createPedidoPresencial, getPedidosByComanda, getPedidoStatus, updatePedidoStatus, closeComanda } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
 import type { Produto } from '../../types/database';
 
@@ -30,6 +30,13 @@ export default function AtendenteMesaDetail() {
   const [comandaInvalidada, setComandaInvalidada] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const [dropdownRect, setDropdownRect] = useState<{ top: number; left: number; width: number } | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 5000);
+    return () => clearTimeout(t);
+  }, [toast]);
 
   const revalidarComanda = useCallback(() => {
     if (!mesaId || !comandaId) return;
@@ -156,8 +163,29 @@ export default function AtendenteMesaDetail() {
     }
   };
 
+  const statusLabel: Record<string, string> = {
+    aguardando_aceite: 'Aguardando aceite',
+    novo_pedido: 'Novo pedido',
+    em_preparacao: 'Em preparação',
+    finalizado: 'Finalizado',
+    cancelado: 'Cancelado',
+  };
+
   const confirmarCancelarPedido = async () => {
     if (!popupCancelar || !motivoCancelamento.trim()) return;
+    const atual = await getPedidoStatus(popupCancelar.pedidoId);
+    if (!atual) {
+      setToast('Pedido não encontrado.');
+      setPopupCancelar(null);
+      setMotivoCancelamento('');
+      return;
+    }
+    if (atual.status !== 'novo_pedido') {
+      setToast(`Não é possível cancelar. O pedido já está em: ${statusLabel[atual.status] ?? atual.status}`);
+      setPopupCancelar(null);
+      setMotivoCancelamento('');
+      return;
+    }
     await updatePedidoStatus(popupCancelar.pedidoId, 'cancelado', {
       motivo_cancelamento: motivoCancelamento.trim(),
       cancelado_por: profile?.id,
@@ -172,6 +200,11 @@ export default function AtendenteMesaDetail() {
 
   return (
     <div className="max-w-2xl mx-auto">
+      {toast && (
+        <div className="fixed top-4 right-4 z-[60] max-w-sm rounded-xl border border-amber-200 bg-amber-50 p-4 shadow-lg text-amber-800">
+          {toast}
+        </div>
+      )}
       {comandaInvalidada && (
         <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-4 flex flex-wrap items-center justify-between gap-2">
           <p className="text-amber-800 font-medium">

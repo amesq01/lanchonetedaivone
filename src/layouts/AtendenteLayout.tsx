@@ -42,12 +42,14 @@ export default function AtendenteLayout() {
     return unsub;
   }, [user?.id, profile?.role]);
 
-  const confirmarVisto = () => {
-    if (toast) {
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => {
       marcarNotificacaoComoVista(toast.id);
       setToast(null);
-    }
-  };
+    }, 5000);
+    return () => clearTimeout(t);
+  }, [toast]);
 
   const handleSignOut = async () => {
     try {
@@ -66,15 +68,6 @@ export default function AtendenteLayout() {
             <div className="flex-1 min-w-0">
               <p className="font-medium text-stone-800">{toast.mensagem}</p>
             </div>
-          </div>
-          <div className="flex justify-end">
-            <button
-              type="button"
-              onClick={confirmarVisto}
-              className="rounded-lg bg-green-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-700"
-            >
-              Confirmar visto
-            </button>
           </div>
         </div>
       )}
