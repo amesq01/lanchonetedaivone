@@ -108,6 +108,7 @@ function addTotaisSection(
 /** Conta da mesa (presencial). */
 export function printContaMesa(opts: {
   titulo: string;
+  clienteNome?: string;
   clienteTelefone?: string;
   itens: ItemConta[];
   subtotal: number;
@@ -128,6 +129,11 @@ export function printContaMesa(opts: {
   const tituloLines = doc.splitTextToSize(opts.titulo, CONTENT_WIDTH);
   doc.text(tituloLines, PAPER_WIDTH_MM / 2, y, { align: 'center' });
   y += tituloLines.length * 5 + 4;
+  if (opts.clienteNome) {
+    doc.setFontSize(10);
+    doc.text(opts.clienteNome, PAPER_WIDTH_MM / 2, y, { align: 'center' });
+    y += 5;
+  }
   if (opts.clienteTelefone) {
     doc.setFontSize(10);
     doc.text('Tel.: ', MARGIN_MM, y);
@@ -183,7 +189,7 @@ export function printContaViagem(opts: {
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(...BLACK);
   doc.text(`Pedido #${opts.pedidoNumero} - VIAGEM`, PAPER_WIDTH_MM / 2, y, { align: 'center' });
-  y +=8;
+  y +=6;
   doc.text(`${opts.clienteNome}`, PAPER_WIDTH_MM / 2, y, { align: 'center' });
 
   y += 8;

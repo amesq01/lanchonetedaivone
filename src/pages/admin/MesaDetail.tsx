@@ -57,12 +57,19 @@ export default function AdminMesaDetail() {
     const contaAtual = await getTotalComanda(comanda.id);
     setContaItens(contaAtual);
     const numeros = pedidos.filter((p) => p.status !== 'cancelado').map((p) => p.numero);
+    const nomeCliente = comanda.nome_cliente || '';
     const titulo =
-      numeros.length === 0
-        ? `${mesaNome} - ${comanda.nome_cliente}`
-        : numeros.length === 1
-          ? `Pedido #${numeros[0]} - ${mesaNome} - ${comanda.nome_cliente}`
-          : `Pedidos ${numeros.map((n) => `#${n}`).join(', ')} - ${mesaNome} - ${comanda.nome_cliente}`;
+      isMesaViagem
+        ? numeros.length === 0
+          ? `${mesaNome} - ${nomeCliente}`
+          : numeros.length === 1
+            ? `Pedido #${numeros[0]} - ${mesaNome} - ${nomeCliente}`
+            : `Pedidos ${numeros.map((n) => `#${n}`).join(', ')} - ${mesaNome} - ${nomeCliente}`
+        : numeros.length === 0
+          ? mesaNome
+          : numeros.length === 1
+            ? `Pedido #${numeros[0]} - ${mesaNome}`
+            : `Pedidos ${numeros.map((n) => `#${n}`).join(', ')} - ${mesaNome}`;
     const sub = contaAtual?.total ?? 0;
     let vCupom = cupomSelecionado ? (sub * Number(cupomSelecionado.porcentagem)) / 100 : 0;
     if (cupomSelecionado?.valor_maximo != null) vCupom = Math.min(vCupom, Number(cupomSelecionado.valor_maximo));
@@ -88,6 +95,7 @@ export default function AdminMesaDetail() {
       : [];
     printContaMesa({
       titulo,
+      clienteNome: isMesaViagem ? undefined : (comanda.nome_cliente || undefined),
       itens,
       subtotal: sub,
       valorCupom: vCupom,
