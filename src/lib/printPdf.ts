@@ -60,16 +60,16 @@ const TABLE_STYLES = {
     textColor: BLACK,
     halign: 'center' as const,
     fillColor: undefined as [number, number, number] | undefined,
-    lineWidth: { top: 0, right: 0, bottom: 0.2, left: 0 },
+    lineWidth: { top: 0, right: 0, bottom: 0.8, left: 0 },
   },
   bodyStyles: { fontSize: 9, textColor: BLACK, fillColor: undefined as [number, number, number] | undefined },
   alternateRowStyles: { fillColor: undefined as [number, number, number] | undefined },
   columnStyles: {
-    0: { cellWidth: 10, halign: 'center' as const },
-    1: { cellWidth: 22, halign: 'center' as const },
-    2: { cellWidth: 12, halign: 'center' as const },
-    3: { cellWidth: 14, halign: 'center' as const },
-    4: { cellWidth: 14, halign: 'center' as const },
+    0: { cellWidth: 8, halign: 'left' as const },
+    1: { cellWidth: 24, halign: 'center' as const },
+    2: { cellWidth: 9, halign: 'center' as const },
+    3: { cellWidth: 14, halign: 'left' as const },
+    4: { cellWidth: 14, halign: 'left' as const },
   },
 };
 
