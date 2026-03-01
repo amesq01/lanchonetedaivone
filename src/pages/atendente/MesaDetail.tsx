@@ -194,7 +194,7 @@ export default function AtendenteMesaDetail() {
               className="flex-1 rounded-lg border border-stone-300 px-3 py-2"
             />
             {search.trim() && filtrados.length > 0 && (
-              <div className="absolute left-4 right-4 mt-1 z-10 rounded-lg border border-stone-200 bg-white shadow-lg max-h-48 overflow-y-auto">
+              <div className="absolute left-4 right-4 mt-1 z-[9999] rounded-lg border border-stone-200 bg-white shadow-lg max-h-48 overflow-y-auto">
                 {filtrados.slice(0, 8).map((p) => (
                   <button key={p.id} type="button" onClick={() => addItem(p)} className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-stone-50 border-b border-stone-100 last:border-0">
                     <div className="w-10 h-10 rounded-lg bg-stone-100 flex-shrink-0 overflow-hidden flex items-center justify-center">

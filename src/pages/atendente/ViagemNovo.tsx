@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { Plus } from 'lucide-react';
 import { getProdutos, createPedidoViagem } from '../../lib/api';
@@ -16,14 +17,25 @@ export default function AtendenteViagemNovo() {
   const [search, setSearch] = useState('');
   const [carrinho, setCarrinho] = useState<ItemCarrinho[]>([]);
   const [enviando, setEnviando] = useState(false);
-
-  useEffect(() => {
-    getProdutos(true).then(setProdutos);
-  }, []);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [dropdownRect, setDropdownRect] = useState<{ top: number; left: number; width: number } | null>(null);
 
   const filtrados = search.trim()
     ? produtos.filter((p) => (p.nome?.toLowerCase().includes(search.toLowerCase())) || p.descricao.toLowerCase().includes(search.toLowerCase()) || p.codigo.toLowerCase().includes(search.toLowerCase()))
     : [];
+
+  useEffect(() => {
+    if (search.trim() && filtrados.length > 0 && inputRef.current) {
+      const rect = inputRef.current.getBoundingClientRect();
+      setDropdownRect({ top: rect.bottom + 4, left: rect.left, width: rect.width });
+    } else {
+      setDropdownRect(null);
+    }
+  }, [search, filtrados.length]);
+
+  useEffect(() => {
+    getProdutos(true).then(setProdutos);
+  }, []);
 
   const addItem = (produto: Produto, qtd = 1, obs = '') => {
     const exist = carrinho.find((i) => i.produto.id === produto.id && i.observacao === obs);
@@ -89,20 +101,26 @@ export default function AtendenteViagemNovo() {
         <h1 className="text-xl font-bold text-stone-800">VIAGEM - {nomeCliente}</h1>
       </div>
       <div className="relative flex gap-2 mb-4">
-        <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar por nome ou código..." className="flex-1 rounded-lg border border-stone-300 px-3 py-2" />
-        {search.trim() && filtrados.length > 0 && (
-          <div className="absolute left-0 right-12 top-full mt-1 z-10 rounded-lg border border-stone-200 bg-white shadow-lg max-h-48 overflow-y-auto">
-            {filtrados.slice(0, 8).map((p) => (
-              <button key={p.id} type="button" onClick={() => addItem(p)} className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-stone-50 border-b border-stone-100 last:border-0">
-                <div className="w-10 h-10 rounded-lg bg-stone-100 flex-shrink-0 overflow-hidden flex items-center justify-center">
+        <input ref={inputRef} type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar por nome ou código..." className="flex-1 rounded-lg border border-stone-300 px-3 py-2" />
+        {search.trim() && filtrados.length > 0 && dropdownRect && createPortal(
+          <div
+            className="fixed z-[9999] rounded-lg border border-stone-200 bg-white shadow-lg max-h-[75vh] overflow-y-auto overflow-x-hidden overscroll-contain"
+            style={{ top: dropdownRect.top, left: dropdownRect.left, width: dropdownRect.width }}
+          >
+            {filtrados.map((p) => (
+              <button key={p.id} type="button" onClick={() => addItem(p)} className="flex w-full min-h-[3.25rem] items-center gap-2 px-3 py-2.5 text-left hover:bg-stone-50 border-b border-stone-100 last:border-0">
+                <div className="w-10 h-10 flex-shrink-0 rounded-lg bg-stone-100 overflow-hidden flex items-center justify-center">
                   {p.imagem_url ? <img src={p.imagem_url} alt="" className="w-full h-full object-cover" /> : <span className="text-stone-400 text-xs">IMG</span>}
                 </div>
-                <span className="text-sm font-medium text-stone-500">{p.codigo}</span>
-                <span className="text-stone-800 truncate">{p.nome || p.descricao}</span>
-                <span className="ml-auto text-amber-600 font-medium">R$ {Number(p.valor).toFixed(2)}</span>
+                <div className="flex-1 min-w-0 flex flex-col sm:flex-row sm:items-center sm:gap-2">
+                  <span className="text-sm font-medium text-stone-500">{p.codigo}</span>
+                  <span className="text-stone-800 truncate text-sm">{p.nome || p.descricao}</span>
+                </div>
+                <span className="flex-shrink-0 text-amber-600 font-medium text-sm">R$ {Number(p.valor).toFixed(2)}</span>
               </button>
             ))}
-          </div>
+          </div>,
+          document.body
         )}
         <button type="button" onClick={() => setSearch(search || ' ')} className="rounded-lg bg-amber-600 p-2 text-white hover:bg-amber-700" title="Adicionar item">
           <Plus className="h-5 w-5" />
