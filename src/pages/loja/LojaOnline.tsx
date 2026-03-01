@@ -275,7 +275,7 @@ function CardProduto({
             <span className="w-8 flex-shrink-0 text-center font-medium">{quantidade}</span>
             <button type="button" onClick={() => onQtyChange(qty + 1)} className="h-8 w-8 flex-shrink-0 rounded border border-stone-300 text-stone-600 hover:bg-stone-50">+</button>
           </div>
-          <button type="button" onClick={onRemove} disabled={quantidade === 0} className="w-full flex-shrink-0 rounded-lg border border-red-300 bg-white py-2 text-red-600 font-medium hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5">
+          <button type="button" onClick={onRemove} disabled={quantidade === 0} className="w-full flex-shrink-0 rounded-lg border border-red-300 bg-white py-2 text-red-600 font-medium hover:bg-red-50 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center gap-1.5">
             <span className="sm:hidden">Remover do <ShoppingCart className="h-4 w-4 inline-block" /></span>
             <span className="hidden sm:inline">Remover do carrinho</span>
           </button>
