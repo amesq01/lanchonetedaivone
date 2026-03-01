@@ -65,7 +65,7 @@ const TABLE_STYLES = {
   bodyStyles: { fontSize: 9, textColor: BLACK, fillColor: undefined as [number, number, number] | undefined },
   alternateRowStyles: { fillColor: undefined as [number, number, number] | undefined },
   columnStyles: {
-    0: { cellWidth: 8, halign: 'left' as const },
+    0: { cellWidth: 9, halign: 'left' as const },
     1: { cellWidth: 24, halign: 'center' as const },
     2: { cellWidth: 9, halign: 'center' as const },
     3: { cellWidth: 14, halign: 'left' as const },
