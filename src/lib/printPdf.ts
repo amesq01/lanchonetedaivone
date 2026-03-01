@@ -4,6 +4,8 @@ import autoTable from 'jspdf-autotable';
 const PAPER_WIDTH_MM = 80;
 const MARGIN_MM = 3;
 const CONTENT_WIDTH = PAPER_WIDTH_MM - MARGIN_MM * 2;
+/** Posição X (align right) dos valores na seção de totais — um pouco mais à esquerda que a margem direita. */
+const VALORES_RIGHT_MM = PAPER_WIDTH_MM - MARGIN_MM - 6;
 
 const BLACK = [0, 0, 0] as [number, number, number];
 
@@ -85,11 +87,11 @@ function addTotaisSection(
   doc.setFontSize(9);
   doc.setTextColor(...BLACK);
   doc.text('Subtotal:', MARGIN_MM, y);
-  doc.text(`R$ ${subtotal.toFixed(2)}`, PAPER_WIDTH_MM - MARGIN_MM, y, { align: 'right' });
+  doc.text(`R$ ${subtotal.toFixed(2)}`, VALORES_RIGHT_MM, y, { align: 'right' });
   y += 5;
   for (const linha of linhasMeio) {
     doc.text(linha.label, MARGIN_MM, y);
-    doc.text(linha.valor, PAPER_WIDTH_MM - MARGIN_MM, y, { align: 'right' });
+    doc.text(linha.valor, VALORES_RIGHT_MM, y, { align: 'right' });
     y += 5;
   }
   y += 2;
@@ -99,7 +101,7 @@ function addTotaisSection(
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(12);
   doc.text('TOTAL:', MARGIN_MM, y);
-  doc.text(`R$ ${total.toFixed(2)}`, PAPER_WIDTH_MM - MARGIN_MM, y, { align: 'right' });
+  doc.text(`R$ ${total.toFixed(2)}`, VALORES_RIGHT_MM, y, { align: 'right' });
   return y + 12;
 }
 
@@ -215,9 +217,10 @@ export function printContaViagem(opts: {
   openAndPrint(doc);
 }
 
-/** Pedido para entrega (online). Mesmo esquema visual das impressões de mesa e viagem. */
+/** Pedido para entrega/retirada (online). Mesmo esquema visual das impressões de mesa e viagem. */
 export function printPedidoEntrega(pedido: {
   numero: number;
+  tipo_entrega?: 'entrega' | 'retirada';
   cliente_nome?: string;
   cliente_whatsapp?: string;
   cliente_endereco?: string;
@@ -243,11 +246,19 @@ export function printPedidoEntrega(pedido: {
   doc.setFontSize(11);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(...BLACK);
-  const titulo = `Pedido #${pedido.numero} - ENTREGA - ${pedido.cliente_nome || '-'}`;
+  const tipoLabel = pedido.tipo_entrega === 'retirada' ? 'RETIRADA' : 'ENTREGA';
+  const titulo = `Pedido #${pedido.numero} - ${tipoLabel}`;
   const tituloLines = doc.splitTextToSize(titulo, CONTENT_WIDTH);
   doc.text(tituloLines, PAPER_WIDTH_MM / 2, y, { align: 'center' });
   y += tituloLines.length * 5 + 4;
   doc.setFontSize(10);
+  if (pedido.cliente_nome) {
+    doc.setTextColor(...BLACK);
+    doc.setFont('helvetica', 'bold');
+    doc.text((pedido.cliente_nome || '').toUpperCase(), MARGIN_MM, y);
+    doc.setFont('helvetica', 'normal');
+    y += 5;
+  }
   if (pedido.cliente_whatsapp) {
     doc.setTextColor(...BLACK);
     doc.text('Tel.: ', MARGIN_MM, y);
