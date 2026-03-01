@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Trash2 } from 'lucide-react';
-import { getConfig, getProdutos, validarCupom } from '../../lib/api';
+import { getConfig, getProdutos, validarCupom, getLanchoneteAberta } from '../../lib/api';
 import type { Produto } from '../../types/database';
 
 type Item = { produto: Produto; quantidade: number; observacao: string };
@@ -54,9 +54,11 @@ export default function LojaCarrinho() {
   const [cupomErro, setCupomErro] = useState('');
   const [cupomLoading, setCupomLoading] = useState(false);
   const [taxaEntrega, setTaxaEntrega] = useState<number | null>(null);
+  const [lanchoneteAberta, setLanchoneteAberta] = useState<boolean | null>(null);
 
   useEffect(() => {
     getConfig('taxa_entrega').then(setTaxaEntrega);
+    getLanchoneteAberta().then(setLanchoneteAberta);
   }, []);
 
   useEffect(() => {
@@ -242,9 +244,15 @@ export default function LojaCarrinho() {
                   <span>R$ {(Number.isFinite(total) ? total : 0).toFixed(2)}</span>
                 </div>
               </div>
-              <Link to="/checkout" className="block w-full rounded-lg bg-amber-600 py-3 text-center font-medium text-white hover:bg-amber-700">
-                Finalizar pedido
-              </Link>
+              {lanchoneteAberta === false ? (
+                <div className="block w-full rounded-lg bg-stone-300 py-3 text-center font-medium text-stone-500 cursor-not-allowed">
+                  Lanchonete fechada para pedidos
+                </div>
+              ) : (
+                <Link to="/checkout" className="block w-full rounded-lg bg-amber-600 py-3 text-center font-medium text-white hover:bg-amber-700">
+                  Finalizar pedido
+                </Link>
+              )}
             </div>
           </>
         )}

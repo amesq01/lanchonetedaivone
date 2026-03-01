@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { createPedidoOnline, getConfig, getProdutos, validarCupom } from '../../lib/api';
+import { createPedidoOnline, getConfig, getProdutos, validarCupom, canPlaceOrderOnline } from '../../lib/api';
 import type { SavedItem } from './Carrinho';
 import { getCupomAplicado } from './Carrinho';
 
@@ -35,12 +35,16 @@ export default function LojaCheckout() {
   const [error, setError] = useState('');
   const [taxaEntrega, setTaxaEntrega] = useState<number | null>(null);
   const [produtos, setProdutos] = useState<{ id: string; valor: number }[]>([]);
+  const [bloqueado, setBloqueado] = useState<{ motivo: string } | null>(null);
   const cupomDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const cart = getCart();
   useEffect(() => {
     getConfig('taxa_entrega').then(setTaxaEntrega);
     getProdutos(true).then((list) => setProdutos(list.map((p) => ({ id: p.id, valor: Number(p.valor) }))));
+    canPlaceOrderOnline().then((r) => {
+      if (!r.allowed && r.message) setBloqueado({ motivo: r.message });
+    });
   }, []);
 
   useEffect(() => {
@@ -95,9 +99,26 @@ export default function LojaCheckout() {
     );
   }
 
+  if (bloqueado) {
+    return (
+      <div className="min-h-screen bg-stone-50 flex items-center justify-center p-4">
+        <div className="max-w-md text-center rounded-xl bg-red-50 border border-red-200 p-6">
+          <p className="font-medium text-red-800 mb-2">Lanchonete fechada</p>
+          <p className="text-stone-700 mb-4">{bloqueado.motivo}</p>
+          <Link to="/" className="text-amber-600 hover:underline">Voltar ao cardápio</Link>
+        </div>
+      </div>
+    );
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    const { allowed, message } = await canPlaceOrderOnline();
+    if (!allowed) {
+      setError(message ?? 'A lanchonete está fechada para pedidos online.');
+      return;
+    }
     setSubmitting(true);
     try {
       const { getProdutos } = await import('../../lib/api');

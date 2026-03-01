@@ -15,6 +15,36 @@ export async function setConfig(key: ConfigKey, value: number) {
   await (supabase as any).from('config').upsert({ key, value, updated_at: new Date().toISOString() });
 }
 
+/** Valor bruto de config (string ou number). */
+export async function getConfigValue(key: string): Promise<string | number | null> {
+  const { data } = await supabase.from('config').select('value').eq('key', key).maybeSingle();
+  const v = (data as { value?: unknown } | null)?.value;
+  if (v === undefined || v === null) return null;
+  return typeof v === 'string' || typeof v === 'number' ? v : null;
+}
+
+export async function setConfigValue(key: string, value: string | number) {
+  await (supabase as any).from('config').upsert({ key, value, updated_at: new Date().toISOString() });
+}
+
+/** Lanchonete aberta para pedidos online? (toggle admin). Default true se não configurado. */
+export async function getLanchoneteAberta(): Promise<boolean> {
+  const v = await getConfigValue('pedido_online_aberta');
+  if (v === null || v === undefined) return true;
+  return Number(v) === 1;
+}
+
+export async function setLanchoneteAberta(aberta: boolean) {
+  await setConfigValue('pedido_online_aberta', aberta ? 1 : 0);
+}
+
+/** Retorna se o cliente pode fazer pedido online (lanchonete aberta). */
+export async function canPlaceOrderOnline(): Promise<{ allowed: boolean; message?: string }> {
+  const aberta = await getLanchoneteAberta();
+  if (aberta) return { allowed: true };
+  return { allowed: false, message: 'A lanchonete está fechada para pedidos online no momento. Tente novamente mais tarde.' };
+}
+
 export async function getMesas() {
   const { data, error } = await supabase.from('mesas').select('*').order('numero');
   if (error) throw error;
@@ -309,6 +339,8 @@ export async function createPedidoOnline(payload: {
   cupom_codigo?: string;
   itens: { produto_id: string; quantidade: number; valor_unitario: number; observacao?: string }[];
 }) {
+  const { allowed, message } = await canPlaceOrderOnline();
+  if (!allowed) throw new Error(message ?? 'A lanchonete está fechada para pedidos online.');
   const tipoEntrega = payload.tipo_entrega ?? 'entrega';
   const taxa = tipoEntrega === 'retirada' ? 0 : await getConfig('taxa_entrega');
   const numero = await nextPedidoNumero();

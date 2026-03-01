@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { ShoppingCart } from 'lucide-react';
-import { getProdutos, getCategorias } from '../../lib/api';
+import { getProdutos, getCategorias, getLanchoneteAberta } from '../../lib/api';
 import type { Produto } from '../../types/database';
 import type { Categoria } from '../../types/database';
 import { getCart, type SavedItem } from './Carrinho';
@@ -76,6 +76,7 @@ export default function LojaOnline() {
   const [cartCount, setCartCount] = useState(0);
   const [qtyByProd, setQtyByProd] = useState<Record<string, number>>({});
   const [categoriaSelecionada, setCategoriaSelecionada] = useState<string | null>(null);
+  const [lanchoneteAberta, setLanchoneteAberta] = useState<boolean | null>(null);
 
   const refreshCartCount = useCallback(() => {
     const cart = getCart();
@@ -85,6 +86,7 @@ export default function LojaOnline() {
   const carregarCardapio = useCallback(() => {
     setErro(null);
     setLoading(true);
+    getLanchoneteAberta().then(setLanchoneteAberta);
     Promise.all([getCategorias(), getProdutos(true)])
       .then(([cats, list]) => {
         setCategorias(cats);
@@ -173,7 +175,15 @@ export default function LojaOnline() {
       <header className="sticky top-0 z-10 border-b border-stone-200 bg-white/95 backdrop-blur">
         <div className="mx-auto max-w-4xl px-4 py-4">
           <div className="flex items-center justify-between">
-            <h1 className="text-xl font-bold text-stone-800">Lanchonete Terra e Mar</h1>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:gap-2">
+              <h1 className="text-xl font-bold text-stone-800">Lanchonete Terra e Mar</h1>
+              {lanchoneteAberta !== null && (
+                <span className={`inline-flex items-center gap-1.5 text-sm font-medium ${lanchoneteAberta ? 'text-green-600' : 'text-red-600'}`}>
+                  <span className={`h-2 w-2 rounded-full flex-shrink-0 ${lanchoneteAberta ? 'bg-green-500' : 'bg-red-500'}`} />
+                  {lanchoneteAberta ? 'Aberto' : 'Fechado'} para pedidos
+                </span>
+              )}
+            </div>
             <Link
               to="/carrinho"
               className="flex items-center gap-2 rounded-full bg-amber-600 pl-3 pr-4 py-2 text-white hover:bg-amber-700 sm:pl-4"

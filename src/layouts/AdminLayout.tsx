@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useNovoPedidoOnline } from '../hooks/useNovoPedidoOnline';
-import { getAdminSidebarCounts } from '../lib/api';
+import { getAdminSidebarCounts, getLanchoneteAberta, setLanchoneteAberta as setLanchoneteAbertaApi } from '../lib/api';
 import {
   LayoutDashboard,
   UtensilsCrossed,
@@ -36,6 +36,9 @@ export default function AdminLayout() {
   const navigate = useNavigate();
   const { mostrar: novoPedidoOnline, count: pendentesOnline, fechar: fecharNovoPedido } = useNovoPedidoOnline();
   const [counts, setCounts] = useState({ mesas: 0, viagem: 0, online: 0, cozinha: 0 });
+  const [lanchoneteAberta, setLanchoneteAberta] = useState<boolean | null>(null);
+  const [confirmandoToggle, setConfirmandoToggle] = useState<'abrir' | 'fechar' | null>(null);
+  const [toggleLoading, setToggleLoading] = useState(false);
 
   useEffect(() => {
     function load() {
@@ -45,6 +48,28 @@ export default function AdminLayout() {
     const t = setInterval(load, 10000);
     return () => clearInterval(t);
   }, []);
+
+  useEffect(() => {
+    getLanchoneteAberta().then(setLanchoneteAberta);
+  }, []);
+
+  const handleToggleClick = () => {
+    if (lanchoneteAberta === null) return;
+    setConfirmandoToggle(lanchoneteAberta ? 'fechar' : 'abrir');
+  };
+
+  const confirmarToggle = async () => {
+    if (confirmandoToggle === null) return;
+    const novaAberta = confirmandoToggle === 'abrir';
+    setToggleLoading(true);
+    try {
+      await setLanchoneteAbertaApi(novaAberta);
+      setLanchoneteAberta(novaAberta);
+      setConfirmandoToggle(null);
+    } finally {
+      setToggleLoading(false);
+    }
+  };
 
   const handleSignOut = async () => {
     try {
@@ -95,6 +120,26 @@ export default function AdminLayout() {
           })}
         </nav>
         <div className="p-2 border-t border-stone-200">
+          <div className="px-3 py-2 flex items-center justify-between gap-2">
+            <span className="text-xs font-medium text-stone-600">Pedidos online</span>
+            <button
+              type="button"
+              onClick={handleToggleClick}
+              disabled={lanchoneteAberta === null || toggleLoading}
+              className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-1 disabled:opacity-50 ${
+                lanchoneteAberta ? 'bg-green-500' : 'bg-stone-300'
+              }`}
+              role="switch"
+              aria-checked={lanchoneteAberta ?? false}
+              title={lanchoneteAberta ? 'Fechar lanchonete online' : 'Abrir lanchonete online'}
+            >
+              <span
+                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                  lanchoneteAberta ? 'translate-x-5' : 'translate-x-0.5'
+                }`}
+              />
+            </button>
+          </div>
           <p className="px-3 py-1 text-xs text-stone-500 truncate">{profile?.nome}</p>
           <button
             onClick={handleSignOut}
@@ -105,6 +150,32 @@ export default function AdminLayout() {
           </button>
         </div>
       </aside>
+      {confirmandoToggle !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
+            <h3 className="font-semibold text-stone-800 mb-2">Confirmar</h3>
+            <p className="text-sm text-stone-600 mb-4">
+              {confirmandoToggle === 'abrir'
+                ? 'Deseja realmente abrir a lanchonete para pedidos online?'
+                : 'Deseja realmente fechar a lanchonete para pedidos online?'}
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={confirmarToggle}
+                disabled={toggleLoading}
+                className={`flex-1 rounded-lg py-2 font-medium text-white disabled:opacity-50 ${
+                  confirmandoToggle === 'abrir' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'
+                }`}
+              >
+                {toggleLoading ? 'Salvando...' : 'Sim, confirmar'}
+              </button>
+              <button onClick={() => setConfirmandoToggle(null)} disabled={toggleLoading} className="rounded-lg border border-stone-300 px-4 py-2 text-stone-600">
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <main className="flex-1 overflow-auto p-6">
         <Outlet />
       </main>
