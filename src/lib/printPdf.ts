@@ -51,9 +51,62 @@ function openAndPrint(doc: jsPDF) {
 
 export type ItemConta = { codigo: string; descricao: string; quantidade: number; valor: number };
 
+const TABLE_STYLES = {
+  headStyles: {
+    fontStyle: 'bold' as const,
+    fontSize: 9,
+    textColor: BLACK,
+    halign: 'center' as const,
+    fillColor: false,
+    lineWidth: { top: 0, right: 0, bottom: 0.2, left: 0 },
+  },
+  bodyStyles: { fontSize: 9, textColor: BLACK, fillColor: false },
+  alternateRowStyles: { fillColor: false },
+  columnStyles: {
+    0: { cellWidth: 10, halign: 'center' as const },
+    1: { cellWidth: 22, halign: 'center' as const },
+    2: { cellWidth: 12, halign: 'center' as const },
+    3: { cellWidth: 14, halign: 'center' as const },
+    4: { cellWidth: 14, halign: 'center' as const },
+  },
+};
+
+/** Linha opcional no bloco de totais: label à esquerda, valor à direita (com R$). */
+type LinhaTotal = { label: string; valor: string };
+
+function addTotaisSection(
+  doc: jsPDF,
+  y: number,
+  subtotal: number,
+  total: number,
+  linhasMeio: LinhaTotal[] = []
+): number {
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(...BLACK);
+  doc.text('Subtotal:', MARGIN_MM, y);
+  doc.text(`R$ ${subtotal.toFixed(2)}`, PAPER_WIDTH_MM - MARGIN_MM, y, { align: 'right' });
+  y += 5;
+  for (const linha of linhasMeio) {
+    doc.text(linha.label, MARGIN_MM, y);
+    doc.text(linha.valor, PAPER_WIDTH_MM - MARGIN_MM, y, { align: 'right' });
+    y += 5;
+  }
+  y += 2;
+  doc.setDrawColor(0, 0, 0);
+  doc.line(MARGIN_MM, y, PAPER_WIDTH_MM - MARGIN_MM, y);
+  y += 5;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(12);
+  doc.text('TOTAL:', MARGIN_MM, y);
+  doc.text(`R$ ${total.toFixed(2)}`, PAPER_WIDTH_MM - MARGIN_MM, y, { align: 'right' });
+  return y + 12;
+}
+
 /** Conta da mesa (presencial). */
 export function printContaMesa(opts: {
   titulo: string;
+  clienteTelefone?: string;
   itens: ItemConta[];
   subtotal: number;
   valorCupom: number;
@@ -72,7 +125,15 @@ export function printContaMesa(opts: {
   doc.setTextColor(...BLACK);
   const tituloLines = doc.splitTextToSize(opts.titulo, CONTENT_WIDTH);
   doc.text(tituloLines, PAPER_WIDTH_MM / 2, y, { align: 'center' });
-  y += tituloLines.length * 5 + 6;
+  y += tituloLines.length * 5 + 4;
+  if (opts.clienteTelefone) {
+    doc.setFontSize(10);
+    doc.text('Tel.: ', MARGIN_MM, y);
+    const w = doc.getTextWidth('Tel.: ');
+    doc.text(opts.clienteTelefone, MARGIN_MM + w, y);
+    y += 4;
+  }
+  y += 2;
 
   autoTable(doc, {
     startY: y,
@@ -86,42 +147,14 @@ export function printContaMesa(opts: {
     ]),
     margin: { left: MARGIN_MM, right: MARGIN_MM },
     tableWidth: CONTENT_WIDTH,
-    headStyles: {
-      fontStyle: 'bold',
-      fontSize: 9,
-      textColor: BLACK,
-      halign: 'center',
-      fillColor: false,
-      lineWidth: { top: 0, right: 0, bottom: 0.2, left: 0 },
-    },
-    bodyStyles: { fontSize: 9, textColor: BLACK, fillColor: false },
-    alternateRowStyles: { fillColor: false },
-    columnStyles: {
-      0: { cellWidth: 10 },
-      1: { cellWidth: 22 },
-      2: { cellWidth: 12, halign: 'center' },
-      3: { cellWidth: 14 },
-      4: { cellWidth: 14 },
-    },
+    ...TABLE_STYLES,
   });
   y = (doc as any).lastAutoTable.finalY + 6;
 
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10);
-  doc.setTextColor(...BLACK);
-  doc.text(`Subtotal: R$ ${opts.subtotal.toFixed(2)}`, MARGIN_MM, y);
-  y += 5;
-  if (opts.valorCupom > 0 && opts.cupomCodigo) {
-    doc.text(`Desconto cupom (${opts.cupomCodigo}): - ${opts.valorCupom.toFixed(2)}`, MARGIN_MM, y);
-    y += 5;
-  }
-  if (opts.valorManual > 0) {
-    doc.text(`Desconto: - ${opts.valorManual.toFixed(2)}`, MARGIN_MM, y);
-    y += 5;
-  }
-  doc.setFontSize(12);
-  doc.text(`TOTAL: R$ ${opts.total.toFixed(2)}`, MARGIN_MM, y + 2);
-  y += 12;
+  const linhasMesa: LinhaTotal[] = [];
+  if (opts.valorCupom > 0 && opts.cupomCodigo) linhasMesa.push({ label: `Desconto cupom (${opts.cupomCodigo}):`, valor: `- R$ ${opts.valorCupom.toFixed(2)}` });
+  if (opts.valorManual > 0) linhasMesa.push({ label: 'Desconto:', valor: `- R$ ${opts.valorManual.toFixed(2)}` });
+  y = addTotaisSection(doc, y, opts.subtotal, opts.total, linhasMesa);
   addFooter(doc, y);
   openAndPrint(doc);
 }
@@ -130,6 +163,7 @@ export function printContaMesa(opts: {
 export function printContaViagem(opts: {
   pedidoNumero: number;
   clienteNome: string;
+  clienteTelefone?: string;
   itens: ItemConta[];
   subtotal: number;
   valorCupom: number;
@@ -147,7 +181,15 @@ export function printContaViagem(opts: {
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(...BLACK);
   doc.text(`Pedido #${opts.pedidoNumero} - VIAGEM - ${opts.clienteNome}`, PAPER_WIDTH_MM / 2, y, { align: 'center' });
-  y += 10;
+  y += 8;
+  if (opts.clienteTelefone) {
+    doc.setFontSize(10);
+    doc.text('Tel.: ', MARGIN_MM, y);
+    const w = doc.getTextWidth('Tel.: ');
+    doc.text(opts.clienteTelefone, MARGIN_MM + w, y);
+    y += 4;
+  }
+  y += 2;
 
   autoTable(doc, {
     startY: y,
@@ -161,47 +203,19 @@ export function printContaViagem(opts: {
     ]),
     margin: { left: MARGIN_MM, right: MARGIN_MM },
     tableWidth: CONTENT_WIDTH,
-    headStyles: {
-      fontStyle: 'bold',
-      fontSize: 9,
-      textColor: BLACK,
-      halign: 'center',
-      fillColor: false,
-      lineWidth: { top: 0, right: 0, bottom: 0.2, left: 0 },
-    },
-    bodyStyles: { fontSize: 9, textColor: BLACK, fillColor: false },
-    alternateRowStyles: { fillColor: false },
-    columnStyles: {
-      0: { cellWidth: 10 },
-      1: { cellWidth: 22 },
-      2: { cellWidth: 12, halign: 'center' },
-      3: { cellWidth: 14 },
-      4: { cellWidth: 14 },
-    },
+    ...TABLE_STYLES,
   });
   y = (doc as any).lastAutoTable.finalY + 6;
 
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10);
-  doc.setTextColor(...BLACK);
-  doc.text(`Subtotal: R$ ${opts.subtotal.toFixed(2)}`, MARGIN_MM, y);
-  y += 5;
-  if (opts.valorCupom > 0 && opts.cupomCodigo) {
-    doc.text(`Desconto cupom (${opts.cupomCodigo}): - ${opts.valorCupom.toFixed(2)}`, MARGIN_MM, y);
-    y += 5;
-  }
-  if (opts.valorManual > 0) {
-    doc.text(`Desconto: - ${opts.valorManual.toFixed(2)}`, MARGIN_MM, y);
-    y += 5;
-  }
-  doc.setFontSize(12);
-  doc.text(`TOTAL: R$ ${opts.total.toFixed(2)}`, MARGIN_MM, y + 2);
-  y += 12;
+  const linhasViagem: LinhaTotal[] = [];
+  if (opts.valorCupom > 0 && opts.cupomCodigo) linhasViagem.push({ label: `Desconto cupom (${opts.cupomCodigo}):`, valor: `- R$ ${opts.valorCupom.toFixed(2)}` });
+  if (opts.valorManual > 0) linhasViagem.push({ label: 'Desconto:', valor: `- R$ ${opts.valorManual.toFixed(2)}` });
+  y = addTotaisSection(doc, y, opts.subtotal, opts.total, linhasViagem);
   addFooter(doc, y);
   openAndPrint(doc);
 }
 
-/** Pedido para entrega (online). */
+/** Pedido para entrega (online). Mesmo esquema visual das impressões de mesa e viagem. */
 export function printPedidoEntrega(pedido: {
   numero: number;
   cliente_nome?: string;
@@ -223,19 +237,23 @@ export function printPedidoEntrega(pedido: {
   const doc = createDoc();
   let y = 10;
   doc.setTextColor(...BLACK);
-  doc.setFontSize(13);
-  doc.text(`Pedido para entrega #${pedido.numero}`, PAPER_WIDTH_MM / 2, y, { align: 'center' });
-  y += 7;
+  doc.setFontSize(14);
+  doc.text('Lanchonete Terra e Mar', PAPER_WIDTH_MM / 2, y, { align: 'center' });
+  y += 8;
+  doc.setFontSize(11);
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(10);
   doc.setTextColor(...BLACK);
-  if (pedido.cliente_nome) {
-    doc.text(pedido.cliente_nome, MARGIN_MM, y);
-    y += 5;
-  }
+  const titulo = `Pedido #${pedido.numero} - ENTREGA - ${pedido.cliente_nome || '-'}`;
+  const tituloLines = doc.splitTextToSize(titulo, CONTENT_WIDTH);
+  doc.text(tituloLines, PAPER_WIDTH_MM / 2, y, { align: 'center' });
+  y += tituloLines.length * 5 + 4;
+  doc.setFontSize(10);
   if (pedido.cliente_whatsapp) {
-    doc.text(pedido.cliente_whatsapp, MARGIN_MM, y);
-    y += 5;
+    doc.setTextColor(...BLACK);
+    doc.text('Tel.: ', MARGIN_MM, y);
+    const w = doc.getTextWidth('Tel.: ');
+    doc.text(pedido.cliente_whatsapp, MARGIN_MM + w, y);
+    y += 4;
   }
   if (pedido.cliente_endereco) {
     const addrLines = doc.splitTextToSize(pedido.cliente_endereco, CONTENT_WIDTH);
@@ -244,13 +262,14 @@ export function printPedidoEntrega(pedido: {
   }
   if (pedido.ponto_referencia) {
     doc.text(`Ref: ${pedido.ponto_referencia}`, MARGIN_MM, y);
-    y += 5;
+    y += 4;
   }
-  doc.text(`Pagamento: ${pedido.forma_pagamento || '-'}${pedido.troco_para ? ` - Troco ${Number(pedido.troco_para).toFixed(2)}` : ''}`, MARGIN_MM, y);
-  y += 5;
+  doc.text(`Pagamento: ${pedido.forma_pagamento || '-'}${pedido.troco_para ? ` - Troco R$ ${Number(pedido.troco_para).toFixed(2)}` : ''}`, MARGIN_MM, y);
+  y += 4;
   if (pedido.observacoes) {
-    doc.text(pedido.observacoes, MARGIN_MM, y);
-    y += 6;
+    const obsLines = doc.splitTextToSize(pedido.observacoes, CONTENT_WIDTH);
+    doc.text(obsLines, MARGIN_MM, y);
+    y += obsLines.length * 4 + 2;
   }
   y += 4;
 
@@ -262,50 +281,29 @@ export function printPedidoEntrega(pedido: {
 
   autoTable(doc, {
     startY: y,
-    head: [['Cod', 'Produto', 'Qtd', 'Valor']],
-    body: itens.map((i) => [
-      (i.produtos?.codigo ?? '-'),
-      `${(i.produtos?.nome || i.produtos?.descricao) ?? '-'}${i.observacao ? ` (${i.observacao})` : ''}`,
-      String(i.quantidade),
-      ((i.quantidade || 0) * Number(i.valor_unitario || 0)).toFixed(2),
-    ]),
+    head: [['Cod', 'Produto', 'Qtd', 'Valor unit.', 'Valor']],
+    body: itens.map((i) => {
+      const qtd = i.quantidade || 0;
+      const unit = Number(i.valor_unitario || 0);
+      const valor = qtd * unit;
+      return [
+        (i.produtos?.codigo ?? '-'),
+        `${(i.produtos?.nome || i.produtos?.descricao) ?? '-'}${i.observacao ? ` (${i.observacao})` : ''}`,
+        String(qtd),
+        (qtd > 0 ? valor / qtd : 0).toFixed(2),
+        valor.toFixed(2),
+      ];
+    }),
     margin: { left: MARGIN_MM, right: MARGIN_MM },
     tableWidth: CONTENT_WIDTH,
-    headStyles: {
-      fontStyle: 'bold',
-      fontSize: 9,
-      textColor: BLACK,
-      halign: 'center',
-      fillColor: false,
-      lineWidth: { top: 0, right: 0, bottom: 0.2, left: 0 },
-    },
-    bodyStyles: { fontSize: 9, textColor: BLACK, fillColor: false },
-    alternateRowStyles: { fillColor: false },
-    columnStyles: {
-      0: { cellWidth: 10 },
-      1: { cellWidth: 24 },
-      2: { cellWidth: 12, halign: 'center' },
-      3: { cellWidth: 18 },
-    },
+    ...TABLE_STYLES,
   });
-  y = (doc as any).lastAutoTable.finalY + 5;
+  y = (doc as any).lastAutoTable.finalY + 6;
 
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10);
-  doc.setTextColor(...BLACK);
-  doc.text(`Subtotal: R$ ${subtotal.toFixed(2)}`, MARGIN_MM, y);
-  y += 4;
-  if (desconto > 0) {
-    doc.text(`Desconto: - ${desconto.toFixed(2)}`, MARGIN_MM, y);
-    y += 4;
-  }
-  if (taxa > 0) {
-    doc.text(`Taxa entrega: ${taxa.toFixed(2)}`, MARGIN_MM, y);
-    y += 4;
-  }
-  doc.setFontSize(12);
-  doc.text(`TOTAL: R$ ${total.toFixed(2)}`, MARGIN_MM, y + 2);
-  y += 10;
+  const linhasEntrega: LinhaTotal[] = [];
+  if (desconto > 0) linhasEntrega.push({ label: 'Desconto:', valor: `- R$ ${desconto.toFixed(2)}` });
+  if (taxa > 0) linhasEntrega.push({ label: 'Taxa entrega:', valor: `R$ ${taxa.toFixed(2)}` });
+  y = addTotaisSection(doc, y, subtotal, total, linhasEntrega);
   addFooter(doc, y);
   openAndPrint(doc);
 }

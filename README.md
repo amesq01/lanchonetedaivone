@@ -31,7 +31,7 @@ npm install
 INSERT INTO profiles (id, role, nome, email) VALUES ('COLE-O-UID-AQUI', 'admin', 'Admin', 'seu@email.com');
 ```
 
-6. (Opcional) Para cadastro de atendentes pela aplicação, publique a Edge Function `create-atendente` e use a Service Role Key apenas no backend da função.
+6. (Opcional) Para cadastro de atendentes pela aplicação, publique a Edge Function `create-atendente` (a pasta `supabase/config.toml` já desativa a verificação de JWT no gateway; a função valida o token internamente). Use a Service Role Key apenas no backend da função.
 
 ### 3. Variáveis de ambiente
 

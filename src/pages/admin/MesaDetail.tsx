@@ -61,8 +61,8 @@ export default function AdminMesaDetail() {
       numeros.length === 0
         ? `${mesaNome} - ${comanda.nome_cliente}`
         : numeros.length === 1
-          ? `Pedido ${numeros[0]} - ${mesaNome} - ${comanda.nome_cliente}`
-          : `Pedidos ${numeros.join(', ')} - ${mesaNome} - ${comanda.nome_cliente}`;
+          ? `Pedido #${numeros[0]} - ${mesaNome} - ${comanda.nome_cliente}`
+          : `Pedidos ${numeros.map((n) => `#${n}`).join(', ')} - ${mesaNome} - ${comanda.nome_cliente}`;
     const sub = contaAtual?.total ?? 0;
     let vCupom = cupomSelecionado ? (sub * Number(cupomSelecionado.porcentagem)) / 100 : 0;
     if (cupomSelecionado?.valor_maximo != null) vCupom = Math.min(vCupom, Number(cupomSelecionado.valor_maximo));

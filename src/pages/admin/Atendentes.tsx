@@ -30,13 +30,32 @@ export default function AdminAtendentes() {
     setSubmitting(true);
     try {
       const url = import.meta.env.VITE_SUPABASE_URL ?? '';
+      if (!url) {
+        setError('VITE_SUPABASE_URL não está configurado no .env.');
+        return;
+      }
+      const { data: { session: refreshedSession } } = await supabase.auth.refreshSession();
+      const token = (refreshedSession?.access_token ?? (await supabase.auth.getSession()).data.session?.access_token)?.trim();
+      if (!token) {
+        setError('Sessão expirada. Faça login novamente.');
+        return;
+      }
       const res = await fetch(`${url}/functions/v1/create-atendente`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}` },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ email, password: senha, nome, codigo, telefone }),
       });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Erro ao criar');
+      let msg = '';
+      try {
+        const json = await res.json();
+        msg = json.error || json.message || '';
+      } catch {
+        msg = res.statusText || `Erro ${res.status}`;
+      }
+      if (!res.ok) {
+        setError(msg || `Erro ${res.status}. Verifique se a Edge Function create-atendente está publicada no Supabase.`);
+        return;
+      }
       setOpen(false);
       setNome('');
       setCodigo('');
@@ -45,7 +64,7 @@ export default function AdminAtendentes() {
       setSenha('');
       load();
     } catch (err: any) {
-      setError(err.message || 'Erro ao cadastrar. Se a Edge Function não estiver publicada, crie o usuário no Supabase Dashboard (Authentication) e depois adicione um profile com role atendente.');
+      setError(err.message || 'Erro ao cadastrar.');
     } finally {
       setSubmitting(false);
     }

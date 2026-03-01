@@ -1,0 +1,3 @@
+# Evita "Invalid JWT" no gateway; a função valida o JWT internamente com auth.getUser(token)
+[functions.create-atendente]
+verify_jwt = false

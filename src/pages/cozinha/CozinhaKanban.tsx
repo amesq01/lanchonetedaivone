@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Volume2 } from 'lucide-react';
+import { Volume2, Inbox, ChefHat, CheckCircle } from 'lucide-react';
 import { getPedidosCozinha, updatePedidoStatus } from '../../lib/api';
 
 let audioCtx: AudioContext | null = null;
@@ -42,9 +42,9 @@ function playSomNovoPedido() {
 }
 
 const COLUNAS = [
-  { key: 'novo_pedido', label: 'Novo pedido' },
-  { key: 'em_preparacao', label: 'Em preparação' },
-  { key: 'finalizado', label: 'Finalizado' },
+  { key: 'novo_pedido', label: 'Novo pedido', icon: Inbox, className: 'bg-amber-100 border-amber-200 text-amber-900' },
+  { key: 'em_preparacao', label: 'Em preparação', icon: ChefHat, className: 'bg-blue-100 border-blue-200 text-blue-900' },
+  { key: 'finalizado', label: 'Finalizado', icon: CheckCircle, className: 'bg-green-100 border-green-200 text-green-900' },
 ] as const;
 
 function pedidoGeradoHa(fromAt: string): string {
@@ -193,9 +193,14 @@ export default function CozinhaKanban() {
         </button>
       </div>
       <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-4 min-h-0">
-      {COLUNAS.map((col) => (
+      {COLUNAS.map((col) => {
+        const Icon = col.icon;
+        return (
         <div key={col.key} className="rounded-xl bg-stone-100 p-4 flex flex-col min-h-0">
-          <h3 className="font-semibold text-stone-700 mb-3 flex-shrink-0">{col.label}</h3>
+          <h3 className={`font-semibold mb-3 flex-shrink-0 flex items-center gap-2 rounded-lg border px-3 py-2 ${col.className}`}>
+            <Icon className="h-5 w-5 flex-shrink-0" />
+            {col.label}
+          </h3>
           <div className="flex-1 overflow-y-auto space-y-3 min-h-0">
             {porColuna(col.key).map((p) => (
               <div key={p.id} className="rounded-lg bg-white p-3 shadow-sm border border-stone-200 flex-shrink-0">
@@ -235,7 +240,8 @@ export default function CozinhaKanban() {
             ))}
           </div>
         </div>
-      ))}
+        );
+      })}
       </div>
 
       {confirmacao && (
