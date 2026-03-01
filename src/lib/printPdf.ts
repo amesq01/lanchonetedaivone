@@ -2,7 +2,7 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
 const PAPER_WIDTH_MM = 80;
-const MARGIN_MM = 3;
+const MARGIN_MM = 1;
 const CONTENT_WIDTH = PAPER_WIDTH_MM - MARGIN_MM * 2;
 /** Posição X (align right) dos valores na seção de totais — um pouco mais à esquerda que a margem direita. */
 const VALORES_RIGHT_MM = PAPER_WIDTH_MM - MARGIN_MM - 6;
