@@ -525,3 +525,62 @@ export async function getRelatorioCancelamentos(desde: string, ate: string) {
   const itens = pedidos.map((p) => ({ ...p, cancelado_por_nome: p.cancelado_por ? nomes[p.cancelado_por] ?? p.cancelado_por : '-' }));
   return { itens, total: itens.length };
 }
+
+/** Marca notificação como vista. */
+export async function marcarNotificacaoComoVista(notificacaoId: string) {
+  await supabase.from('notificacoes').update({ visto: true }).eq('id', notificacaoId);
+}
+
+/** Busca notificações não vistas do atendente. */
+export async function getNotificacoesNaoVistas(atendenteId: string) {
+  const { data, error } = await supabase
+    .from('notificacoes')
+    .select('id, mensagem, pedido_numero')
+    .eq('atendente_id', atendenteId)
+    .eq('visto', false)
+    .order('created_at', { ascending: false });
+  if (error) return [];
+  return (data ?? []) as { id: string; mensagem: string; pedido_numero: number }[];
+}
+
+/** Inscreve nas notificações do atendente (Realtime + polling). Retorna função para cancelar. */
+export function subscribeToNotificacoesAtendente(
+  atendenteId: string,
+  onNotificacao: (notificacao: { id: string; mensagem: string; pedido_numero: number }) => void
+) {
+  const idsVistos = new Set<string>();
+  const poll = async () => {
+    const list = await getNotificacoesNaoVistas(atendenteId);
+    for (const n of list) {
+      if (!idsVistos.has(n.id)) {
+        idsVistos.add(n.id);
+        onNotificacao(n);
+      }
+    }
+  };
+  poll();
+  const interval = setInterval(poll, 3000);
+  const channel = supabase
+    .channel('notificacoes-atendente')
+    .on(
+      'postgres_changes',
+      {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'notificacoes',
+        filter: `atendente_id=eq.${atendenteId}`,
+      },
+      (payload) => {
+        const n = payload.new as { id: string; mensagem: string; pedido_numero: number };
+        if (!idsVistos.has(n.id)) {
+          idsVistos.add(n.id);
+          onNotificacao(n);
+        }
+      }
+    )
+    .subscribe();
+  return () => {
+    clearInterval(interval);
+    supabase.removeChannel(channel);
+  };
+}

@@ -155,6 +155,20 @@ export interface Database {
         Insert: Omit<Database['public']['Tables']['pedido_itens']['Row'], 'created_at'> & { created_at?: string };
         Update: Partial<Database['public']['Tables']['pedido_itens']['Insert']>;
       };
+      notificacoes: {
+        Row: {
+          id: string;
+          atendente_id: string;
+          pedido_id: string;
+          pedido_numero: number;
+          tipo: string;
+          mensagem: string;
+          visto: boolean;
+          created_at: string;
+        };
+        Insert: Omit<Database['public']['Tables']['notificacoes']['Row'], 'id' | 'created_at'> & { id?: string; created_at?: string };
+        Update: Partial<Database['public']['Tables']['notificacoes']['Insert']>;
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
