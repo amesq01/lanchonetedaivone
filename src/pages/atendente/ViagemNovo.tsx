@@ -20,8 +20,9 @@ export default function AtendenteViagemNovo() {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dropdownRect, setDropdownRect] = useState<{ top: number; left: number; width: number } | null>(null);
 
-  const filtrados = search.trim()
-    ? produtos.filter((p) => (p.nome?.toLowerCase().includes(search.toLowerCase())) || p.descricao.toLowerCase().includes(search.toLowerCase()) || p.codigo.toLowerCase().includes(search.toLowerCase()))
+  const s = search.trim();
+  const filtrados = s
+    ? produtos.filter((p) => (p.nome?.toLowerCase().includes(s.toLowerCase())) || (p.codigo === s))
     : [];
 
   useEffect(() => {
