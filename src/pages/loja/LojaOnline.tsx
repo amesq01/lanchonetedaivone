@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { ShoppingCart } from 'lucide-react';
+import { ShoppingCart, X } from 'lucide-react';
 import { getProdutos, getCategorias, getLanchoneteAberta } from '../../lib/api';
 import type { ProdutoWithCategorias } from '../../types/database';
 import type { Categoria } from '../../types/database';
@@ -78,6 +78,7 @@ export default function LojaOnline() {
   const [qtyByProd, setQtyByProd] = useState<Record<string, number>>({});
   const [categoriaSelecionada, setCategoriaSelecionada] = useState<string | null>(null);
   const [lanchoneteAberta, setLanchoneteAberta] = useState<boolean | null>(null);
+  const [modalProduto, setModalProduto] = useState<ProdutoWithCategorias | null>(null);
 
   const refreshCartCount = useCallback(() => {
     const cart = getCart();
@@ -249,7 +250,7 @@ export default function LojaOnline() {
             <h2 className="mb-4 text-lg font-semibold text-stone-800">Cardápio</h2>
             <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 items-stretch">
               {byCategoria(null).map((p) => (
-                <CardProduto key={p.id} produto={p} qty={qtyByProd[p.id] ?? 0} onQtyChange={(q) => updateQtyInCart(p, q)} onRemove={() => removeFromCart(p)} />
+                <CardProduto key={p.id} produto={p} qty={qtyByProd[p.id] ?? 0} onQtyChange={(q) => updateQtyInCart(p, q)} onRemove={() => removeFromCart(p)} onOpenModal={() => setModalProduto(p)} />
               ))}
             </div>
           </section>
@@ -259,11 +260,20 @@ export default function LojaOnline() {
             <h2 className="mb-4 text-lg font-semibold text-stone-800">{cat.nome}</h2>
             <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 items-stretch">
               {byCategoria(cat.id).map((p) => (
-                <CardProduto key={p.id} produto={p} qty={qtyByProd[p.id] ?? 0} onQtyChange={(q) => updateQtyInCart(p, q)} onRemove={() => removeFromCart(p)} />
+                <CardProduto key={p.id} produto={p} qty={qtyByProd[p.id] ?? 0} onQtyChange={(q) => updateQtyInCart(p, q)} onRemove={() => removeFromCart(p)} onOpenModal={() => setModalProduto(p)} />
               ))}
             </div>
           </section>
         ))}
+        {modalProduto && (
+          <ModalProduto
+            key={modalProduto.id}
+            produto={modalProduto}
+            qtyInCart={qtyByProd[modalProduto.id] ?? 0}
+            onQtyChange={(novaQty) => updateQtyInCart(modalProduto, novaQty)}
+            onClose={() => setModalProduto(null)}
+          />
+        )}
         {categoriaVazia && (
           <p className="text-stone-500">Nenhum produto nesta categoria.</p>
         )}
@@ -273,58 +283,123 @@ export default function LojaOnline() {
   );
 }
 
+function ModalProduto({
+  produto,
+  qtyInCart,
+  onQtyChange,
+  onClose,
+}: {
+  produto: ProdutoWithCategorias;
+  qtyInCart: number;
+  onQtyChange: (novaQty: number) => void;
+  onClose: () => void;
+}) {
+  const preco = precoVenda(produto);
+  const emPromo = produto.em_promocao && produto.valor_promocional != null && Number(produto.valor_promocional) > 0;
+  const qty = Math.max(0, qtyInCart);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={onClose} role="dialog" aria-modal="true" aria-labelledby="modal-produto-titulo">
+      <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="relative flex-shrink-0">
+          <button type="button" onClick={onClose} className="absolute top-3 right-3 z-10 w-10 h-10 rounded-full bg-white/90 hover:bg-white shadow flex items-center justify-center text-stone-600 hover:text-stone-800" aria-label="Fechar">
+            <X className="w-5 h-5" />
+          </button>
+          <div className="aspect-square w-full max-h-72 bg-stone-100 flex items-center justify-center text-stone-400">
+            {produto.imagem_url ? <img src={produto.imagem_url} alt="" className="w-full h-full object-cover" /> : 'Sem imagem'}
+          </div>
+        </div>
+        <div className="p-5 overflow-y-auto flex-1">
+          <h2 id="modal-produto-titulo" className="text-xl font-semibold text-stone-800">{produto.nome || produto.descricao}</h2>
+          {produto.nome && produto.descricao && <p className="mt-1 text-stone-600">{produto.descricao}</p>}
+          {produto.ingredientes && (
+            <p className="mt-3 text-sm text-stone-600"><span className="font-medium text-stone-700">Ingredientes:</span> {produto.ingredientes}</p>
+          )}
+          {produto.acompanhamentos && (
+            <p className="mt-1 text-sm text-stone-600"><span className="font-medium text-stone-700">Acompanhamentos:</span> {produto.acompanhamentos}</p>
+          )}
+          <div className="mt-4 flex items-center gap-2">
+            <span className="text-sm font-medium text-stone-600">Quantidade:</span>
+            <button type="button" onClick={() => onQtyChange(Math.max(0, qty - 1))} className="w-9 h-9 rounded-lg border border-stone-300 text-stone-600 hover:bg-stone-50 font-medium disabled:opacity-50 disabled:cursor-not-allowed" disabled={qty <= 0}>−</button>
+            <span className="w-10 text-center font-semibold text-stone-800">{qty}</span>
+            <button type="button" onClick={() => onQtyChange(qty + 1)} className="w-9 h-9 rounded-lg border border-stone-300 text-stone-600 hover:bg-stone-50 font-medium">+</button>
+          </div>
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <div className="font-semibold text-amber-600">
+              {emPromo ? (
+                <>
+                  <span className="text-stone-400 line-through font-normal mr-1">R$ {Number(produto.valor).toFixed(2)}</span>
+                  <span>R$ {Number(produto.valor_promocional).toFixed(2)}</span>
+                </>
+              ) : (
+                <>R$ {preco.toFixed(2)}</>
+              )}
+            </div>
+            <button type="button" onClick={(e) => { e.stopPropagation(); onClose(); }} className="flex-1 min-w-[140px] rounded-xl bg-amber-600 py-3 px-4 text-white font-semibold hover:bg-amber-700 flex items-center justify-center gap-2">
+              <ShoppingCart className="w-5 h-5" />
+              Adicionar ao carrinho
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function CardProduto({
   produto,
   qty,
   onQtyChange,
   onRemove,
+  onOpenModal,
 }: {
   produto: ProdutoWithCategorias;
   qty: number;
   onQtyChange: (novaQty: number) => void;
   onRemove: () => void;
+  onOpenModal: () => void;
 }) {
   const quantidade = Math.max(0, qty);
   const preco = precoVenda(produto);
   const emPromo = produto.em_promocao && produto.valor_promocional != null && Number(produto.valor_promocional) > 0;
   return (
-    <div className="flex h-full min-h-0 flex-col rounded-2xl border border-stone-100 bg-white p-4 shadow-sm transition hover:shadow-md hover:border-amber-200">
-      {/* Imagem: altura fixa por aspect-ratio */}
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onOpenModal}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpenModal(); } }}
+      className="flex h-full min-h-0 flex-col rounded-2xl border border-stone-100 bg-white p-4 shadow-sm transition hover:shadow-md hover:border-amber-200 cursor-pointer focus:outline-none focus:ring-2 focus:ring-amber-400 focus:ring-offset-2"
+    >
       <div className="aspect-square w-full flex-shrink-0 overflow-hidden rounded-xl bg-stone-100 flex items-center justify-center text-stone-400 text-sm">
         {produto.imagem_url ? <img src={produto.imagem_url} alt="" className="h-full w-full object-cover" /> : 'Sem imagem'}
       </div>
-      {/* Conteúdo: preenche o resto e empurra preço/qty/botão para baixo */}
-      <div className="mt-3 flex min-h-0 flex-1 flex-col gap-3">
-        {/* Bloco de texto (cresce para igualar altura dos cards) */}
-        <div className="flex min-h-0 flex-1 flex-col gap-1">
-          <div className="font-medium text-stone-800 leading-tight line-clamp-2">{produto.nome || produto.descricao}</div>
-          {produto.nome && produto.descricao ? <div className="text-sm text-stone-500 leading-tight line-clamp-2">{produto.descricao}</div> : null}
-          {produto.ingredientes ? <div className="min-h-[1.25rem] text-xs text-stone-500 leading-tight line-clamp-2"><span className="font-medium text-stone-600">Ingredientes:</span> {produto.ingredientes}</div> : <div className="min-h-[1.25rem]" />}
-          {produto.acompanhamentos ? <div className="min-h-[1.25rem] text-xs text-stone-500 leading-tight line-clamp-2"><span className="font-medium text-stone-600">Acompanhamentos:</span> {produto.acompanhamentos}</div> : <div className="min-h-[1.25rem]" />}
+      <div className="mt-3 flex min-h-0 flex-1 flex-col gap-1">
+        <div className="font-medium text-stone-800 leading-tight line-clamp-2">{produto.nome || produto.descricao}</div>
+        {produto.nome && produto.descricao ? <div className="text-sm text-stone-500 leading-tight line-clamp-2">{produto.descricao}</div> : null}
+        {produto.ingredientes ? <div className="min-h-[1.25rem] text-xs text-stone-500 leading-tight line-clamp-2"><span className="font-medium text-stone-600">Ingredientes:</span> {produto.ingredientes}</div> : <div className="min-h-[1.25rem]" />}
+        {produto.acompanhamentos ? <div className="min-h-[1.25rem] text-xs text-stone-500 leading-tight line-clamp-2"><span className="font-medium text-stone-600">Acompanhamentos:</span> {produto.acompanhamentos}</div> : <div className="min-h-[1.25rem]" />}
+      </div>
+      <div className="flex flex-shrink-0 flex-col gap-3 pt-0 mt-1" onClick={(e) => e.stopPropagation()}>
+        <div className="font-semibold text-amber-600">
+          {emPromo ? (
+            <>
+              <span className="text-stone-400 line-through font-normal mr-1">R$ {Number(produto.valor).toFixed(2)}</span>
+              <span className="text-amber-600">R$ {Number(produto.valor_promocional).toFixed(2)}</span>
+            </>
+          ) : (
+            <>R$ {preco.toFixed(2)}</>
+          )}
         </div>
-        {/* Preço, quantidade e botão: sempre no mesmo alinhamento */}
-        <div className="flex flex-shrink-0 flex-col gap-3 pt-0">
-          <div className="font-semibold text-amber-600">
-            {emPromo ? (
-              <>
-                <span className="text-stone-400 line-through font-normal mr-1">R$ {Number(produto.valor).toFixed(2)}</span>
-                <span className="text-amber-600">R$ {Number(produto.valor_promocional).toFixed(2)}</span>
-              </>
-            ) : (
-              <>R$ {preco.toFixed(2)}</>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-stone-600"><span className="sm:hidden">Qtd:</span><span className="hidden sm:inline">Quantidade:</span></span>
-            <button type="button" onClick={() => onQtyChange(Math.max(0, qty - 1))} className="h-8 w-8 flex-shrink-0 rounded border border-stone-300 text-stone-600 hover:bg-stone-50">−</button>
-            <span className="w-8 flex-shrink-0 text-center font-medium">{quantidade}</span>
-            <button type="button" onClick={() => onQtyChange(qty + 1)} className="h-8 w-8 flex-shrink-0 rounded border border-stone-300 text-stone-600 hover:bg-stone-50">+</button>
-          </div>
-          <button type="button" onClick={onRemove} disabled={quantidade === 0} className="w-full flex-shrink-0 rounded-lg border border-red-300 bg-white py-2 text-red-600 font-medium hover:bg-red-50 disabled:opacity-10 disabled:cursor-not-allowed flex items-center justify-center gap-1.5">
-            <span className="sm:hidden">Remover do <ShoppingCart className="h-4 w-4 inline-block" /></span>
-            <span className="hidden sm:inline">Remover do carrinho</span>
-          </button>
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-stone-600"><span className="sm:hidden">Qtd:</span><span className="hidden sm:inline">Quantidade:</span></span>
+          <button type="button" onClick={() => onQtyChange(Math.max(0, qty - 1))} className="h-8 w-8 flex-shrink-0 rounded border border-stone-300 text-stone-600 hover:bg-stone-50">−</button>
+          <span className="w-8 flex-shrink-0 text-center font-medium">{quantidade}</span>
+          <button type="button" onClick={() => onQtyChange(qty + 1)} className="h-8 w-8 flex-shrink-0 rounded border border-stone-300 text-stone-600 hover:bg-stone-50">+</button>
         </div>
+        <button type="button" onClick={onRemove} disabled={quantidade === 0} className="w-full flex-shrink-0 rounded-lg border border-red-300 bg-white py-2 text-red-600 font-medium hover:bg-red-50 disabled:opacity-10 disabled:cursor-not-allowed flex items-center justify-center gap-1.5">
+          <span className="sm:hidden">Remover do <ShoppingCart className="h-4 w-4 inline-block" /></span>
+          <span className="hidden sm:inline">Remover do carrinho</span>
+        </button>
       </div>
     </div>
   );
