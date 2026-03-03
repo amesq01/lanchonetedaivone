@@ -305,8 +305,8 @@ function ModalProduto({
           <button type="button" onClick={onClose} className="absolute top-3 right-3 z-10 w-10 h-10 rounded-full bg-white/90 hover:bg-white shadow flex items-center justify-center text-stone-600 hover:text-stone-800" aria-label="Fechar">
             <X className="w-5 h-5" />
           </button>
-          <div className="aspect-square w-full max-h-72 bg-stone-100 flex items-center justify-center text-stone-400">
-            {produto.imagem_url ? <img src={produto.imagem_url} alt="" className="w-full h-full object-cover" /> : 'Sem imagem'}
+          <div className="aspect-square w-full max-h-72 bg-stone-100 flex items-center justify-center text-stone-400 overflow-hidden">
+            {produto.imagem_url ? <img src={produto.imagem_url} alt="" className="w-full h-full object-contain object-center" /> : 'Sem imagem'}
           </div>
         </div>
         <div className="p-5 overflow-y-auto flex-1">
