@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { ShoppingCart, X } from 'lucide-react';
+import { ShoppingCart, Trash2, X } from 'lucide-react';
 import { getProdutos, getCategorias, getLanchoneteAberta } from '../../lib/api';
 import type { ProdutoWithCategorias } from '../../types/database';
 import type { Categoria } from '../../types/database';
@@ -248,9 +248,9 @@ export default function LojaOnline() {
         {exibirSemCategoria && (
           <section className="mb-8">
             <h2 className="mb-4 text-lg font-semibold text-stone-800">Cardápio</h2>
-            <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 items-stretch">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 items-stretch">
               {byCategoria(null).map((p) => (
-                <CardProduto key={p.id} produto={p} qty={qtyByProd[p.id] ?? 0} onQtyChange={(q) => updateQtyInCart(p, q)} onRemove={() => removeFromCart(p)} onOpenModal={() => setModalProduto(p)} />
+                <CardProduto key={p.id} produto={p} qty={qtyByProd[p.id] ?? 0} onOpenModal={() => setModalProduto(p)} onRemove={() => removeFromCart(p)} />
               ))}
             </div>
           </section>
@@ -258,9 +258,9 @@ export default function LojaOnline() {
         {categoriasComProdutos.filter(exibirCategoria).map((cat) => (
           <section key={cat.id} className="mb-8">
             <h2 className="mb-4 text-lg font-semibold text-stone-800">{cat.nome}</h2>
-            <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 items-stretch">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 items-stretch">
               {byCategoria(cat.id).map((p) => (
-                <CardProduto key={p.id} produto={p} qty={qtyByProd[p.id] ?? 0} onQtyChange={(q) => updateQtyInCart(p, q)} onRemove={() => removeFromCart(p)} onOpenModal={() => setModalProduto(p)} />
+                <CardProduto key={p.id} produto={p} qty={qtyByProd[p.id] ?? 0} onOpenModal={() => setModalProduto(p)} onRemove={() => removeFromCart(p)} />
               ))}
             </div>
           </section>
@@ -346,18 +346,22 @@ function ModalProduto({
   );
 }
 
+function labelAdicionado(q: number): string {
+  if (q <= 0) return '';
+  if (q === 1) return '1 adicionado';
+  return (q < 10 ? '0' : '') + q + ' adicionados';
+}
+
 function CardProduto({
   produto,
   qty,
-  onQtyChange,
-  onRemove,
   onOpenModal,
+  onRemove,
 }: {
   produto: ProdutoWithCategorias;
   qty: number;
-  onQtyChange: (novaQty: number) => void;
-  onRemove: () => void;
   onOpenModal: () => void;
+  onRemove: () => void;
 }) {
   const quantidade = Math.max(0, qty);
   const preco = precoVenda(produto);
@@ -368,38 +372,47 @@ function CardProduto({
       tabIndex={0}
       onClick={onOpenModal}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpenModal(); } }}
-      className="flex h-full min-h-0 flex-col rounded-2xl border border-stone-100 bg-white p-4 shadow-sm transition hover:shadow-md hover:border-amber-200 cursor-pointer focus:outline-none focus:ring-2 focus:ring-amber-400 focus:ring-offset-2"
+      className="flex h-full min-h-0 flex-row sm:flex-col rounded-2xl border border-stone-100 bg-white p-4 shadow-sm transition hover:shadow-md hover:border-amber-200 cursor-pointer focus:outline-none focus:ring-2 focus:ring-amber-400 focus:ring-offset-2"
     >
-      <div className="aspect-square w-full flex-shrink-0 overflow-hidden rounded-xl bg-stone-100 flex items-center justify-center text-stone-400 text-sm">
+      {/* Imagem: no mobile à esquerda (quadrada); no sm+ em cima */}
+      <div className="w-28 h-28 flex-shrink-0 sm:w-full sm:h-auto sm:aspect-square overflow-hidden rounded-xl bg-stone-100 flex items-center justify-center text-stone-400 text-xs sm:text-sm">
         {produto.imagem_url ? <img src={produto.imagem_url} alt="" className="h-full w-full object-cover" /> : 'Sem imagem'}
       </div>
-      <div className="mt-3 flex min-h-0 flex-1 flex-col gap-1">
-        <div className="font-medium text-stone-800 leading-tight line-clamp-2">{produto.nome || produto.descricao}</div>
-        {produto.nome && produto.descricao ? <div className="text-sm text-stone-500 leading-tight line-clamp-2">{produto.descricao}</div> : null}
-        {produto.ingredientes ? <div className="min-h-[1.25rem] text-xs text-stone-500 leading-tight line-clamp-2"><span className="font-medium text-stone-600">Ingredientes:</span> {produto.ingredientes}</div> : <div className="min-h-[1.25rem]" />}
-        {produto.acompanhamentos ? <div className="min-h-[1.25rem] text-xs text-stone-500 leading-tight line-clamp-2"><span className="font-medium text-stone-600">Acompanhamentos:</span> {produto.acompanhamentos}</div> : <div className="min-h-[1.25rem]" />}
-      </div>
-      <div className="flex flex-shrink-0 flex-col gap-3 pt-0 mt-1" onClick={(e) => e.stopPropagation()}>
-        <div className="font-semibold text-amber-600">
-          {emPromo ? (
-            <>
-              <span className="text-stone-400 line-through font-normal mr-1">R$ {Number(produto.valor).toFixed(2)}</span>
-              <span className="text-amber-600">R$ {Number(produto.valor_promocional).toFixed(2)}</span>
-            </>
-          ) : (
-            <>R$ {preco.toFixed(2)}</>
+      {/* Lado direito no mobile: texto + preço + botão */}
+      <div className="flex-1 min-w-0 flex flex-col ml-3 sm:ml-0 sm:mt-3 gap-1 sm:gap-0">
+        <div className="flex min-h-0 flex-1 flex-col gap-1">
+          <div className="font-medium text-stone-800 leading-tight line-clamp-2">{produto.nome || produto.descricao}</div>
+          {produto.nome && produto.descricao ? <div className="text-sm text-stone-500 leading-tight line-clamp-2">{produto.descricao}</div> : null}
+          {/* Ingredientes e acompanhamentos: só a partir de sm (ocultos no mobile); no modal aparecem sempre */}
+          {produto.ingredientes ? <div className="hidden sm:block min-h-[1.25rem] text-xs text-stone-500 leading-tight line-clamp-2"><span className="font-medium text-stone-600">Ingredientes:</span> {produto.ingredientes}</div> : null}
+          {produto.acompanhamentos ? <div className="hidden sm:block min-h-[1.25rem] text-xs text-stone-500 leading-tight line-clamp-2"><span className="font-medium text-stone-600">Acompanhamentos:</span> {produto.acompanhamentos}</div> : null}
+        </div>
+        <div className="flex flex-shrink-0 flex-col gap-2 pt-0 mt-1 sm:mt-1" onClick={(e) => e.stopPropagation()}>
+          <div className="font-semibold text-amber-600">
+            {emPromo ? (
+              <>
+                <span className="text-stone-400 line-through font-normal mr-1">R$ {Number(produto.valor).toFixed(2)}</span>
+                <span className="text-amber-600">R$ {Number(produto.valor_promocional).toFixed(2)}</span>
+              </>
+            ) : (
+              <>R$ {preco.toFixed(2)}</>
+            )}
+          </div>
+          {quantidade > 0 && (
+            <div className="text-xs font-medium text-stone-600">{labelAdicionado(quantidade)}</div>
           )}
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={(e) => { e.stopPropagation(); onOpenModal(); }} className="flex-1 min-w-0 rounded-lg bg-amber-600 py-2 px-3 text-white font-medium hover:bg-amber-700 flex items-center justify-center gap-1.5" aria-label="Adicionar ao carrinho" title="Adicionar ao carrinho">
+              <span>Adicionar ao</span>
+              <ShoppingCart className="w-5 h-5 flex-shrink-0" />
+            </button>
+            {quantidade > 0 && (
+              <button type="button" onClick={(e) => { e.stopPropagation(); onRemove(); }} className="flex-shrink-0 w-9 h-9 rounded-lg border border-red-300 text-red-600 hover:bg-red-50 flex items-center justify-center" aria-label="Retirar do carrinho" title="Retirar do carrinho">
+                <Trash2 className="w-4 h-4" />
+              </button>
+            )}
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-stone-600"><span className="sm:hidden">Qtd:</span><span className="hidden sm:inline">Quantidade:</span></span>
-          <button type="button" onClick={() => onQtyChange(Math.max(0, qty - 1))} className="h-8 w-8 flex-shrink-0 rounded border border-stone-300 text-stone-600 hover:bg-stone-50">−</button>
-          <span className="w-8 flex-shrink-0 text-center font-medium">{quantidade}</span>
-          <button type="button" onClick={() => onQtyChange(qty + 1)} className="h-8 w-8 flex-shrink-0 rounded border border-stone-300 text-stone-600 hover:bg-stone-50">+</button>
-        </div>
-        <button type="button" onClick={onRemove} disabled={quantidade === 0} className="w-full flex-shrink-0 rounded-lg border border-red-300 bg-white py-2 text-red-600 font-medium hover:bg-red-50 disabled:opacity-10 disabled:cursor-not-allowed flex items-center justify-center gap-1.5">
-          <span className="sm:hidden">Remover do <ShoppingCart className="h-4 w-4 inline-block" /></span>
-          <span className="hidden sm:inline">Remover do carrinho</span>
-        </button>
       </div>
     </div>
   );
