@@ -382,7 +382,7 @@ function CardProduto({
       <div className="flex-1 min-w-0 flex flex-col ml-3 sm:ml-0 sm:mt-3 gap-1 sm:gap-0">
         <div className="flex min-h-0 flex-1 flex-col gap-1">
           <div className="font-medium text-stone-800 leading-tight line-clamp-2">{produto.nome || produto.descricao}</div>
-          {produto.nome && produto.descricao ? <div className="text-sm text-stone-500 leading-tight">{produto.descricao}</div> : null}
+          {produto.nome && produto.descricao ? <div className="text-sm text-stone-500 leading-tight line-clamp-1">{produto.descricao}</div> : null}
           {/* Ingredientes e acompanhamentos: só a partir de sm (ocultos no mobile); no modal aparecem sempre */}
           {produto.ingredientes ? <div className="hidden sm:block min-h-[1.25rem] text-xs text-stone-500 leading-tight line-clamp-2"><span className="font-medium text-stone-600">Ingredientes:</span> {produto.ingredientes}</div> : null}
           {produto.acompanhamentos ? <div className="hidden sm:block min-h-[1.25rem] text-xs text-stone-500 leading-tight line-clamp-2"><span className="font-medium text-stone-600">Acompanhamentos:</span> {produto.acompanhamentos}</div> : null}
