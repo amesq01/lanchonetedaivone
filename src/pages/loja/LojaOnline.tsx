@@ -374,9 +374,9 @@ function CardProduto({
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpenModal(); } }}
       className="flex h-full min-h-0 flex-row sm:flex-col rounded-2xl border border-stone-100 bg-white p-4 shadow-sm transition hover:shadow-md hover:border-amber-200 cursor-pointer focus:outline-none focus:ring-2 focus:ring-amber-400 focus:ring-offset-2"
     >
-      {/* Imagem: no mobile à esquerda (quadrada); no sm+ em cima */}
-      <div className="w-28 h-28 flex-shrink-0 sm:w-full sm:h-auto sm:aspect-square overflow-hidden rounded-xl bg-stone-100 flex items-center justify-center text-stone-400 text-xs sm:text-sm">
-        {produto.imagem_url ? <img src={produto.imagem_url} alt="" className="h-full w-full object-cover" /> : 'Sem imagem'}
+      {/* Imagem: no mobile à esquerda (quadrada), centralizada; no sm+ em cima */}
+      <div className="w-28 h-28 flex-shrink-0 self-center sm:self-auto sm:w-full sm:h-auto sm:aspect-square overflow-hidden rounded-xl bg-stone-100 flex items-center justify-center text-stone-400 text-xs sm:text-sm">
+        {produto.imagem_url ? <img src={produto.imagem_url} alt="" className="h-full w-full object-cover object-center" /> : 'Sem imagem'}
       </div>
       {/* Lado direito no mobile: texto + preço + botão */}
       <div className="flex-1 min-w-0 flex flex-col ml-3 sm:ml-0 sm:mt-3 gap-1 sm:gap-0">
