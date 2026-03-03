@@ -66,9 +66,15 @@ npm run dev
 - Supabase (Auth, Database, RLS)
 - Lucide React (ícones)
 
+## Limpar dados para produção
 
--- Remove todos os pedidos (pedido_itens some por CASCADE)
-DELETE FROM pedidos;
+Se você usou o banco para testes e quer **zerar apenas pedidos e comandas** antes de ir para produção (mantendo **produtos**, **usuários**, **mesas**, **config**, **cupons**, **categorias**):
 
--- Reinicia a sequência para o próximo pedido ser #1
-ALTER SEQUENCE pedidos_numero_seq RESTART WITH 1;
+1. No Supabase (Dashboard do projeto) → **SQL Editor**.
+2. Execute o conteúdo do arquivo:
+   ```
+   supabase/migrations/20260228_limpar_pedidos_comandas_para_producao.sql
+   ```
+   Ou rode as migrations com o CLI: `supabase db push` (se já tiver aplicado as migrations anteriores, essa será a única nova).
+
+Isso apaga: **notificacoes**, **pedido_itens**, **pedidos**, **comandas** e reinicia a numeração dos pedidos para o próximo ser #1.

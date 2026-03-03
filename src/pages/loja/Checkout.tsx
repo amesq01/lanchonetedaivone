@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { createPedidoOnline, getConfig, getProdutos, validarCupom, canPlaceOrderOnline } from '../../lib/api';
+import { precoVenda } from '../../types/database';
 import type { SavedItem } from './Carrinho';
 import { getCupomAplicado } from './Carrinho';
 
@@ -41,7 +42,7 @@ export default function LojaCheckout() {
   const cart = getCart();
   useEffect(() => {
     getConfig('taxa_entrega').then(setTaxaEntrega);
-    getProdutos(true).then((list) => setProdutos(list.map((p) => ({ id: p.id, valor: Number(p.valor) }))));
+    getProdutos(true).then((list) => setProdutos(list.map((p) => ({ id: p.id, valor: precoVenda(p) }))));
     canPlaceOrderOnline().then((r) => {
       if (!r.allowed && r.message) setBloqueado({ motivo: r.message });
     });
@@ -122,13 +123,13 @@ export default function LojaCheckout() {
     setSubmitting(true);
     try {
       const { getProdutos } = await import('../../lib/api');
-      const produtos = await getProdutos(true);
-      const byId: Record<string, { id: string; valor: number }> = {};
-      produtos.forEach((p) => { byId[p.id] = { id: p.id, valor: Number(p.valor) }; });
-      const itens = cart.filter((i) => byId[i.produto_id]).map((i) => ({
+      const produtosList = await getProdutos(true);
+      const byId: Record<string, number> = {};
+      produtosList.forEach((p) => { byId[p.id] = precoVenda(p); });
+      const itens = cart.filter((i) => byId[i.produto_id] != null).map((i) => ({
         produto_id: i.produto_id,
         quantidade: i.quantidade,
-        valor_unitario: byId[i.produto_id].valor,
+        valor_unitario: byId[i.produto_id],
         observacao: i.observacao || undefined,
       }));
       if (itens.length === 0) throw new Error('Nenhum item válido no carrinho.');

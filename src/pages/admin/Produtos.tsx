@@ -1,15 +1,14 @@
 import { useEffect, useState } from 'react';
-import { supabase } from '../../lib/supabase';
-import { getCategorias } from '../../lib/api';
-import type { Produto } from '../../types/database';
+import { getCategorias, getProdutos, saveProduto } from '../../lib/api';
+import type { ProdutoWithCategorias } from '../../types/database';
 import type { Categoria } from '../../types/database';
 
 export default function AdminProdutos() {
-  const [list, setList] = useState<Produto[]>([]);
+  const [list, setList] = useState<ProdutoWithCategorias[]>([]);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
-  const [editing, setEditing] = useState<Produto | null>(null);
+  const [editing, setEditing] = useState<ProdutoWithCategorias | null>(null);
   const [codigo, setCodigo] = useState('');
   const [nome, setNome] = useState('');
   const [descricao, setDescricao] = useState('');
@@ -19,8 +18,10 @@ export default function AdminProdutos() {
   const [quantidade, setQuantidade] = useState(0);
   const [ativo, setAtivo] = useState(true);
   const [vaiParaCozinha, setVaiParaCozinha] = useState(true);
-  const [categoriaId, setCategoriaId] = useState('');
+  const [categoriaIds, setCategoriaIds] = useState<string[]>([]);
   const [imagemUrl, setImagemUrl] = useState('');
+  const [emPromocao, setEmPromocao] = useState(false);
+  const [valorPromocional, setValorPromocional] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -29,12 +30,16 @@ export default function AdminProdutos() {
   }, []);
 
   async function load() {
-    const { data } = await supabase.from('produtos').select('*, categorias(nome)').order('codigo');
-    setList((data ?? []) as Produto[]);
+    const data = await getProdutos(false);
+    setList(data);
     setLoading(false);
   }
 
-  function openForm(prod?: Produto) {
+  function toggleCategoria(id: string) {
+    setCategoriaIds((prev) => (prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id]));
+  }
+
+  function openForm(prod?: ProdutoWithCategorias) {
     if (prod) {
       setEditing(prod);
       setCodigo(prod.codigo);
@@ -46,8 +51,10 @@ export default function AdminProdutos() {
       setQuantidade(prod.quantidade);
       setAtivo(prod.ativo);
       setVaiParaCozinha(prod.vai_para_cozinha !== false);
-      setCategoriaId((prod as any).categoria_id ?? '');
+      setCategoriaIds((prod.produto_categorias ?? []).map((pc) => pc.categoria_id));
       setImagemUrl(prod.imagem_url ?? '');
+      setEmPromocao(prod.em_promocao === true);
+      setValorPromocional(prod.valor_promocional != null ? String(prod.valor_promocional) : '');
     } else {
       setEditing(null);
       setCodigo('');
@@ -59,8 +66,10 @@ export default function AdminProdutos() {
       setQuantidade(0);
       setAtivo(true);
       setVaiParaCozinha(true);
-      setCategoriaId('');
+      setCategoriaIds([]);
       setImagemUrl('');
+      setEmPromocao(false);
+      setValorPromocional('');
     }
     setOpen(true);
   }
@@ -69,7 +78,8 @@ export default function AdminProdutos() {
     e.preventDefault();
     setSubmitting(true);
     try {
-      const payload = {
+      await saveProduto({
+        ...(editing?.id && { id: editing.id }),
         codigo,
         nome: nome.trim() || null,
         descricao,
@@ -80,11 +90,10 @@ export default function AdminProdutos() {
         ativo,
         imagem_url: imagemUrl.trim() || null,
         vai_para_cozinha: vaiParaCozinha,
-        categoria_id: categoriaId || null,
-        updated_at: new Date().toISOString(),
-      };
-      if (editing) await (supabase as any).from('produtos').update(payload).eq('id', editing.id);
-      else await (supabase as any).from('produtos').insert(payload);
+        em_promocao: emPromocao,
+        valor_promocional: emPromocao && valorPromocional.trim() ? Number(valorPromocional) : null,
+        categoria_ids: categoriaIds,
+      });
       setOpen(false);
       load();
     } finally {
@@ -128,10 +137,14 @@ export default function AdminProdutos() {
                 <td className="px-4 py-3">{p.descricao}</td>
                 <td className="px-4 py-3 text-sm text-stone-500">{p.ingredientes ?? '-'}</td>
                 <td className="px-4 py-3 text-sm text-stone-500">{p.acompanhamentos ?? '-'}</td>
-                <td className="px-4 py-3">R$ {Number(p.valor).toFixed(2)}</td>
+                <td className="px-4 py-3">
+                  {p.em_promocao && p.valor_promocional != null
+                    ? <>R$ <span className="line-through text-stone-400">{Number(p.valor).toFixed(2)}</span> → R$ {Number(p.valor_promocional).toFixed(2)}</>
+                    : `R$ ${Number(p.valor).toFixed(2)}`}
+                </td>
                 <td className="px-4 py-3">{p.quantidade}</td>
                 <td className="px-4 py-3">{p.ativo ? 'Sim' : 'Não'}</td>
-                <td className="px-4 py-3">{(p as any).categorias?.nome ?? '-'}</td>
+                <td className="px-4 py-3 text-sm">{(p.produto_categorias ?? []).map((pc) => (pc.categorias as { nome: string })?.nome).filter(Boolean).join(', ') || '—'}</td>
                 <td className="px-4 py-3">{p.vai_para_cozinha !== false ? 'Sim' : 'Não'}</td>
                 <td className="px-4 py-3">
                   {p.imagem_url ? <img src={p.imagem_url} alt="" className="w-10 h-10 rounded object-cover" /> : <span className="text-stone-400 text-xs">—</span>}
@@ -174,6 +187,16 @@ export default function AdminProdutos() {
                 <label className="block text-sm font-medium text-stone-600">Valor (R$) *</label>
                 <input type="number" step="0.01" min="0" value={valor} onChange={(e) => setValor(e.target.value)} required className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2" />
               </div>
+              <div className="flex items-center gap-2">
+                <input type="checkbox" id="em_promocao" checked={emPromocao} onChange={(e) => setEmPromocao(e.target.checked)} className="rounded border-stone-300" />
+                <label htmlFor="em_promocao" className="text-sm font-medium text-stone-600">Na promoção?</label>
+              </div>
+              {emPromocao && (
+                <div>
+                  <label className="block text-sm font-medium text-stone-600">Valor promocional (R$) *</label>
+                  <input type="number" step="0.01" min="0" value={valorPromocional} onChange={(e) => setValorPromocional(e.target.value)} className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2" placeholder="Preço na promoção" />
+                </div>
+              )}
               <div>
                 <label className="block text-sm font-medium text-stone-600">Quantidade</label>
                 <input type="number" min="0" value={quantidade} onChange={(e) => setQuantidade(Number(e.target.value))} className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2" />
@@ -188,13 +211,16 @@ export default function AdminProdutos() {
                 <label htmlFor="ativo" className="text-sm text-stone-600">Ativo</label>
               </div>
               <div>
-                <label className="block text-sm font-medium text-stone-600">Categoria (loja online)</label>
-                <select value={categoriaId} onChange={(e) => setCategoriaId(e.target.value)} className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2">
-                  <option value="">Nenhuma</option>
+                <label className="block text-sm font-medium text-stone-600 mb-1">Categorias (loja online)</label>
+                <div className="mt-1 flex flex-wrap gap-2 rounded-lg border border-stone-300 p-2 max-h-32 overflow-y-auto">
                   {categorias.map((c) => (
-                    <option key={c.id} value={c.id}>{c.nome}</option>
+                    <label key={c.id} className="flex items-center gap-1.5 text-sm cursor-pointer">
+                      <input type="checkbox" checked={categoriaIds.includes(c.id)} onChange={() => toggleCategoria(c.id)} className="rounded border-stone-300" />
+                      <span>{c.nome}</span>
+                    </label>
                   ))}
-                </select>
+                  {categorias.length === 0 && <span className="text-stone-400 text-sm">Nenhuma categoria cadastrada.</span>}
+                </div>
               </div>
               <div className="flex items-center gap-2">
                 <input type="checkbox" id="vai_para_cozinha" checked={vaiParaCozinha} onChange={(e) => setVaiParaCozinha(e.target.checked)} className="rounded border-stone-300" />

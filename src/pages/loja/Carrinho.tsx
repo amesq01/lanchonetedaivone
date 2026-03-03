@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { Trash2 } from 'lucide-react';
 import { getConfig, getProdutos, validarCupom, getLanchoneteAberta } from '../../lib/api';
 import type { Produto } from '../../types/database';
+import { precoVenda } from '../../types/database';
 
 type Item = { produto: Produto; quantidade: number; observacao: string };
 
@@ -115,7 +116,7 @@ export default function LojaCarrinho() {
     });
   };
 
-  const rawSubtotal = itens.reduce((s, i) => s + i.quantidade * Number(i.produto.valor), 0);
+  const rawSubtotal = itens.reduce((s, i) => s + i.quantidade * precoVenda(i.produto), 0);
   const subtotal = Number.isFinite(rawSubtotal) ? rawSubtotal : 0;
   const taxa = taxaEntrega !== null && Number.isFinite(taxaEntrega) ? taxaEntrega : 0;
   let rawDesconto = cupomAplicado ? (subtotal * Number(cupomAplicado.porcentagem)) / 100 : 0;
@@ -188,7 +189,7 @@ export default function LojaCarrinho() {
                     </div>
                   </div>
                   <div className="flex flex-col items-end gap-1">
-                    <span className="font-medium text-amber-600">R$ {(item.quantidade * Number(item.produto.valor)).toFixed(2)}</span>
+                    <span className="font-medium text-amber-600">R$ {(item.quantidade * precoVenda(item.produto)).toFixed(2)}</span>
                     <button type="button" onClick={() => removeItem(i)} className="p-1.5 rounded text-stone-400 hover:bg-red-50 hover:text-red-600" title="Remover item" aria-label="Remover item">
                       <Trash2 size={18} />
                     </button>

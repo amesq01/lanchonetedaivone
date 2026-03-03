@@ -71,6 +71,14 @@ export interface Database {
         Insert: Omit<Database['public']['Tables']['categorias']['Row'], 'created_at'> & { created_at?: string };
         Update: Partial<Database['public']['Tables']['categorias']['Insert']>;
       };
+      produto_categorias: {
+        Row: {
+          produto_id: string;
+          categoria_id: string;
+        };
+        Insert: Database['public']['Tables']['produto_categorias']['Row'];
+        Update: Partial<Database['public']['Tables']['produto_categorias']['Insert']>;
+      };
       produtos: {
         Row: {
           id: string;
@@ -85,6 +93,8 @@ export interface Database {
           imagem_url: string | null;
           vai_para_cozinha: boolean;
           categoria_id: string | null;
+          em_promocao: boolean;
+          valor_promocional: number | null;
           created_at: string;
           updated_at: string;
         };
@@ -181,8 +191,22 @@ export type Profile = Database['public']['Tables']['profiles']['Row'];
 export type Mesa = Database['public']['Tables']['mesas']['Row'];
 export type Comanda = Database['public']['Tables']['comandas']['Row'];
 export type Categoria = Database['public']['Tables']['categorias']['Row'];
+export type ProdutoCategoria = Database['public']['Tables']['produto_categorias']['Row'];
 export type Produto = Database['public']['Tables']['produtos']['Row'];
 export type Cupom = Database['public']['Tables']['cupons']['Row'];
+
+/** Produto com categorias (via produto_categorias). categorias é array de { id, nome }. */
+export type ProdutoWithCategorias = Produto & {
+  produto_categorias?: { categoria_id: string; categorias: { id: string; nome: string } | null }[];
+};
+
+/** Preço de venda: valor_promocional se em_promocao, senão valor. */
+export function precoVenda(produto: Pick<Produto, 'valor' | 'em_promocao' | 'valor_promocional'>): number {
+  if (produto.em_promocao && produto.valor_promocional != null && Number(produto.valor_promocional) > 0) {
+    return Number(produto.valor_promocional);
+  }
+  return Number(produto.valor);
+}
 export type Pedido = Database['public']['Tables']['pedidos']['Row'];
 export type PedidoItem = Database['public']['Tables']['pedido_itens']['Row'];
 

@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import type { Database } from '../types/database';
+import type { ProdutoWithCategorias } from '../types/database';
 
 type ConfigKey = 'taxa_entrega' | 'quantidade_mesas';
 
@@ -156,12 +157,52 @@ export async function getCategorias() {
   return (data ?? []) as Database['public']['Tables']['categorias']['Row'][];
 }
 
-export async function getProdutos(ativoOnly = false) {
-  let q = supabase.from('produtos').select('*, categorias(nome)').order('codigo');
+export async function getProdutos(ativoOnly = false): Promise<ProdutoWithCategorias[]> {
+  let q = supabase
+    .from('produtos')
+    .select('*, produto_categorias(categoria_id, categorias(id, nome))')
+    .order('codigo');
   if (ativoOnly) q = q.eq('ativo', true);
   const { data, error } = await q;
   if (error) throw error;
-  return (data ?? []) as (Database['public']['Tables']['produtos']['Row'] & { categorias: { nome: string } | null })[];
+  return (data ?? []) as ProdutoWithCategorias[];
+}
+
+/** Salva produto (insert ou update) e sincroniza categorias em produto_categorias. */
+export async function saveProduto(payload: {
+  id?: string;
+  codigo: string;
+  nome: string | null;
+  descricao: string;
+  ingredientes: string | null;
+  acompanhamentos: string | null;
+  valor: number;
+  quantidade: number;
+  ativo: boolean;
+  imagem_url: string | null;
+  vai_para_cozinha: boolean;
+  em_promocao: boolean;
+  valor_promocional: number | null;
+  categoria_ids: string[];
+}) {
+  const { categoria_ids, ...prod } = payload;
+  const row = {
+    ...prod,
+    updated_at: new Date().toISOString(),
+  };
+  let produtoId: string;
+  if (payload.id) {
+    await (supabase as any).from('produtos').update(row).eq('id', payload.id);
+    produtoId = payload.id;
+  } else {
+    const { data: inserted, error } = await (supabase as any).from('produtos').insert(row).select('id').single();
+    if (error) throw error;
+    produtoId = (inserted as { id: string }).id;
+  }
+  await (supabase as any).from('produto_categorias').delete().eq('produto_id', produtoId);
+  if (categoria_ids.length > 0) {
+    await (supabase as any).from('produto_categorias').insert(categoria_ids.map((categoria_id) => ({ produto_id: produtoId, categoria_id })));
+  }
 }
 
 export async function nextPedidoNumero(): Promise<number> {

@@ -2,8 +2,9 @@ import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { ShoppingCart } from 'lucide-react';
 import { getProdutos, getCategorias, getLanchoneteAberta } from '../../lib/api';
-import type { Produto } from '../../types/database';
+import type { ProdutoWithCategorias } from '../../types/database';
 import type { Categoria } from '../../types/database';
+import { precoVenda } from '../../types/database';
 import { getCart, type SavedItem } from './Carrinho';
 
 const CART_KEY = 'lanchonete_cart';
@@ -69,7 +70,7 @@ function saveCart(items: SavedItem[]) {
 }
 
 export default function LojaOnline() {
-  const [produtos, setProdutos] = useState<Produto[]>([]);
+  const [produtos, setProdutos] = useState<ProdutoWithCategorias[]>([]);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
@@ -117,7 +118,7 @@ export default function LojaOnline() {
     return () => window.removeEventListener('storage', onStorage);
   }, [refreshCartCount]);
 
-  function updateQtyInCart(produto: Produto, newQty: number) {
+  function updateQtyInCart(produto: ProdutoWithCategorias, newQty: number) {
     const cart = getCart();
     if (newQty <= 0) {
       const filtered = cart.filter((x) => x.produto_id !== produto.id);
@@ -137,14 +138,27 @@ export default function LojaOnline() {
     setCartCount(updated.reduce((s, i) => s + i.quantidade, 0));
   }
 
-  function removeFromCart(produto: Produto) {
+  function removeFromCart(produto: ProdutoWithCategorias) {
     updateQtyInCart(produto, 0);
   }
 
-  const byCategoria = (categoriaId: string | null) =>
-    produtos.filter((p) => ((p as any).categoria_id ?? null) === (categoriaId ?? null));
+  const promocoesCategoriaId = categorias.find((c) => c.nome.toUpperCase() === 'PROMOÇÕES')?.id ?? null;
 
-  const categoriasComProdutos = categorias.filter((c) => byCategoria(c.id).length > 0);
+  const byCategoria = (categoriaId: string | null) => {
+    if (categoriaId === promocoesCategoriaId) {
+      return produtos.filter((p) => p.em_promocao === true);
+    }
+    return produtos.filter((p) => {
+      const ids = (p.produto_categorias ?? []).map((pc) => pc.categoria_id);
+      if (categoriaId === null) return ids.length === 0;
+      return ids.includes(categoriaId);
+    });
+  };
+
+  const categoriasComProdutos = categorias.filter((c) => {
+    if (c.nome.toUpperCase() === 'PROMOÇÕES') return produtos.some((p) => p.em_promocao === true);
+    return byCategoria(c.id).length > 0;
+  });
   const semCategoria = byCategoria(null).length > 0;
 
   const exibirSemCategoria = categoriaSelecionada === null && semCategoria;
@@ -206,16 +220,26 @@ export default function LojaOnline() {
             >
               Todos
             </button>
-            {categorias.map((cat) => (
-              <button
-                key={cat.id}
-                type="button"
-                onClick={() => setCategoriaSelecionada(cat.id)}
-                className={`rounded-full px-3 py-1.5 text-sm font-medium transition ${categoriaSelecionada === cat.id ? 'bg-amber-600 text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`}
-              >
-                {cat.nome}
-              </button>
-            ))}
+            {categorias.map((cat) => {
+              const isPromocoes = cat.nome.toUpperCase() === 'PROMOÇÕES';
+              return (
+                <button
+                  key={cat.id}
+                  type="button"
+                  onClick={() => setCategoriaSelecionada(cat.id)}
+                  className={
+                    isPromocoes
+                      ? `rounded-full px-3 py-1.5 text-sm font-semibold transition shadow-md ${categoriaSelecionada === cat.id
+                        ? 'bg-gradient-to-r from-red-500 to-amber-500 text-white ring-2 ring-amber-300 ring-offset-2'
+                        : 'bg-gradient-to-r from-red-400 to-amber-400 text-white hover:from-red-500 hover:to-amber-500 hover:shadow-lg'}`
+                      : `rounded-full px-3 py-1.5 text-sm font-medium transition ${categoriaSelecionada === cat.id ? 'bg-amber-600 text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`
+                  }
+                >
+                  {isPromocoes && <span className="mr-1" aria-hidden>🔥</span>}
+                  {cat.nome}
+                </button>
+              );
+            })}
           </nav>
         </div>
       </header>
@@ -255,12 +279,14 @@ function CardProduto({
   onQtyChange,
   onRemove,
 }: {
-  produto: Produto;
+  produto: ProdutoWithCategorias;
   qty: number;
   onQtyChange: (novaQty: number) => void;
   onRemove: () => void;
 }) {
   const quantidade = Math.max(0, qty);
+  const preco = precoVenda(produto);
+  const emPromo = produto.em_promocao && produto.valor_promocional != null && Number(produto.valor_promocional) > 0;
   return (
     <div className="flex h-full min-h-0 flex-col rounded-2xl border border-stone-100 bg-white p-4 shadow-sm transition hover:shadow-md hover:border-amber-200">
       {/* Imagem: altura fixa por aspect-ratio */}
@@ -278,7 +304,16 @@ function CardProduto({
         </div>
         {/* Preço, quantidade e botão: sempre no mesmo alinhamento */}
         <div className="flex flex-shrink-0 flex-col gap-3 pt-0">
-          <div className="font-semibold text-amber-600">R$ {Number(produto.valor).toFixed(2)}</div>
+          <div className="font-semibold text-amber-600">
+            {emPromo ? (
+              <>
+                <span className="text-stone-400 line-through font-normal mr-1">R$ {Number(produto.valor).toFixed(2)}</span>
+                <span className="text-amber-600">R$ {Number(produto.valor_promocional).toFixed(2)}</span>
+              </>
+            ) : (
+              <>R$ {preco.toFixed(2)}</>
+            )}
+          </div>
           <div className="flex items-center gap-2">
             <span className="text-sm text-stone-600"><span className="sm:hidden">Qtd:</span><span className="hidden sm:inline">Quantidade:</span></span>
             <button type="button" onClick={() => onQtyChange(Math.max(0, qty - 1))} className="h-8 w-8 flex-shrink-0 rounded border border-stone-300 text-stone-600 hover:bg-stone-50">−</button>
