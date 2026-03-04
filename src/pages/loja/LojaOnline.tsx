@@ -143,6 +143,11 @@ export default function LojaOnline() {
     updateQtyInCart(produto, 0);
   }
 
+  function openModal(produto: ProdutoWithCategorias) {
+    if ((qtyByProd[produto.id] ?? 0) === 0) updateQtyInCart(produto, 1);
+    setModalProduto(produto);
+  }
+
   const promocoesCategoriaId = categorias.find((c) => c.nome.toUpperCase() === 'PROMOÇÕES')?.id ?? null;
 
   const byCategoria = (categoriaId: string | null) => {
@@ -160,11 +165,12 @@ export default function LojaOnline() {
     if (c.nome.toUpperCase() === 'PROMOÇÕES') return produtos.some((p) => p.em_promocao === true);
     return byCategoria(c.id).length > 0;
   });
-  const semCategoria = byCategoria(null).length > 0;
+  const produtosSemCategoria = byCategoria(null).filter((p) => !p.em_promocao);
+  const semCategoria = produtosSemCategoria.length > 0;
 
   const exibirSemCategoria = categoriaSelecionada === null && semCategoria;
   const exibirCategoria = (cat: Categoria) =>
-    categoriaSelecionada === null || categoriaSelecionada === cat.id;
+    categoriaSelecionada === cat.id || (categoriaSelecionada === null && cat.nome.toUpperCase() !== 'PROMOÇÕES');
   const categoriaVazia =
     categoriaSelecionada !== null && byCategoria(categoriaSelecionada).length === 0;
 
@@ -249,8 +255,8 @@ export default function LojaOnline() {
           <section className="mb-8">
             <h2 className="mb-4 text-lg font-semibold text-stone-800">Cardápio</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 items-stretch">
-              {byCategoria(null).map((p) => (
-                <CardProduto key={p.id} produto={p} qty={qtyByProd[p.id] ?? 0} onOpenModal={() => setModalProduto(p)} onRemove={() => removeFromCart(p)} />
+              {produtosSemCategoria.map((p) => (
+                <CardProduto key={p.id} produto={p} qty={qtyByProd[p.id] ?? 0} onOpenModal={() => openModal(p)} onRemove={() => removeFromCart(p)} />
               ))}
             </div>
           </section>
@@ -260,7 +266,7 @@ export default function LojaOnline() {
             <h2 className="mb-4 text-lg font-semibold text-stone-800">{cat.nome}</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 items-stretch">
               {byCategoria(cat.id).map((p) => (
-                <CardProduto key={p.id} produto={p} qty={qtyByProd[p.id] ?? 0} onOpenModal={() => setModalProduto(p)} onRemove={() => removeFromCart(p)} />
+                <CardProduto key={p.id} produto={p} qty={qtyByProd[p.id] ?? 0} onOpenModal={() => openModal(p)} onRemove={() => removeFromCart(p)} />
               ))}
             </div>
           </section>
