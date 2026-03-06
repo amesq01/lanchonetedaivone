@@ -35,7 +35,7 @@ function CardItem({ produto }: { produto: ProdutoWithCategorias }) {
   const valor = precoVenda(produto);
   const emPromo = produto.em_promocao && produto.valor_promocional != null && Number(produto.valor_promocional) > 0;
   return (
-    <article className="cardapio-item rounded-xl border border-stone-200 bg-white p-4 shadow-sm print:shadow-none print:border-stone-300 print:p-3">
+    <article className="cardapio-item rounded-xl border border-stone-200 bg-white p-2 shadow-sm print:shadow-none print:border-stone-300 print:p-3">
       <div className="flex gap-4 print:gap-3">
         <div className="cardapio-item-img h-24 w-24 flex-shrink-0 overflow-hidden rounded-lg bg-stone-100 print:h-20 print:w-20 print:rounded">
           {produto.imagem_url ? (
@@ -197,25 +197,25 @@ export default function CardapioMesa() {
         {/* Categorias uma abaixo da outra */}
         {catSushi && produtosSushi.length > 0 && (
           <>
-            <tr className="cardapio-section-row"><td className="pt-4 pb-2 print:pt-4 print:pb-2"><h2 className="text-lg font-semibold text-stone-800 print:text-sm print:font-bold print:border-b-2 print:border-stone-800 print:pb-1">{catSushi.nome}</h2></td></tr>
+            <tr className="cardapio-section-row"><td className="pt-4 pb-2 print:pt-4 print:pb-2"><h2 className="text-lg font-semibold text-stone-800 print:text-sm print:font-bold print:uppercase print:border-b-2 print:border-stone-800 print:pb-1">{catSushi.nome}</h2></td></tr>
             {produtosSushi.map((p) => (
-              <tr key={p.id}><td className="py-2 print:py-2"><CardItem produto={p} /></td></tr>
+              <tr key={p.id}><td className="py-1 print:py-1"><CardItem produto={p} /></td></tr>
             ))}
           </>
         )}
         {catLanches && produtosLanches.length > 0 && (
           <>
-            <tr className="cardapio-section-row"><td className="pt-4 pb-2 print:pt-4 print:pb-2"><h2 className="text-lg font-semibold text-stone-800 print:text-sm print:font-bold print:border-b-2 print:border-stone-800 print:pb-1">{catLanches.nome}</h2></td></tr>
+            <tr className="cardapio-section-row"><td className="pt-4 pb-2 print:pt-4 print:pb-2"><h2 className="text-lg font-semibold text-stone-800 print:text-sm print:font-bold print:uppercase print:border-b-2 print:border-stone-800 print:pb-1">{catLanches.nome}</h2></td></tr>
             {produtosLanches.map((p) => (
-              <tr key={p.id}><td className="py-2 print:py-2"><CardItem produto={p} /></td></tr>
+              <tr key={p.id}><td className="py-1 print:py-1"><CardItem produto={p} /></td></tr>
             ))}
           </>
         )}
         {catBebidas && produtosBebidas.length > 0 && (
           <>
-            <tr className="cardapio-section-row"><td className="pt-4 pb-2 print:pt-4 print:pb-2"><h2 className="text-lg font-semibold text-stone-800 print:text-sm print:font-bold print:border-b-2 print:border-stone-800 print:pb-1">{catBebidas.nome}</h2></td></tr>
+            <tr className="cardapio-section-row"><td className="pt-4 pb-2 print:pt-4 print:pb-2"><h2 className="text-lg font-semibold text-stone-800 print:text-sm print:font-bold print:uppercase print:border-b-2 print:border-stone-800 print:pb-1">{catBebidas.nome}</h2></td></tr>
             {produtosBebidas.map((p) => (
-              <tr key={p.id}><td className="py-2 print:py-2"><CardItem produto={p} /></td></tr>
+              <tr key={p.id}><td className="py-1 print:py-1"><CardItem produto={p} /></td></tr>
             ))}
           </>
         )}
@@ -224,18 +224,18 @@ export default function CardapioMesa() {
           if (prods.length === 0) return null;
           return (
             <React.Fragment key={cat.id}>
-              <tr className="cardapio-section-row"><td className="pt-4 pb-2 print:pt-4 print:pb-2"><h2 className="text-lg font-semibold text-stone-800 print:text-sm print:font-bold print:border-b-2 print:border-stone-800 print:pb-1">{cat.nome}</h2></td></tr>
+              <tr className="cardapio-section-row"><td className="pt-4 pb-2 print:pt-4 print:pb-2"><h2 className="text-lg font-semibold text-stone-800 print:text-sm print:font-bold print:uppercase print:border-b-2 print:border-stone-800 print:pb-1">{cat.nome}</h2></td></tr>
               {prods.map((p) => (
-                <tr key={p.id}><td className="py-2 print:py-2"><CardItem produto={p} /></td></tr>
+                <tr key={p.id}><td className="py-1 print:py-1"><CardItem produto={p} /></td></tr>
               ))}
             </React.Fragment>
           );
         })}
         {produtosSemCategoria.length > 0 && (
           <>
-            <tr className="cardapio-section-row"><td className="pt-4 pb-2 print:pt-4 print:pb-2"><h2 className="text-lg font-semibold text-stone-800 print:text-sm print:font-bold print:border-b-2 print:border-stone-800 print:pb-1">Cardápio</h2></td></tr>
+            <tr className="cardapio-section-row"><td className="pt-4 pb-2 print:pt-4 print:pb-2"><h2 className="text-lg font-semibold text-stone-800 print:text-sm print:font-bold print:uppercase print:border-b-2 print:border-stone-800 print:pb-1">Cardápio</h2></td></tr>
             {produtosSemCategoria.map((p) => (
-              <tr key={p.id}><td className="py-2 print:py-2"><CardItem produto={p} /></td></tr>
+              <tr key={p.id}><td className="py-1 print:py-1"><CardItem produto={p} /></td></tr>
             ))}
           </>
         )}
