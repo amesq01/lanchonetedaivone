@@ -84,7 +84,7 @@ function CardItem({ produto, onClick }: { produto: ProdutoWithCategorias; onClic
       tabIndex={isClickable ? 0 : undefined}
       onClick={isClickable ? onClick : undefined}
       onKeyDown={isClickable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick?.(); } } : undefined}
-      className={`cardapio-item rounded-xl border border-stone-200 bg-white p-1.5 sm:p-2 shadow-sm print:shadow-none print:border-stone-300 print:p-3 w-full min-w-0 ${isClickable ? 'cursor-pointer hover:border-amber-200 hover:shadow-md transition print:cursor-default' : ''}`}
+      className={`cardapio-item rounded-xl border border-stone-200 bg-white px-1.5 py-2 sm:px-2 sm:py-2 shadow-sm print:shadow-none print:border-stone-300 print:p-3 w-full min-w-0 ${isClickable ? 'cursor-pointer hover:border-amber-200 hover:shadow-md transition print:cursor-default' : ''}`}
     >
       <div className="flex gap-2 sm:gap-4 print:gap-3 min-w-0">
         <div className="cardapio-item-img h-20 w-20 sm:h-24 sm:w-24 flex-shrink-0 self-center overflow-hidden rounded-lg bg-stone-100 print:h-20 print:w-20 print:rounded">
@@ -124,7 +124,7 @@ function CardItem({ produto, onClick }: { produto: ProdutoWithCategorias; onClic
             </p>
           )}
         </div>
-        <div className="hidden sm:flex flex-shrink-0 self-center font-semibold text-amber-600 print:text-sm print:flex sm:mr-[35px]">
+        <div className="hidden sm:flex flex-shrink-0 self-center font-semibold text-amber-600 print:text-sm print:flex sm:mr-[15px]">
           {emPromo ? (
             <>
               <span className="text-stone-400 line-through font-normal mr-1">R$ {Number(produto.valor).toFixed(2)}</span>
