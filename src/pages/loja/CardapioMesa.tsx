@@ -135,6 +135,7 @@ export default function CardapioMesa() {
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
   const [modalProduto, setModalProduto] = useState<ProdutoWithCategorias | null>(null);
+  const [categoriaSelecionada, setCategoriaSelecionada] = useState<string | null>(null);
 
   function handleImprimir() {
     const imagens = document.querySelectorAll('.print-cardapio-a4 img[src]');
@@ -176,38 +177,32 @@ export default function CardapioMesa() {
     );
   }
 
-  const catSushi = getCategoriaPorNome(categorias, 'Sushi', 'Sushis');
-  const catLanches = getCategoriaPorNome(categorias, 'Lanche', 'Lanches');
-  const catBebidas = getCategoriaPorNome(categorias, 'Bebida', 'Bebidas');
-  const promocoesId = categorias.find((c) => c.nome.toUpperCase() === 'PROMOÇÕES')?.id;
+  const promocoesId = categorias.find((c) => c.nome.toUpperCase() === 'PROMOÇÕES')?.id ?? null;
+
+  const byCategoria = (categoriaId: string | null): ProdutoWithCategorias[] => {
+    if (categoriaId === promocoesId) {
+      return produtos.filter((p) => p.em_promocao === true);
+    }
+    return produtos.filter((p) => {
+      const ids = getCategoriaIds(p);
+      if (categoriaId === null) return ids.length === 0;
+      return ids.includes(categoriaId);
+    });
+  };
+
+  const categoriasComProdutos = categorias.filter((c) => {
+    if (c.nome.toUpperCase() === 'PROMOÇÕES') return produtos.some((p) => p.em_promocao === true);
+    return byCategoria(c.id).length > 0;
+  });
+  const produtosSemCategoriaLista = byCategoria(null).filter((p) => !p.em_promocao);
+  const semCategoria = produtosSemCategoriaLista.length > 0;
+
+  const exibirSemCategoria = categoriaSelecionada === null && semCategoria;
+  const exibirCategoria = (cat: Categoria) =>
+    categoriaSelecionada === cat.id || (categoriaSelecionada === null && cat.nome.toUpperCase() !== 'PROMOÇÕES');
+  const categoriaVazia = categoriaSelecionada !== null && byCategoria(categoriaSelecionada).length === 0;
 
   const idsJaExibidos = new Set<string>();
-  const produtosSushi = catSushi ? produtosDaCategoria(produtos, catSushi.id).filter((p) => {
-    if (idsJaExibidos.has(p.id)) return false;
-    idsJaExibidos.add(p.id);
-    return true;
-  }) : [];
-  const produtosLanches = catLanches ? produtosDaCategoria(produtos, catLanches.id).filter((p) => {
-    if (idsJaExibidos.has(p.id)) return false;
-    idsJaExibidos.add(p.id);
-    return true;
-  }) : [];
-  const produtosBebidas = catBebidas ? produtosDaCategoria(produtos, catBebidas.id).filter((p) => {
-    if (idsJaExibidos.has(p.id)) return false;
-    idsJaExibidos.add(p.id);
-    return true;
-  }) : [];
-
-  const categoriasExibidas = new Set<string>([
-    ...(catSushi ? [catSushi.id] : []),
-    ...(catLanches ? [catLanches.id] : []),
-    ...(catBebidas ? [catBebidas.id] : []),
-    ...(promocoesId ? [promocoesId] : []),
-  ]);
-  const outrasCategorias = categorias.filter((c) => !categoriasExibidas.has(c.id));
-  const idsSemPromocao = (p: ProdutoWithCategorias) =>
-    getCategoriaIds(p).filter((id) => !promocoesId || id !== promocoesId);
-  const produtosSemCategoria = produtos.filter((p) => idsSemPromocao(p).length === 0);
   const produtosDeOutraCat = (catId: string) =>
     produtosDaCategoria(produtos, catId).filter((p) => {
       if (idsJaExibidos.has(p.id)) return false;
@@ -215,25 +210,99 @@ export default function CardapioMesa() {
       return true;
     });
 
+  const catSushi = getCategoriaPorNome(categorias, 'Sushi', 'Sushis');
+  const catLanches = getCategoriaPorNome(categorias, 'Lanche', 'Lanches');
+  const catBebidas = getCategoriaPorNome(categorias, 'Bebida', 'Bebidas');
+  const categoriasExibidas = new Set<string>([
+    ...(catSushi ? [catSushi.id] : []),
+    ...(catLanches ? [catLanches.id] : []),
+    ...(catBebidas ? [catBebidas.id] : []),
+    ...(promocoesId ? [promocoesId] : []),
+  ]);
+  const outrasCategorias = categorias.filter((c) => !categoriasExibidas.has(c.id));
+  const produtosSushi = catSushi ? produtosDeOutraCat(catSushi.id) : [];
+  const produtosLanches = catLanches ? produtosDeOutraCat(catLanches.id) : [];
+  const produtosBebidas = catBebidas ? produtosDeOutraCat(catBebidas.id) : [];
+  const produtosSemCategoria = produtosSemCategoriaLista;
+
   return (
     <div className="print-cardapio-a4 min-h-screen bg-stone-50">
       <header className="cardapio-header border-b border-stone-200 bg-white print:hidden">
-        <div className="mx-auto max-w-6xl px-4 py-6 flex items-center justify-center sm:justify-between">
-          <div className="text-center sm:text-left">
-            <h1 className="text-2xl font-bold text-stone-800">Lanchonete Terra e Mar</h1>
-            <p className="mt-1 text-sm text-stone-500">Cardápio da mesa</p>
+        <div className="mx-auto max-w-6xl px-4 py-4">
+          <div className="flex items-center justify-center sm:justify-between">
+            <div className="text-center sm:text-left">
+              <h1 className="text-2xl font-bold text-stone-800">Lanchonete Terra e Mar</h1>
+              <p className="mt-1 text-sm text-stone-500">Cardápio da mesa</p>
+            </div>
+            <button
+              type="button"
+              onClick={handleImprimir}
+              className="hidden sm:flex items-center gap-2 rounded-lg bg-amber-600 px-4 py-2 text-white font-medium hover:bg-amber-700"
+            >
+              <Printer className="h-5 w-5" />
+              Imprimir
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={handleImprimir}
-            className="hidden sm:flex items-center gap-2 rounded-lg bg-amber-600 px-4 py-2 text-white font-medium hover:bg-amber-700"
-          >
-            <Printer className="h-5 w-5" />
-            Imprimir
-          </button>
+          <nav className="mt-3 flex flex-wrap gap-2 border-t border-stone-100 pt-3 print:hidden">
+            <button
+              type="button"
+              onClick={() => setCategoriaSelecionada(null)}
+              className={`rounded-full px-3 py-1.5 text-sm font-medium transition ${categoriaSelecionada === null ? 'bg-amber-600 text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`}
+            >
+              Todos
+            </button>
+            {categoriasComProdutos.map((cat) => {
+              const isPromocoes = cat.nome.toUpperCase() === 'PROMOÇÕES';
+              return (
+                <button
+                  key={cat.id}
+                  type="button"
+                  onClick={() => setCategoriaSelecionada(cat.id)}
+                  className={
+                    isPromocoes
+                      ? `rounded-full px-3 py-1.5 text-sm font-semibold transition shadow-md ${categoriaSelecionada === cat.id
+                        ? 'bg-gradient-to-r from-red-500 to-amber-500 text-white ring-2 ring-amber-300 ring-offset-2'
+                        : 'bg-gradient-to-r from-red-400 to-amber-400 text-white hover:from-red-500 hover:to-amber-500 hover:shadow-lg'}`
+                      : `rounded-full px-3 py-1.5 text-sm font-medium transition ${categoriaSelecionada === cat.id ? 'bg-amber-600 text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`
+                  }
+                >
+                  {isPromocoes && <span className="mr-1" aria-hidden>🔥</span>}
+                  {cat.nome}
+                </button>
+              );
+            })}
+          </nav>
         </div>
       </header>
-      <div className="px-1.5 sm:px-4 print:px-0 overflow-x-auto print:overflow-visible">
+
+      {/* Tela: lista filtrada por categoria, mesma disposição dos cards (um por linha) */}
+      <main className="mx-auto max-w-6xl px-4 py-6 print:hidden">
+        {exibirSemCategoria && (
+          <section className="mb-8">
+            <h2 className="mb-4 text-lg font-semibold text-stone-800">Cardápio</h2>
+            <div className="space-y-2">
+              {produtosSemCategoria.map((p) => (
+                <CardItem key={p.id} produto={p} onClick={() => setModalProduto(p)} />
+              ))}
+            </div>
+          </section>
+        )}
+        {categoriasComProdutos.filter(exibirCategoria).map((cat) => (
+          <section key={cat.id} className="mb-8">
+            <h2 className="mb-4 text-lg font-semibold text-stone-800">{cat.nome}</h2>
+            <div className="space-y-2">
+              {byCategoria(cat.id).map((p) => (
+                <CardItem key={p.id} produto={p} onClick={() => setModalProduto(p)} />
+              ))}
+            </div>
+          </section>
+        ))}
+        {categoriaVazia && <p className="text-stone-500">Nenhum produto nesta categoria.</p>}
+        {produtos.length === 0 && <p className="text-stone-500">Nenhum produto disponível.</p>}
+      </main>
+
+      {/* Impressão: tabela completa, sem filtro */}
+      <div className="hidden print:block px-1.5 sm:px-4 print:px-0 overflow-x-auto print:overflow-visible">
       <table className="cardapio-print-table w-full max-w-6xl mx-auto border-collapse table-fixed sm:table-auto">
         <thead className="hidden print:table-header-group">
           <tr>
@@ -249,7 +318,7 @@ export default function CardapioMesa() {
           <>
             <tr className="cardapio-section-row bg-amber-50/80 print:bg-transparent"><td className="pt-4 pb-2 pl-2 sm:pl-4 print:pt-4 print:pb-2 print:pl-0 border-l-4 border-amber-500 print:border-l-0"><h2 className="text-lg font-semibold text-stone-800 print:text-sm print:font-bold print:uppercase print:border-b-2 print:border-stone-800 print:pb-1">{catSushi.nome}</h2></td></tr>
             {produtosSushi.map((p) => (
-              <tr key={p.id}><td className="py-1 print:py-1 overflow-hidden"><CardItem produto={p} onClick={() => setModalProduto(p)} /></td></tr>
+              <tr key={p.id}><td className="py-1 print:py-1 overflow-hidden"><CardItem produto={p} /></td></tr>
             ))}
           </>
         )}
@@ -257,7 +326,7 @@ export default function CardapioMesa() {
           <>
             <tr className="cardapio-section-row bg-amber-50/80 print:bg-transparent"><td className="pt-4 pb-2 pl-2 sm:pl-4 print:pt-4 print:pb-2 print:pl-0 border-l-4 border-amber-500 print:border-l-0"><h2 className="text-lg font-semibold text-stone-800 print:text-sm print:font-bold print:uppercase print:border-b-2 print:border-stone-800 print:pb-1">{catLanches.nome}</h2></td></tr>
             {produtosLanches.map((p) => (
-              <tr key={p.id}><td className="py-1 print:py-1 overflow-hidden"><CardItem produto={p} onClick={() => setModalProduto(p)} /></td></tr>
+              <tr key={p.id}><td className="py-1 print:py-1 overflow-hidden"><CardItem produto={p} /></td></tr>
             ))}
           </>
         )}
@@ -265,7 +334,7 @@ export default function CardapioMesa() {
           <>
             <tr className="cardapio-section-row bg-amber-50/80 print:bg-transparent"><td className="pt-4 pb-2 pl-2 sm:pl-4 print:pt-4 print:pb-2 print:pl-0 border-l-4 border-amber-500 print:border-l-0"><h2 className="text-lg font-semibold text-stone-800 print:text-sm print:font-bold print:uppercase print:border-b-2 print:border-stone-800 print:pb-1">{catBebidas.nome}</h2></td></tr>
             {produtosBebidas.map((p) => (
-              <tr key={p.id}><td className="py-1 print:py-1 overflow-hidden"><CardItem produto={p} onClick={() => setModalProduto(p)} /></td></tr>
+              <tr key={p.id}><td className="py-1 print:py-1 overflow-hidden"><CardItem produto={p} /></td></tr>
             ))}
           </>
         )}
@@ -276,7 +345,7 @@ export default function CardapioMesa() {
             <React.Fragment key={cat.id}>
               <tr className="cardapio-section-row bg-amber-50/80 print:bg-transparent"><td className="pt-4 pb-2 pl-2 sm:pl-4 print:pt-4 print:pb-2 print:pl-0 border-l-4 border-amber-500 print:border-l-0"><h2 className="text-lg font-semibold text-stone-800 print:text-sm print:font-bold print:uppercase print:border-b-2 print:border-stone-800 print:pb-1">{cat.nome}</h2></td></tr>
               {prods.map((p) => (
-                <tr key={p.id}><td className="py-1 print:py-1 overflow-hidden"><CardItem produto={p} onClick={() => setModalProduto(p)} /></td></tr>
+                <tr key={p.id}><td className="py-1 print:py-1 overflow-hidden"><CardItem produto={p} /></td></tr>
               ))}
             </React.Fragment>
           );
@@ -285,14 +354,14 @@ export default function CardapioMesa() {
           <>
             <tr className="cardapio-section-row bg-amber-50/80 print:bg-transparent"><td className="pt-4 pb-2 pl-2 sm:pl-4 print:pt-4 print:pb-2 print:pl-0 border-l-4 border-amber-500 print:border-l-0"><h2 className="text-lg font-semibold text-stone-800 print:text-sm print:font-bold print:uppercase print:border-b-2 print:border-stone-800 print:pb-1">Cardápio</h2></td></tr>
             {produtosSemCategoria.map((p) => (
-              <tr key={p.id}><td className="py-1 print:py-1 overflow-hidden"><CardItem produto={p} onClick={() => setModalProduto(p)} /></td></tr>
+              <tr key={p.id}><td className="py-1 print:py-1 overflow-hidden"><CardItem produto={p} /></td></tr>
             ))}
           </>
         )}
         </tbody>
       </table>
-      </div>
       {produtos.length === 0 && <p className="mx-auto max-w-6xl px-4 py-6 text-stone-500">Nenhum produto disponível.</p>}
+      </div>
       {modalProduto && (
         <ModalProdutoCardapio produto={modalProduto} onClose={() => setModalProduto(null)} />
       )}
