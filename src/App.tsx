@@ -28,6 +28,7 @@ import LojaOnline from './pages/loja/LojaOnline';
 import LojaCarrinho from './pages/loja/Carrinho';
 import LojaCheckout from './pages/loja/Checkout';
 import LojaObrigado from './pages/loja/Obrigado';
+import CardapioMesa from './pages/loja/CardapioMesa';
 
 function ProtectedRoute({ children, role }: { children: React.ReactNode; role?: 'admin' | 'atendente' | 'cozinha' }) {
   const { user, profile, loading, profileFetched } = useAuth();
@@ -45,6 +46,7 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/" element={<LojaOnline />} />
+      <Route path="/cardapio" element={<CardapioMesa />} />
       <Route path="/carrinho" element={<LojaCarrinho />} />
       <Route path="/checkout" element={<LojaCheckout />} />
       <Route path="/obrigado" element={<LojaObrigado />} />

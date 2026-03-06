@@ -1,7 +1,18 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 import { getCategorias, getProdutos, saveProduto } from '../../lib/api';
 import type { ProdutoWithCategorias } from '../../types/database';
 import type { Categoria } from '../../types/database';
+
+function getCategoriaIds(p: ProdutoWithCategorias): string[] {
+  const ids = (p.produto_categorias ?? []).map((pc) => pc.categoria_id);
+  if (ids.length > 0) return ids;
+  return p.categoria_id ? [p.categoria_id] : [];
+}
+
+function produtosDaCategoria(produtos: ProdutoWithCategorias[], categoriaId: string): ProdutoWithCategorias[] {
+  return produtos.filter((p) => getCategoriaIds(p).includes(categoriaId));
+}
 
 export default function AdminProdutos() {
   const [list, setList] = useState<ProdutoWithCategorias[]>([]);
@@ -23,6 +34,48 @@ export default function AdminProdutos() {
   const [emPromocao, setEmPromocao] = useState(false);
   const [valorPromocional, setValorPromocional] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set());
+
+  const { categoriasComProdutos, semCategoria } = useMemo(() => {
+    const promocoesId = categorias.find((c) => c.nome.toUpperCase() === 'PROMOÇÕES')?.id;
+    const comProdutos: { categoria: Categoria; produtos: ProdutoWithCategorias[] }[] = [];
+
+    for (const cat of categorias) {
+      let prods = produtosDaCategoria(list, cat.id);
+      if (cat.id === promocoesId) {
+        const emPromo = list.filter((p) => p.em_promocao === true);
+        const ids = new Set(prods.map((p) => p.id));
+        for (const p of emPromo) {
+          if (!ids.has(p.id)) {
+            ids.add(p.id);
+            prods = [...prods, p];
+          }
+        }
+      }
+      if (prods.length > 0) comProdutos.push({ categoria: cat, produtos: prods });
+    }
+
+    const promocoesProdutos = list.filter((p) => p.em_promocao === true);
+    const temPromocoesCat = !!promocoesId;
+    if (promocoesProdutos.length > 0 && !temPromocoesCat) {
+      comProdutos.push({
+        categoria: { id: 'promocoes-virtual', nome: 'Promoções' },
+        produtos: promocoesProdutos,
+      });
+    }
+
+    const semCat = list.filter((p) => getCategoriaIds(p).length === 0 && !p.em_promocao);
+    return { categoriasComProdutos: comProdutos, semCategoria: semCat };
+  }, [list, categorias]);
+
+  function toggleAccordion(id: string) {
+    setExpandedCats((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   useEffect(() => {
     load();
@@ -107,55 +160,137 @@ export default function AdminProdutos() {
     <div>
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-bold text-stone-800">Produtos</h1>
-        <button onClick={() => openForm()} className="rounded-lg bg-amber-600 px-4 py-2 text-white hover:bg-amber-700">
-          Novo produto
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setExpandedCats(new Set([...categoriasComProdutos.map((c) => c.categoria.id), ...(semCategoria.length > 0 ? ['sem-categoria'] : [])]))}
+            className="rounded-lg border border-stone-300 px-3 py-1.5 text-sm text-stone-600 hover:bg-stone-50"
+          >
+            Expandir todos
+          </button>
+          <button
+            type="button"
+            onClick={() => setExpandedCats(new Set())}
+            className="rounded-lg border border-stone-300 px-3 py-1.5 text-sm text-stone-600 hover:bg-stone-50"
+          >
+            Recolher todos
+          </button>
+          <button onClick={() => openForm()} className="rounded-lg bg-amber-600 px-4 py-2 text-white hover:bg-amber-700">
+            Novo produto
+          </button>
+        </div>
       </div>
-      <div className="overflow-hidden rounded-xl bg-white shadow-sm">
-        <table className="w-full">
-          <thead className="border-b border-stone-200 bg-stone-50">
-            <tr>
-              <th className="px-4 py-3 text-left text-sm font-medium text-stone-600">Código</th>
-              <th className="px-4 py-3 text-left text-sm font-medium text-stone-600">Nome do produto</th>
-              <th className="px-4 py-3 text-left text-sm font-medium text-stone-600">Descrição</th>
-              <th className="px-4 py-3 text-left text-sm font-medium text-stone-600">Ingredientes</th>
-              <th className="px-4 py-3 text-left text-sm font-medium text-stone-600">Acompanhamentos</th>
-              <th className="px-4 py-3 text-left text-sm font-medium text-stone-600">Valor</th>
-              <th className="px-4 py-3 text-left text-sm font-medium text-stone-600">Qtd</th>
-              <th className="px-4 py-3 text-left text-sm font-medium text-stone-600">Ativo</th>
-              <th className="px-4 py-3 text-left text-sm font-medium text-stone-600">Categoria</th>
-              <th className="px-4 py-3 text-left text-sm font-medium text-stone-600">Cozinha</th>
-              <th className="px-4 py-3 text-left text-sm font-medium text-stone-600">Foto</th>
-              <th className="px-4 py-3"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {list.map((p) => (
-              <tr key={p.id} className="border-b border-stone-100">
-                <td className="px-4 py-3">{p.codigo}</td>
-                <td className="px-4 py-3">{p.nome || '—'}</td>
-                <td className="px-4 py-3">{p.descricao}</td>
-                <td className="px-4 py-3 text-sm text-stone-500">{p.ingredientes ?? '-'}</td>
-                <td className="px-4 py-3 text-sm text-stone-500">{p.acompanhamentos ?? '-'}</td>
-                <td className="px-4 py-3">
-                  {p.em_promocao && p.valor_promocional != null
-                    ? <>R$ <span className="line-through text-stone-400">{Number(p.valor).toFixed(2)}</span> → R$ {Number(p.valor_promocional).toFixed(2)}</>
-                    : `R$ ${Number(p.valor).toFixed(2)}`}
-                </td>
-                <td className="px-4 py-3">{p.quantidade}</td>
-                <td className="px-4 py-3">{p.ativo ? 'Sim' : 'Não'}</td>
-                <td className="px-4 py-3 text-sm">{(p.produto_categorias ?? []).map((pc) => (pc.categorias as { nome: string })?.nome).filter(Boolean).join(', ') || '—'}</td>
-                <td className="px-4 py-3">{p.vai_para_cozinha !== false ? 'Sim' : 'Não'}</td>
-                <td className="px-4 py-3">
-                  {p.imagem_url ? <img src={p.imagem_url} alt="" className="w-10 h-10 rounded object-cover" /> : <span className="text-stone-400 text-xs">—</span>}
-                </td>
-                <td className="px-4 py-3">
-                  <button onClick={() => openForm(p)} className="text-amber-600 hover:underline text-sm">Editar</button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="space-y-2">
+        {categoriasComProdutos.map(({ categoria, produtos }) => {
+          const isOpen = expandedCats.has(categoria.id);
+          return (
+            <div key={categoria.id} className="overflow-hidden rounded-xl bg-white shadow-sm border border-stone-200">
+              <button
+                type="button"
+                onClick={() => toggleAccordion(categoria.id)}
+                className="w-full flex items-center justify-between px-4 py-3 bg-stone-50 hover:bg-stone-100 text-left font-medium text-stone-800"
+              >
+                <span className="flex items-center gap-2">
+                  {isOpen ? <ChevronDown className="h-5 w-5 text-stone-500" /> : <ChevronRight className="h-5 w-5 text-stone-500" />}
+                  {categoria.nome} <span className="text-sm font-normal text-stone-500">({produtos.length})</span>
+                </span>
+              </button>
+              {isOpen && (
+                <div className="border-t border-stone-200">
+                  <table className="w-full">
+                    <thead className="border-b border-stone-200 bg-stone-50/80">
+                      <tr>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-stone-600">Código</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-stone-600">Nome</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-stone-600">Descrição</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-stone-600">Valor</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-stone-600">Ativo</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-stone-600">Foto</th>
+                        <th className="px-4 py-2"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {produtos.map((p) => (
+                        <tr key={p.id} className="border-b border-stone-100 hover:bg-stone-50/50">
+                          <td className="px-4 py-2 text-sm">{p.codigo}</td>
+                          <td className="px-4 py-2 text-sm">{p.nome || '—'}</td>
+                          <td className="px-4 py-2 text-sm text-stone-600 max-w-[200px] truncate">{p.descricao}</td>
+                          <td className="px-4 py-2 text-sm">
+                            {p.em_promocao && p.valor_promocional != null
+                              ? <>R$ <span className="line-through text-stone-400">{Number(p.valor).toFixed(2)}</span> → R$ {Number(p.valor_promocional).toFixed(2)}</>
+                              : `R$ ${Number(p.valor).toFixed(2)}`}
+                          </td>
+                          <td className="px-4 py-2 text-sm">{p.ativo ? 'Sim' : 'Não'}</td>
+                          <td className="px-4 py-2">
+                            {p.imagem_url ? <img src={p.imagem_url} alt="" className="w-8 h-8 rounded object-cover" /> : <span className="text-stone-400 text-xs">—</span>}
+                          </td>
+                          <td className="px-4 py-2">
+                            <button onClick={() => openForm(p)} className="text-amber-600 hover:underline text-sm">Editar</button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          );
+        })}
+        {semCategoria.length > 0 && (
+          <div className="overflow-hidden rounded-xl bg-white shadow-sm border border-stone-200">
+            <button
+              type="button"
+              onClick={() => toggleAccordion('sem-categoria')}
+              className="w-full flex items-center justify-between px-4 py-3 bg-stone-50 hover:bg-stone-100 text-left font-medium text-stone-800"
+            >
+              <span className="flex items-center gap-2">
+                {expandedCats.has('sem-categoria') ? <ChevronDown className="h-5 w-5 text-stone-500" /> : <ChevronRight className="h-5 w-5 text-stone-500" />}
+                Sem categoria <span className="text-sm font-normal text-stone-500">({semCategoria.length})</span>
+              </span>
+            </button>
+            {expandedCats.has('sem-categoria') && (
+              <div className="border-t border-stone-200">
+                <table className="w-full">
+                  <thead className="border-b border-stone-200 bg-stone-50/80">
+                    <tr>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-stone-600">Código</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-stone-600">Nome</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-stone-600">Descrição</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-stone-600">Valor</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-stone-600">Ativo</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-stone-600">Foto</th>
+                      <th className="px-4 py-2"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {semCategoria.map((p) => (
+                      <tr key={p.id} className="border-b border-stone-100 hover:bg-stone-50/50">
+                        <td className="px-4 py-2 text-sm">{p.codigo}</td>
+                        <td className="px-4 py-2 text-sm">{p.nome || '—'}</td>
+                        <td className="px-4 py-2 text-sm text-stone-600 max-w-[200px] truncate">{p.descricao}</td>
+                        <td className="px-4 py-2 text-sm">
+                          {p.em_promocao && p.valor_promocional != null
+                            ? <>R$ <span className="line-through text-stone-400">{Number(p.valor).toFixed(2)}</span> → R$ {Number(p.valor_promocional).toFixed(2)}</>
+                            : `R$ ${Number(p.valor).toFixed(2)}`}
+                        </td>
+                        <td className="px-4 py-2 text-sm">{p.ativo ? 'Sim' : 'Não'}</td>
+                        <td className="px-4 py-2">
+                          {p.imagem_url ? <img src={p.imagem_url} alt="" className="w-8 h-8 rounded object-cover" /> : <span className="text-stone-400 text-xs">—</span>}
+                        </td>
+                        <td className="px-4 py-2">
+                          <button onClick={() => openForm(p)} className="text-amber-600 hover:underline text-sm">Editar</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+        {list.length === 0 && (
+          <p className="rounded-xl bg-white p-6 text-center text-stone-500 shadow-sm border border-stone-200">Nenhum produto cadastrado.</p>
+        )}
       </div>
 
       {open && (
@@ -165,7 +300,7 @@ export default function AdminProdutos() {
             <form onSubmit={handleSubmit} className="space-y-3">
               <div>
                 <label className="block text-sm font-medium text-stone-600">Código *</label>
-                <input value={codigo} onChange={(e) => setCodigo(e.target.value)} required disabled={!!editing} className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 disabled:bg-stone-100" />
+                <input value={codigo} onChange={(e) => setCodigo(e.target.value)} required className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-stone-600">Nome do produto</label>

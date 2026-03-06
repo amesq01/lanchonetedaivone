@@ -57,6 +57,13 @@
 }
 
 /* Impressão: Bematech MP 4200 TH — papel 80mm. Largura 256px (~68mm) para não cortar à direita. */
+/* Cardápio: A4 com margens. Usa @page nomeado quando .print-cardapio-a4 existe. */
+@page cardapio {
+  size: A4;
+  margin: 1.5cm;
+  margin-top: 3cm;
+}
+
 @media print {
   @page {
     size: 80mm auto;
@@ -180,5 +187,125 @@
   .print-receipt footer,
   .print-receipt .text-stone-500 {
     font-size: 8pt !important;
+  }
+
+  /* Cardápio A4: layout otimizado para impressão */
+  .print-cardapio-a4 {
+    page: cardapio;
+    width: 100% !important;
+    max-width: none !important;
+    min-width: 0 !important;
+    background: white !important;
+    padding: 0 !important;
+  }
+
+  body:has(.print-cardapio-a4) #root,
+  body:has(.print-cardapio-a4) #root > * {
+    width: 100% !important;
+    max-width: none !important;
+    min-width: 0 !important;
+  }
+
+  body:has(.print-cardapio-a4) #root {
+    display: block !important;
+    justify-content: flex-start !important;
+  }
+
+  .print-cardapio-a4 header {
+    break-after: avoid;
+  }
+
+  /* Tabela do cardápio: thead repete em cada página impressa */
+  .print-cardapio-a4 .cardapio-print-table {
+    display: table !important;
+    width: 100% !important;
+  }
+
+  .print-cardapio-a4 .cardapio-print-table thead {
+    display: table-header-group !important;
+  }
+
+  .print-cardapio-a4 .cardapio-print-table tbody {
+    display: table-row-group !important;
+  }
+
+  .print-cardapio-a4 .cardapio-print-table tr {
+    display: table-row !important;
+  }
+
+  .print-cardapio-a4 .cardapio-print-table td {
+    display: table-cell !important;
+  }
+
+  /* Evitar que um item seja cortado no meio; permitir quebra entre itens */
+  .print-cardapio-a4 .cardapio-section-row {
+    page-break-after: avoid;
+  }
+
+  .print-cardapio-a4 .cardapio-item {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .print-cardapio-a4 article {
+    break-inside: avoid;
+    box-shadow: none !important;
+  }
+
+  /* Cardápio estilo restaurante: imagens e layout */
+  .print-cardapio-a4 img {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    max-width: none !important;
+  }
+
+  .print-cardapio-a4 .cardapio-header {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    width: 100% !important;
+    background: white !important;
+    border-bottom: 2px solid #1c1917 !important;
+    text-align: center !important;
+    z-index: 9999 !important;
+    padding: 0.4cm 0 0.3cm !important;
+    margin: 0 !important;
+  }
+
+  .print-cardapio-a4 .cardapio-header h1 {
+    font-size: 18pt !important;
+    letter-spacing: 0.05em !important;
+    margin: 0 !important;
+  }
+
+  .print-cardapio-a4 .cardapio-header p {
+    margin: 0.1cm 0 0 !important;
+    font-size: 10pt !important;
+  }
+
+  .print-cardapio-a4 .cardapio-section h2 {
+    font-size: 12pt !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.08em !important;
+    break-after: avoid;
+  }
+
+  .print-cardapio-a4 .cardapio-item {
+    border: 1px solid #d6d3d1 !important;
+    background: #fff !important;
+  }
+
+  .print-cardapio-a4 .cardapio-item-img {
+    min-width: 72px !important;
+    min-height: 72px !important;
+    width: 72px !important;
+    height: 72px !important;
+  }
+
+  .print-cardapio-a4 .cardapio-item-img img {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover !important;
   }
 }
