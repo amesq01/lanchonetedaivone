@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import { ChevronDown, ChevronRight, Search } from 'lucide-react';
 import { getCategorias, getProdutos, saveProduto } from '../../lib/api';
 import type { ProdutoWithCategorias } from '../../types/database';
 import type { Categoria } from '../../types/database';
@@ -35,15 +35,26 @@ export default function AdminProdutos() {
   const [valorPromocional, setValorPromocional] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set());
+  const [searchQuery, setSearchQuery] = useState('');
 
   const { categoriasComProdutos, semCategoria } = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    const filtered = q
+      ? list.filter(
+          (p) =>
+            (p.codigo ?? '').toLowerCase().includes(q) ||
+            (p.nome ?? '').toLowerCase().includes(q) ||
+            (p.descricao ?? '').toLowerCase().includes(q) ||
+            (p.ingredientes ?? '').toLowerCase().includes(q)
+        )
+      : list;
     const promocoesId = categorias.find((c) => c.nome.toUpperCase() === 'PROMOÇÕES')?.id;
     const comProdutos: { categoria: Categoria; produtos: ProdutoWithCategorias[] }[] = [];
 
     for (const cat of categorias) {
-      let prods = produtosDaCategoria(list, cat.id);
+      let prods = produtosDaCategoria(filtered, cat.id);
       if (cat.id === promocoesId) {
-        const emPromo = list.filter((p) => p.em_promocao === true);
+        const emPromo = filtered.filter((p) => p.em_promocao === true);
         const ids = new Set(prods.map((p) => p.id));
         for (const p of emPromo) {
           if (!ids.has(p.id)) {
@@ -55,7 +66,7 @@ export default function AdminProdutos() {
       if (prods.length > 0) comProdutos.push({ categoria: cat, produtos: prods });
     }
 
-    const promocoesProdutos = list.filter((p) => p.em_promocao === true);
+    const promocoesProdutos = filtered.filter((p) => p.em_promocao === true);
     const temPromocoesCat = !!promocoesId;
     if (promocoesProdutos.length > 0 && !temPromocoesCat) {
       comProdutos.push({
@@ -64,9 +75,9 @@ export default function AdminProdutos() {
       });
     }
 
-    const semCat = list.filter((p) => getCategoriaIds(p).length === 0 && !p.em_promocao);
+    const semCat = filtered.filter((p) => getCategoriaIds(p).length === 0 && !p.em_promocao);
     return { categoriasComProdutos: comProdutos, semCategoria: semCat };
-  }, [list, categorias]);
+  }, [list, categorias, searchQuery]);
 
   function toggleAccordion(id: string) {
     setExpandedCats((prev) => {
@@ -158,9 +169,19 @@ export default function AdminProdutos() {
 
   return (
     <div>
-      <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-stone-800">Produtos</h1>
-        <div className="flex items-center gap-2">
+      <h1 className="mb-4 text-2xl font-bold text-stone-800">Produtos</h1>
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="relative flex-1 max-w-md">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" />
+          <input
+            type="search"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Buscar por código, nome, descrição ou ingredientes..."
+            className="w-full rounded-lg border border-stone-300 py-2 pl-9 pr-3 text-sm placeholder:text-stone-400 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+          />
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
           <button
             type="button"
             onClick={() => setExpandedCats(new Set([...categoriasComProdutos.map((c) => c.categoria.id), ...(semCategoria.length > 0 ? ['sem-categoria'] : [])]))}
@@ -290,6 +311,9 @@ export default function AdminProdutos() {
         )}
         {list.length === 0 && (
           <p className="rounded-xl bg-white p-6 text-center text-stone-500 shadow-sm border border-stone-200">Nenhum produto cadastrado.</p>
+        )}
+        {list.length > 0 && categoriasComProdutos.length === 0 && semCategoria.length === 0 && (
+          <p className="rounded-xl bg-white p-6 text-center text-stone-500 shadow-sm border border-stone-200">Nenhum produto encontrado para &quot;{searchQuery}&quot;.</p>
         )}
       </div>
 
