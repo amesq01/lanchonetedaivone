@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Printer } from 'lucide-react';
+import { Printer, X } from 'lucide-react';
 import { getProdutos, getCategorias } from '../../lib/api';
 import type { ProdutoWithCategorias } from '../../types/database';
 import type { Categoria } from '../../types/database';
@@ -31,13 +31,63 @@ function produtosDaCategoria(produtos: ProdutoWithCategorias[], categoriaId: str
   return produtos.filter((p) => getCategoriaIds(p).includes(categoriaId));
 }
 
-function CardItem({ produto }: { produto: ProdutoWithCategorias }) {
+function ModalProdutoCardapio({ produto, onClose }: { produto: ProdutoWithCategorias; onClose: () => void }) {
   const valor = precoVenda(produto);
   const emPromo = produto.em_promocao && produto.valor_promocional != null && Number(produto.valor_promocional) > 0;
   return (
-    <article className="cardapio-item rounded-xl border border-stone-200 bg-white p-2 shadow-sm print:shadow-none print:border-stone-300 print:p-3">
-      <div className="flex gap-4 print:gap-3">
-        <div className="cardapio-item-img h-24 w-24 flex-shrink-0 overflow-hidden rounded-lg bg-stone-100 print:h-20 print:w-20 print:rounded">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 print:hidden" onClick={onClose} role="dialog" aria-modal="true" aria-labelledby="modal-cardapio-titulo">
+      <div className="bg-white rounded-2xl shadow-xl max-w-[420px] w-full max-h-[90vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="relative flex-shrink-0">
+          <button type="button" onClick={onClose} className="absolute top-3 right-3 z-10 w-10 h-10 rounded-full bg-white/90 hover:bg-white shadow flex items-center justify-center text-stone-600 hover:text-stone-800" aria-label="Fechar">
+            <X className="w-5 h-5" />
+          </button>
+          <div className="aspect-square w-full max-h-72 bg-stone-100 flex items-center justify-center text-stone-400 overflow-hidden">
+            {produto.imagem_url ? <img src={produto.imagem_url} alt="" className="w-full h-full object-contain object-center" /> : 'Sem imagem'}
+          </div>
+        </div>
+        <div className="p-5 overflow-y-auto flex-1">
+          <h2 id="modal-cardapio-titulo" className="text-xl font-semibold text-stone-800">{produto.nome || produto.descricao}</h2>
+          <p className="mt-1 text-sm text-stone-500">Cód: #{produto.codigo}</p>
+          {produto.nome && produto.descricao && <p className="mt-1 text-stone-600">{produto.descricao}</p>}
+          {produto.ingredientes && (
+            <p className="mt-3 text-sm text-stone-600"><span className="font-medium text-stone-700">Ingredientes:</span> {produto.ingredientes}</p>
+          )}
+          {produto.acompanhamentos && (
+            <p className="mt-1 text-sm text-stone-600"><span className="font-medium text-stone-700">Acompanhamentos:</span> {produto.acompanhamentos}</p>
+          )}
+          <div className="mt-4 font-semibold text-amber-600">
+            {emPromo ? (
+              <>
+                <span className="text-stone-400 line-through font-normal mr-1">R$ {Number(produto.valor).toFixed(2)}</span>
+                R$ {Number(produto.valor_promocional).toFixed(2)}
+              </>
+            ) : (
+              <>R$ {valor.toFixed(2)}</>
+            )}
+          </div>
+          <button type="button" onClick={onClose} className="mt-4 w-full rounded-xl bg-stone-200 py-3 px-4 text-stone-700 font-semibold hover:bg-stone-300">
+            Fechar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CardItem({ produto, onClick }: { produto: ProdutoWithCategorias; onClick?: () => void }) {
+  const valor = precoVenda(produto);
+  const emPromo = produto.em_promocao && produto.valor_promocional != null && Number(produto.valor_promocional) > 0;
+  const isClickable = !!onClick;
+  return (
+    <article
+      role={isClickable ? 'button' : undefined}
+      tabIndex={isClickable ? 0 : undefined}
+      onClick={isClickable ? onClick : undefined}
+      onKeyDown={isClickable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick?.(); } } : undefined}
+      className={`cardapio-item rounded-xl border border-stone-200 bg-white p-1.5 sm:p-2 shadow-sm print:shadow-none print:border-stone-300 print:p-3 w-full min-w-0 ${isClickable ? 'cursor-pointer hover:border-amber-200 hover:shadow-md transition print:cursor-default' : ''}`}
+    >
+      <div className="flex gap-2 sm:gap-4 print:gap-3 min-w-0">
+        <div className="cardapio-item-img h-16 w-16 sm:h-24 sm:w-24 flex-shrink-0 overflow-hidden rounded-lg bg-stone-100 print:h-20 print:w-20 print:rounded">
           {produto.imagem_url ? (
             <img
               src={produto.imagem_url}
@@ -49,31 +99,29 @@ function CardItem({ produto }: { produto: ProdutoWithCategorias }) {
             <div className="flex h-full w-full items-center justify-center text-stone-400 text-xs print:text-[10px]">Sem imagem</div>
           )}
         </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-baseline gap-2">
-            <h3 className="font-semibold text-stone-800 print:text-sm print:font-bold">{produto.nome || produto.descricao}</h3>
-            <span className="text-xs text-stone-500 print:text-[10px]">Cód: {produto.codigo}</span>
+        <div className="min-w-0 flex-1 overflow-hidden">
+          <span className="block text-xs text-stone-500 print:text-[10px] truncate">Cód: #{produto.codigo}</span>
+          <h3 className="mt-0.5 font-semibold text-stone-800 print:text-sm print:font-bold truncate">{produto.nome || produto.descricao}</h3>
+          {produto.nome && produto.descricao && <p className="mt-0.5 text-sm text-stone-600 print:text-xs print:mt-0 truncate">{produto.descricao}</p>}
+          <div className="mt-1 font-semibold text-amber-600 print:text-sm truncate">
+            {emPromo ? (
+              <>
+                <span className="text-stone-400 line-through font-normal mr-1">R$ {Number(produto.valor).toFixed(2)}</span>
+                R$ {valor.toFixed(2)}
+              </>
+            ) : (
+              <>R$ {valor.toFixed(2)}</>
+            )}
           </div>
-          {produto.nome && produto.descricao && <p className="mt-0.5 text-sm text-stone-600 print:text-xs print:mt-0">{produto.descricao}</p>}
           {produto.ingredientes && (
-            <p className="mt-3 text-xs text-stone-500 print:mt-1 print:text-[10px]">
+            <p className="mt-3 text-xs text-stone-500 print:mt-1 print:text-[10px] hidden sm:block print:block">
               <span className="font-medium text-stone-600">Ingredientes:</span> {produto.ingredientes}
             </p>
           )}
           {produto.acompanhamentos && (
-            <p className="mt-1 text-xs text-stone-500 print:text-[10px]">
+            <p className="mt-1 text-xs text-stone-500 print:text-[10px] hidden sm:block print:block">
               <span className="font-medium text-stone-600">Acompanhamentos:</span> {produto.acompanhamentos}
             </p>
-          )}
-        </div>
-        <div className="flex-shrink-0 self-center font-semibold text-amber-600 print:text-sm">
-          {emPromo ? (
-            <>
-              <span className="text-stone-400 line-through font-normal mr-1">R$ {Number(produto.valor).toFixed(2)}</span>
-              R$ {valor.toFixed(2)}
-            </>
-          ) : (
-            <>R$ {valor.toFixed(2)}</>
           )}
         </div>
       </div>
@@ -86,6 +134,7 @@ export default function CardapioMesa() {
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
+  const [modalProduto, setModalProduto] = useState<ProdutoWithCategorias | null>(null);
 
   function handleImprimir() {
     const imagens = document.querySelectorAll('.print-cardapio-a4 img[src]');
@@ -184,8 +233,8 @@ export default function CardapioMesa() {
           </button>
         </div>
       </header>
-      <div className="px-1.5 sm:px-4 print:px-0">
-      <table className="cardapio-print-table w-full max-w-6xl mx-auto border-collapse">
+      <div className="px-1.5 sm:px-4 print:px-0 overflow-x-auto print:overflow-visible">
+      <table className="cardapio-print-table w-full max-w-6xl mx-auto border-collapse table-fixed sm:table-auto">
         <thead className="hidden print:table-header-group">
           <tr>
             <td className="print:py-3 print:border-b-2 print:border-stone-800 print:text-center print:align-top">
@@ -198,25 +247,25 @@ export default function CardapioMesa() {
         {/* Categorias uma abaixo da outra */}
         {catSushi && produtosSushi.length > 0 && (
           <>
-            <tr className="cardapio-section-row bg-amber-50/80 print:bg-transparent"><td className="pt-4 pb-2 pl-4 print:pt-4 print:pb-2 print:pl-0 border-l-4 border-amber-500 print:border-l-0"><h2 className="text-lg font-semibold text-stone-800 print:text-sm print:font-bold print:uppercase print:border-b-2 print:border-stone-800 print:pb-1">{catSushi.nome}</h2></td></tr>
+            <tr className="cardapio-section-row bg-amber-50/80 print:bg-transparent"><td className="pt-4 pb-2 pl-2 sm:pl-4 print:pt-4 print:pb-2 print:pl-0 border-l-4 border-amber-500 print:border-l-0"><h2 className="text-lg font-semibold text-stone-800 print:text-sm print:font-bold print:uppercase print:border-b-2 print:border-stone-800 print:pb-1">{catSushi.nome}</h2></td></tr>
             {produtosSushi.map((p) => (
-              <tr key={p.id}><td className="py-1 print:py-1"><CardItem produto={p} /></td></tr>
+              <tr key={p.id}><td className="py-1 print:py-1 overflow-hidden"><CardItem produto={p} onClick={() => setModalProduto(p)} /></td></tr>
             ))}
           </>
         )}
         {catLanches && produtosLanches.length > 0 && (
           <>
-            <tr className="cardapio-section-row bg-amber-50/80 print:bg-transparent"><td className="pt-4 pb-2 pl-4 print:pt-4 print:pb-2 print:pl-0 border-l-4 border-amber-500 print:border-l-0"><h2 className="text-lg font-semibold text-stone-800 print:text-sm print:font-bold print:uppercase print:border-b-2 print:border-stone-800 print:pb-1">{catLanches.nome}</h2></td></tr>
+            <tr className="cardapio-section-row bg-amber-50/80 print:bg-transparent"><td className="pt-4 pb-2 pl-2 sm:pl-4 print:pt-4 print:pb-2 print:pl-0 border-l-4 border-amber-500 print:border-l-0"><h2 className="text-lg font-semibold text-stone-800 print:text-sm print:font-bold print:uppercase print:border-b-2 print:border-stone-800 print:pb-1">{catLanches.nome}</h2></td></tr>
             {produtosLanches.map((p) => (
-              <tr key={p.id}><td className="py-1 print:py-1"><CardItem produto={p} /></td></tr>
+              <tr key={p.id}><td className="py-1 print:py-1 overflow-hidden"><CardItem produto={p} onClick={() => setModalProduto(p)} /></td></tr>
             ))}
           </>
         )}
         {catBebidas && produtosBebidas.length > 0 && (
           <>
-            <tr className="cardapio-section-row bg-amber-50/80 print:bg-transparent"><td className="pt-4 pb-2 pl-4 print:pt-4 print:pb-2 print:pl-0 border-l-4 border-amber-500 print:border-l-0"><h2 className="text-lg font-semibold text-stone-800 print:text-sm print:font-bold print:uppercase print:border-b-2 print:border-stone-800 print:pb-1">{catBebidas.nome}</h2></td></tr>
+            <tr className="cardapio-section-row bg-amber-50/80 print:bg-transparent"><td className="pt-4 pb-2 pl-2 sm:pl-4 print:pt-4 print:pb-2 print:pl-0 border-l-4 border-amber-500 print:border-l-0"><h2 className="text-lg font-semibold text-stone-800 print:text-sm print:font-bold print:uppercase print:border-b-2 print:border-stone-800 print:pb-1">{catBebidas.nome}</h2></td></tr>
             {produtosBebidas.map((p) => (
-              <tr key={p.id}><td className="py-1 print:py-1"><CardItem produto={p} /></td></tr>
+              <tr key={p.id}><td className="py-1 print:py-1 overflow-hidden"><CardItem produto={p} onClick={() => setModalProduto(p)} /></td></tr>
             ))}
           </>
         )}
@@ -225,18 +274,18 @@ export default function CardapioMesa() {
           if (prods.length === 0) return null;
           return (
             <React.Fragment key={cat.id}>
-              <tr className="cardapio-section-row bg-amber-50/80 print:bg-transparent"><td className="pt-4 pb-2 pl-4 print:pt-4 print:pb-2 print:pl-0 border-l-4 border-amber-500 print:border-l-0"><h2 className="text-lg font-semibold text-stone-800 print:text-sm print:font-bold print:uppercase print:border-b-2 print:border-stone-800 print:pb-1">{cat.nome}</h2></td></tr>
+              <tr className="cardapio-section-row bg-amber-50/80 print:bg-transparent"><td className="pt-4 pb-2 pl-2 sm:pl-4 print:pt-4 print:pb-2 print:pl-0 border-l-4 border-amber-500 print:border-l-0"><h2 className="text-lg font-semibold text-stone-800 print:text-sm print:font-bold print:uppercase print:border-b-2 print:border-stone-800 print:pb-1">{cat.nome}</h2></td></tr>
               {prods.map((p) => (
-                <tr key={p.id}><td className="py-1 print:py-1"><CardItem produto={p} /></td></tr>
+                <tr key={p.id}><td className="py-1 print:py-1 overflow-hidden"><CardItem produto={p} onClick={() => setModalProduto(p)} /></td></tr>
               ))}
             </React.Fragment>
           );
         })}
         {produtosSemCategoria.length > 0 && (
           <>
-            <tr className="cardapio-section-row bg-amber-50/80 print:bg-transparent"><td className="pt-4 pb-2 pl-4 print:pt-4 print:pb-2 print:pl-0 border-l-4 border-amber-500 print:border-l-0"><h2 className="text-lg font-semibold text-stone-800 print:text-sm print:font-bold print:uppercase print:border-b-2 print:border-stone-800 print:pb-1">Cardápio</h2></td></tr>
+            <tr className="cardapio-section-row bg-amber-50/80 print:bg-transparent"><td className="pt-4 pb-2 pl-2 sm:pl-4 print:pt-4 print:pb-2 print:pl-0 border-l-4 border-amber-500 print:border-l-0"><h2 className="text-lg font-semibold text-stone-800 print:text-sm print:font-bold print:uppercase print:border-b-2 print:border-stone-800 print:pb-1">Cardápio</h2></td></tr>
             {produtosSemCategoria.map((p) => (
-              <tr key={p.id}><td className="py-1 print:py-1"><CardItem produto={p} /></td></tr>
+              <tr key={p.id}><td className="py-1 print:py-1 overflow-hidden"><CardItem produto={p} onClick={() => setModalProduto(p)} /></td></tr>
             ))}
           </>
         )}
@@ -244,6 +293,9 @@ export default function CardapioMesa() {
       </table>
       </div>
       {produtos.length === 0 && <p className="mx-auto max-w-6xl px-4 py-6 text-stone-500">Nenhum produto disponível.</p>}
+      {modalProduto && (
+        <ModalProdutoCardapio produto={modalProduto} onClose={() => setModalProduto(null)} />
+      )}
     </div>
   );
 }
