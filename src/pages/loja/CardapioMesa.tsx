@@ -169,21 +169,22 @@ export default function CardapioMesa() {
   return (
     <div className="print-cardapio-a4 min-h-screen bg-stone-50">
       <header className="cardapio-header border-b border-stone-200 bg-white print:hidden">
-        <div className="mx-auto max-w-6xl px-4 py-6 flex items-center justify-between">
-          <div>
+        <div className="mx-auto max-w-6xl px-4 py-6 flex items-center justify-center sm:justify-between">
+          <div className="text-center sm:text-left">
             <h1 className="text-2xl font-bold text-stone-800">Lanchonete Terra e Mar</h1>
             <p className="mt-1 text-sm text-stone-500">Cardápio da mesa</p>
           </div>
           <button
             type="button"
             onClick={handleImprimir}
-            className="flex items-center gap-2 rounded-lg bg-amber-600 px-4 py-2 text-white font-medium hover:bg-amber-700"
+            className="hidden sm:flex items-center gap-2 rounded-lg bg-amber-600 px-4 py-2 text-white font-medium hover:bg-amber-700"
           >
             <Printer className="h-5 w-5" />
             Imprimir
           </button>
         </div>
       </header>
+      <div className="px-1.5 sm:px-4 print:px-0">
       <table className="cardapio-print-table w-full max-w-6xl mx-auto border-collapse">
         <thead className="hidden print:table-header-group">
           <tr>
@@ -197,7 +198,7 @@ export default function CardapioMesa() {
         {/* Categorias uma abaixo da outra */}
         {catSushi && produtosSushi.length > 0 && (
           <>
-            <tr className="cardapio-section-row"><td className="pt-4 pb-2 print:pt-4 print:pb-2"><h2 className="text-lg font-semibold text-stone-800 print:text-sm print:font-bold print:uppercase print:border-b-2 print:border-stone-800 print:pb-1">{catSushi.nome}</h2></td></tr>
+            <tr className="cardapio-section-row bg-amber-50/80 print:bg-transparent"><td className="pt-4 pb-2 pl-4 print:pt-4 print:pb-2 print:pl-0 border-l-4 border-amber-500 print:border-l-0"><h2 className="text-lg font-semibold text-stone-800 print:text-sm print:font-bold print:uppercase print:border-b-2 print:border-stone-800 print:pb-1">{catSushi.nome}</h2></td></tr>
             {produtosSushi.map((p) => (
               <tr key={p.id}><td className="py-1 print:py-1"><CardItem produto={p} /></td></tr>
             ))}
@@ -205,7 +206,7 @@ export default function CardapioMesa() {
         )}
         {catLanches && produtosLanches.length > 0 && (
           <>
-            <tr className="cardapio-section-row"><td className="pt-4 pb-2 print:pt-4 print:pb-2"><h2 className="text-lg font-semibold text-stone-800 print:text-sm print:font-bold print:uppercase print:border-b-2 print:border-stone-800 print:pb-1">{catLanches.nome}</h2></td></tr>
+            <tr className="cardapio-section-row bg-amber-50/80 print:bg-transparent"><td className="pt-4 pb-2 pl-4 print:pt-4 print:pb-2 print:pl-0 border-l-4 border-amber-500 print:border-l-0"><h2 className="text-lg font-semibold text-stone-800 print:text-sm print:font-bold print:uppercase print:border-b-2 print:border-stone-800 print:pb-1">{catLanches.nome}</h2></td></tr>
             {produtosLanches.map((p) => (
               <tr key={p.id}><td className="py-1 print:py-1"><CardItem produto={p} /></td></tr>
             ))}
@@ -213,7 +214,7 @@ export default function CardapioMesa() {
         )}
         {catBebidas && produtosBebidas.length > 0 && (
           <>
-            <tr className="cardapio-section-row"><td className="pt-4 pb-2 print:pt-4 print:pb-2"><h2 className="text-lg font-semibold text-stone-800 print:text-sm print:font-bold print:uppercase print:border-b-2 print:border-stone-800 print:pb-1">{catBebidas.nome}</h2></td></tr>
+            <tr className="cardapio-section-row bg-amber-50/80 print:bg-transparent"><td className="pt-4 pb-2 pl-4 print:pt-4 print:pb-2 print:pl-0 border-l-4 border-amber-500 print:border-l-0"><h2 className="text-lg font-semibold text-stone-800 print:text-sm print:font-bold print:uppercase print:border-b-2 print:border-stone-800 print:pb-1">{catBebidas.nome}</h2></td></tr>
             {produtosBebidas.map((p) => (
               <tr key={p.id}><td className="py-1 print:py-1"><CardItem produto={p} /></td></tr>
             ))}
@@ -224,7 +225,7 @@ export default function CardapioMesa() {
           if (prods.length === 0) return null;
           return (
             <React.Fragment key={cat.id}>
-              <tr className="cardapio-section-row"><td className="pt-4 pb-2 print:pt-4 print:pb-2"><h2 className="text-lg font-semibold text-stone-800 print:text-sm print:font-bold print:uppercase print:border-b-2 print:border-stone-800 print:pb-1">{cat.nome}</h2></td></tr>
+              <tr className="cardapio-section-row bg-amber-50/80 print:bg-transparent"><td className="pt-4 pb-2 pl-4 print:pt-4 print:pb-2 print:pl-0 border-l-4 border-amber-500 print:border-l-0"><h2 className="text-lg font-semibold text-stone-800 print:text-sm print:font-bold print:uppercase print:border-b-2 print:border-stone-800 print:pb-1">{cat.nome}</h2></td></tr>
               {prods.map((p) => (
                 <tr key={p.id}><td className="py-1 print:py-1"><CardItem produto={p} /></td></tr>
               ))}
@@ -233,7 +234,7 @@ export default function CardapioMesa() {
         })}
         {produtosSemCategoria.length > 0 && (
           <>
-            <tr className="cardapio-section-row"><td className="pt-4 pb-2 print:pt-4 print:pb-2"><h2 className="text-lg font-semibold text-stone-800 print:text-sm print:font-bold print:uppercase print:border-b-2 print:border-stone-800 print:pb-1">Cardápio</h2></td></tr>
+            <tr className="cardapio-section-row bg-amber-50/80 print:bg-transparent"><td className="pt-4 pb-2 pl-4 print:pt-4 print:pb-2 print:pl-0 border-l-4 border-amber-500 print:border-l-0"><h2 className="text-lg font-semibold text-stone-800 print:text-sm print:font-bold print:uppercase print:border-b-2 print:border-stone-800 print:pb-1">Cardápio</h2></td></tr>
             {produtosSemCategoria.map((p) => (
               <tr key={p.id}><td className="py-1 print:py-1"><CardItem produto={p} /></td></tr>
             ))}
@@ -241,6 +242,7 @@ export default function CardapioMesa() {
         )}
         </tbody>
       </table>
+      </div>
       {produtos.length === 0 && <p className="mx-auto max-w-6xl px-4 py-6 text-stone-500">Nenhum produto disponível.</p>}
     </div>
   );
