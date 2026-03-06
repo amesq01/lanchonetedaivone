@@ -59,7 +59,7 @@ export default function AdminProdutos() {
     const temPromocoesCat = !!promocoesId;
     if (promocoesProdutos.length > 0 && !temPromocoesCat) {
       comProdutos.push({
-        categoria: { id: 'promocoes-virtual', nome: 'Promoções' },
+        categoria: { id: 'promocoes-virtual', nome: 'Promoções', ordem: 0, created_at: '' },
         produtos: promocoesProdutos,
       });
     }
