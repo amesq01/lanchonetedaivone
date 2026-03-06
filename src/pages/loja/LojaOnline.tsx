@@ -250,11 +250,11 @@ export default function LojaOnline() {
           </nav>
         </div>
       </header>
-      <main className="mx-auto max-w-4xl px-4 py-6">
+      <main className="mx-auto max-w-4xl px-2 py-4 sm:px-4 sm:py-6">
         {exibirSemCategoria && (
-          <section className="mb-8">
-            <h2 className="mb-4 text-lg font-semibold text-stone-800">Cardápio</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 items-stretch">
+          <section className="mb-4 sm:mb-8">
+            <h2 className="mb-2 sm:mb-4 text-lg font-semibold text-stone-800">Cardápio</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-4 items-stretch">
               {produtosSemCategoria.map((p) => (
                 <CardProduto key={p.id} produto={p} qty={qtyByProd[p.id] ?? 0} onOpenModal={() => openModal(p)} onRemove={() => removeFromCart(p)} />
               ))}
@@ -262,9 +262,9 @@ export default function LojaOnline() {
           </section>
         )}
         {categoriasComProdutos.filter(exibirCategoria).map((cat) => (
-          <section key={cat.id} className="mb-8">
-            <h2 className="mb-4 text-lg font-semibold text-stone-800">{cat.nome}</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 items-stretch">
+          <section key={cat.id} className="mb-4 sm:mb-8">
+            <h2 className="mb-2 sm:mb-4 text-lg font-semibold text-stone-800">{cat.nome}</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-4 items-stretch">
               {byCategoria(cat.id).map((p) => (
                 <CardProduto key={p.id} produto={p} qty={qtyByProd[p.id] ?? 0} onOpenModal={() => openModal(p)} onRemove={() => removeFromCart(p)} />
               ))}
@@ -346,17 +346,17 @@ function ModalProduto({
             <button type="button" onClick={() => onQtyChange(qty + 1)} className="w-9 h-9 rounded-lg border border-stone-300 text-stone-600 hover:bg-stone-50 font-medium">+</button>
           </div>
           <div className="mt-4 flex flex-wrap items-center gap-3">
-            <div className="font-semibold text-amber-600">
+            <div className={emPromo ? 'flex flex-col' : 'font-semibold text-amber-600'}>
               {emPromo ? (
                 <>
-                  <span className="text-stone-400 line-through font-normal mr-1">R$ {Number(produto.valor).toFixed(2)}</span>
-                  <span>R$ {Number(produto.valor_promocional).toFixed(2)}</span>
+                  <span className="text-xs text-stone-500">De: <span className="line-through text-stone-400 font-normal">R$ {Number(produto.valor).toFixed(2)}</span></span>
+                  <span className="text-lg font-semibold text-amber-600">Por: R$ {Number(produto.valor_promocional).toFixed(2)}</span>
                 </>
               ) : (
                 <>R$ {preco.toFixed(2)}</>
               )}
             </div>
-            <button type="button" onClick={(e) => { e.stopPropagation(); onClose(); }} className="flex-1 min-w-[140px] rounded-xl bg-amber-600 py-3 px-4 text-white font-semibold hover:bg-amber-700 flex items-center justify-center gap-2">
+            <button type="button" onClick={(e) => { e.stopPropagation(); onClose(); }} className="flex-1 min-w-[140px] rounded-xl bg-amber-600 py-3 px-3 text-white font-semibold opacity-90 hover:opacity-100 hover:bg-amber-700 flex items-center justify-center gap-1.5 transition-opacity">
               <ShoppingCart className="w-5 h-5" />
               Adicionar ao carrinho
             </button>
@@ -393,14 +393,14 @@ function CardProduto({
       tabIndex={0}
       onClick={onOpenModal}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpenModal(); } }}
-      className="flex h-full min-h-0 flex-row sm:flex-col rounded-2xl border border-stone-100 bg-white p-4 shadow-sm transition hover:shadow-md hover:border-amber-200 cursor-pointer focus:outline-none focus:ring-2 focus:ring-amber-400 focus:ring-offset-2"
+      className="flex h-full min-h-0 flex-row sm:flex-col rounded-2xl border border-stone-100 bg-white p-2 sm:p-4 shadow-sm transition hover:shadow-md hover:border-amber-200 cursor-pointer focus:outline-none focus:ring-2 focus:ring-amber-400 focus:ring-offset-2"
     >
       {/* Imagem: no mobile à esquerda (quadrada), centralizada; no sm+ em cima */}
       <div className="w-28 h-28 flex-shrink-0 self-center sm:self-auto sm:w-full sm:h-auto sm:aspect-square overflow-hidden rounded-xl bg-stone-100 flex items-center justify-center text-stone-400 text-xs sm:text-sm">
         {imagensProduto(produto)[0] ? <img src={imagensProduto(produto)[0]} alt="" className="h-full w-full object-cover object-center" /> : 'Sem imagem'}
       </div>
       {/* Lado direito no mobile: texto + preço + botão */}
-      <div className="flex-1 min-w-0 flex flex-col ml-3 sm:ml-0 sm:mt-3 gap-1 sm:gap-0">
+      <div className="flex-1 min-w-0 flex flex-col ml-2 sm:ml-0 sm:mt-3 gap-1 sm:gap-0">
         <div className="flex min-h-0 flex-1 flex-col gap-1">
           <div className="font-medium text-stone-800 leading-tight line-clamp-2">{produto.nome || produto.descricao}</div>
           {produto.nome && produto.descricao ? <div className="text-sm text-stone-500 leading-tight line-clamp-1">{produto.descricao}</div> : null}
@@ -423,7 +423,7 @@ function CardProduto({
             <div className="text-xs font-medium text-stone-600">{labelAdicionado(quantidade)}</div>
           )}
           <div className="flex items-center gap-2">
-            <button type="button" onClick={(e) => { e.stopPropagation(); onOpenModal(); }} className="flex-1 min-w-0 rounded-lg bg-amber-600 py-2 px-3 text-white font-medium hover:bg-amber-700 flex items-center justify-center gap-1.5" aria-label="Adicionar ao carrinho" title="Adicionar ao carrinho">
+            <button type="button" onClick={(e) => { e.stopPropagation(); onOpenModal(); }} className="flex-1 min-w-0 rounded-lg bg-amber-600 py-2 px-3 text-white font-medium opacity-80 hover:opacity-100 hover:bg-amber-700 flex items-center justify-center gap-1.5 transition-opacity" aria-label="Adicionar ao carrinho" title="Adicionar ao carrinho">
               <span>Adicionar ao</span>
               <ShoppingCart className="w-5 h-5 flex-shrink-0" />
             </button>
