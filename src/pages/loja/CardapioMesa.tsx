@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { Printer, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Printer, X } from 'lucide-react';
 import { getProdutos, getCategorias } from '../../lib/api';
 import type { ProdutoWithCategorias } from '../../types/database';
 import type { Categoria } from '../../types/database';
-import { precoVenda } from '../../types/database';
+import { precoVenda, imagensProduto } from '../../types/database';
 
 function CardapioLoading() {
   return (
@@ -34,6 +34,11 @@ function produtosDaCategoria(produtos: ProdutoWithCategorias[], categoriaId: str
 function ModalProdutoCardapio({ produto, onClose }: { produto: ProdutoWithCategorias; onClose: () => void }) {
   const valor = precoVenda(produto);
   const emPromo = produto.em_promocao && produto.valor_promocional != null && Number(produto.valor_promocional) > 0;
+  const fotos = imagensProduto(produto);
+  const [idx, setIdx] = useState(0);
+  const indice = Math.min(idx, Math.max(0, fotos.length - 1));
+  const urlAtual = fotos[indice];
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 print:hidden" onClick={onClose} role="dialog" aria-modal="true" aria-labelledby="modal-cardapio-titulo">
       <div className="bg-white rounded-2xl shadow-xl max-w-[420px] w-full max-h-[90vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
@@ -41,8 +46,19 @@ function ModalProdutoCardapio({ produto, onClose }: { produto: ProdutoWithCatego
           <button type="button" onClick={onClose} className="absolute top-3 right-3 z-10 w-10 h-10 rounded-full bg-white/90 hover:bg-white shadow flex items-center justify-center text-stone-600 hover:text-stone-800" aria-label="Fechar">
             <X className="w-5 h-5" />
           </button>
-          <div className="aspect-square w-full max-h-72 bg-stone-100 flex items-center justify-center text-stone-400 overflow-hidden">
-            {produto.imagem_url ? <img src={produto.imagem_url} alt="" className="w-full h-full object-contain object-center" /> : 'Sem imagem'}
+          <div className="aspect-square w-full max-h-72 bg-stone-100 flex items-center justify-center text-stone-400 overflow-hidden relative">
+            {urlAtual ? <img src={urlAtual} alt="" className="w-full h-full object-contain object-center" /> : 'Sem imagem'}
+            {fotos.length > 1 && (
+              <>
+                <button type="button" onClick={(e) => { e.stopPropagation(); setIdx((i) => (i - 1 + fotos.length) % fotos.length); }} className="absolute left-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/90 hover:bg-white shadow flex items-center justify-center text-stone-600" aria-label="Imagem anterior"><ChevronLeft className="w-5 h-5" /></button>
+                <button type="button" onClick={(e) => { e.stopPropagation(); setIdx((i) => (i + 1) % fotos.length); }} className="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/90 hover:bg-white shadow flex items-center justify-center text-stone-600" aria-label="Próxima imagem"><ChevronRight className="w-5 h-5" /></button>
+                <div className="absolute bottom-2 left-0 right-0 flex justify-center gap-1.5">
+                  {fotos.map((_, i) => (
+                    <button key={i} type="button" onClick={(e) => { e.stopPropagation(); setIdx(i); }} className={`w-2 h-2 rounded-full transition ${i === indice ? 'bg-amber-500 scale-110' : 'bg-white/80 hover:bg-white'}`} aria-label={`Ver imagem ${i + 1}`} />
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         </div>
         <div className="p-5 overflow-y-auto flex-1">
@@ -88,9 +104,9 @@ function CardItem({ produto, onClick }: { produto: ProdutoWithCategorias; onClic
     >
       <div className="flex gap-2 sm:gap-4 print:gap-3 min-w-0">
         <div className="cardapio-item-img h-20 w-20 sm:h-24 sm:w-24 flex-shrink-0 self-center overflow-hidden rounded-lg bg-stone-100 print:h-20 print:w-20 print:rounded">
-          {produto.imagem_url ? (
+          {imagensProduto(produto)[0] ? (
             <img
-              src={produto.imagem_url}
+              src={imagensProduto(produto)[0]}
               alt=""
               className="h-full w-full object-cover print:object-cover"
               loading="eager"

@@ -91,6 +91,7 @@ export interface Database {
           quantidade: number;
           ativo: boolean;
           imagem_url: string | null;
+          imagens: string[] | null;
           vai_para_cozinha: boolean;
           categoria_id: string | null;
           em_promocao: boolean;
@@ -206,6 +207,14 @@ export function precoVenda(produto: Pick<Produto, 'valor' | 'em_promocao' | 'val
     return Number(produto.valor_promocional);
   }
   return Number(produto.valor);
+}
+
+/** Lista de URLs de imagens do produto: imagens se houver, senão [imagem_url] se existir. */
+export function imagensProduto(produto: Pick<Produto, 'imagem_url' | 'imagens'>): string[] {
+  const arr = produto.imagens && Array.isArray(produto.imagens) ? produto.imagens : [];
+  if (arr.length > 0) return arr;
+  if (produto.imagem_url) return [produto.imagem_url];
+  return [];
 }
 export type Pedido = Database['public']['Tables']['pedidos']['Row'];
 export type PedidoItem = Database['public']['Tables']['pedido_itens']['Row'];

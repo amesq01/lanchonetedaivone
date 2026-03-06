@@ -5,6 +5,7 @@ import { Plus } from 'lucide-react';
 import { getProdutos, createPedidoViagem } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
 import type { Produto } from '../../types/database';
+import { imagensProduto } from '../../types/database';
 
 type ItemCarrinho = { produto: Produto; quantidade: number; observacao: string };
 
@@ -111,7 +112,7 @@ export default function AtendenteViagemNovo() {
             {filtrados.map((p) => (
               <button key={p.id} type="button" onClick={() => addItem(p)} className="flex w-full min-h-[3.25rem] items-center gap-2 px-3 py-2.5 text-left hover:bg-stone-50 border-b border-stone-100 last:border-0">
                 <div className="w-10 h-10 flex-shrink-0 rounded-lg bg-stone-100 overflow-hidden flex items-center justify-center">
-                  {p.imagem_url ? <img src={p.imagem_url} alt="" className="w-full h-full object-cover" /> : <span className="text-stone-400 text-xs">IMG</span>}
+                  {imagensProduto(p)[0] ? <img src={imagensProduto(p)[0]} alt="" className="w-full h-full object-cover" /> : <span className="text-stone-400 text-xs">IMG</span>}
                 </div>
                 <div className="flex-1 min-w-0 flex flex-col sm:flex-row sm:items-center sm:gap-2">
                   <span className="text-sm font-medium text-stone-500">{p.codigo}</span>
@@ -134,7 +135,7 @@ export default function AtendenteViagemNovo() {
             {carrinho.map((item, i) => (
               <li key={i} className="flex flex-wrap items-center gap-2 p-3">
                 <div className="w-12 h-12 rounded-lg bg-stone-100 flex-shrink-0 overflow-hidden flex items-center justify-center">
-                  {item.produto.imagem_url ? <img src={item.produto.imagem_url} alt="" className="w-full h-full object-cover" /> : <span className="text-stone-400 text-xs">IMG</span>}
+                  {imagensProduto(item.produto)[0] ? <img src={imagensProduto(item.produto)[0]} alt="" className="w-full h-full object-cover" /> : <span className="text-stone-400 text-xs">IMG</span>}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="font-medium text-stone-800">{item.produto.codigo} - {item.produto.nome || item.produto.descricao}</div>

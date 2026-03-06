@@ -1,10 +1,10 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { ShoppingCart, Trash2, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ShoppingCart, Trash2, X } from 'lucide-react';
 import { getProdutos, getCategorias, getLanchoneteAberta } from '../../lib/api';
 import type { ProdutoWithCategorias } from '../../types/database';
 import type { Categoria } from '../../types/database';
-import { precoVenda } from '../../types/database';
+import { precoVenda, imagensProduto } from '../../types/database';
 import { getCart, type SavedItem } from './Carrinho';
 
 const CART_KEY = 'lanchonete_cart';
@@ -303,6 +303,10 @@ function ModalProduto({
   const preco = precoVenda(produto);
   const emPromo = produto.em_promocao && produto.valor_promocional != null && Number(produto.valor_promocional) > 0;
   const qty = Math.max(0, qtyInCart);
+  const fotos = imagensProduto(produto);
+  const [idx, setIdx] = useState(0);
+  const indice = Math.min(idx, Math.max(0, fotos.length - 1));
+  const urlAtual = fotos[indice];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={onClose} role="dialog" aria-modal="true" aria-labelledby="modal-produto-titulo">
@@ -311,8 +315,19 @@ function ModalProduto({
           <button type="button" onClick={onClose} className="absolute top-3 right-3 z-10 w-10 h-10 rounded-full bg-white/90 hover:bg-white shadow flex items-center justify-center text-stone-600 hover:text-stone-800" aria-label="Fechar">
             <X className="w-5 h-5" />
           </button>
-          <div className="aspect-square w-full max-h-72 bg-stone-100 flex items-center justify-center text-stone-400 overflow-hidden">
-            {produto.imagem_url ? <img src={produto.imagem_url} alt="" className="w-full h-full object-contain object-center" /> : 'Sem imagem'}
+          <div className="aspect-square w-full max-h-72 bg-stone-100 flex items-center justify-center text-stone-400 overflow-hidden relative">
+            {urlAtual ? <img src={urlAtual} alt="" className="w-full h-full object-contain object-center" /> : 'Sem imagem'}
+            {fotos.length > 1 && (
+              <>
+                <button type="button" onClick={(e) => { e.stopPropagation(); setIdx((i) => (i - 1 + fotos.length) % fotos.length); }} className="absolute left-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/90 hover:bg-white shadow flex items-center justify-center text-stone-600" aria-label="Imagem anterior"><ChevronLeft className="w-5 h-5" /></button>
+                <button type="button" onClick={(e) => { e.stopPropagation(); setIdx((i) => (i + 1) % fotos.length); }} className="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/90 hover:bg-white shadow flex items-center justify-center text-stone-600" aria-label="Próxima imagem"><ChevronRight className="w-5 h-5" /></button>
+                <div className="absolute bottom-2 left-0 right-0 flex justify-center gap-1.5">
+                  {fotos.map((_, i) => (
+                    <button key={i} type="button" onClick={(e) => { e.stopPropagation(); setIdx(i); }} className={`w-2 h-2 rounded-full transition ${i === indice ? 'bg-amber-500 scale-110' : 'bg-white/80 hover:bg-white'}`} aria-label={`Ver imagem ${i + 1}`} />
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         </div>
         <div className="p-5 overflow-y-auto flex-1">
@@ -382,7 +397,7 @@ function CardProduto({
     >
       {/* Imagem: no mobile à esquerda (quadrada), centralizada; no sm+ em cima */}
       <div className="w-28 h-28 flex-shrink-0 self-center sm:self-auto sm:w-full sm:h-auto sm:aspect-square overflow-hidden rounded-xl bg-stone-100 flex items-center justify-center text-stone-400 text-xs sm:text-sm">
-        {produto.imagem_url ? <img src={produto.imagem_url} alt="" className="h-full w-full object-cover object-center" /> : 'Sem imagem'}
+        {imagensProduto(produto)[0] ? <img src={imagensProduto(produto)[0]} alt="" className="h-full w-full object-cover object-center" /> : 'Sem imagem'}
       </div>
       {/* Lado direito no mobile: texto + preço + botão */}
       <div className="flex-1 min-w-0 flex flex-col ml-3 sm:ml-0 sm:mt-3 gap-1 sm:gap-0">

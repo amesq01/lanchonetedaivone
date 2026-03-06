@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { Trash2 } from 'lucide-react';
 import { getConfig, getProdutos, validarCupom, getLanchoneteAberta } from '../../lib/api';
 import type { Produto } from '../../types/database';
-import { precoVenda } from '../../types/database';
+import { precoVenda, imagensProduto } from '../../types/database';
 
 type Item = { produto: Produto; quantidade: number; observacao: string };
 
@@ -177,7 +177,7 @@ export default function LojaCarrinho() {
               {itens.map((item, i) => (
                 <li key={i} className="flex gap-4 rounded-xl bg-white p-4 shadow-sm border border-stone-100">
                   <div className="w-16 h-16 rounded-lg bg-stone-100 flex-shrink-0 flex items-center justify-center text-stone-400 text-xs">
-                    {item.produto.imagem_url ? <img src={item.produto.imagem_url} alt="" className="rounded-lg w-full h-full object-cover" /> : 'IMG'}
+                    {imagensProduto(item.produto)[0] ? <img src={imagensProduto(item.produto)[0]} alt="" className="rounded-lg w-full h-full object-cover" /> : 'IMG'}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="font-medium text-stone-800">{item.produto.descricao}</div>

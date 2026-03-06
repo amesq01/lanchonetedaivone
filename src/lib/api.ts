@@ -180,14 +180,19 @@ export async function saveProduto(payload: {
   quantidade: number;
   ativo: boolean;
   imagem_url: string | null;
+  imagens?: string[];
   vai_para_cozinha: boolean;
   em_promocao: boolean;
   valor_promocional: number | null;
   categoria_ids: string[];
 }) {
   const { categoria_ids, ...prod } = payload;
+  const imagens = prod.imagens ?? [];
+  const imagem_url = imagens.length > 0 ? imagens[0] : (prod.imagem_url ?? null);
   const row = {
     ...prod,
+    imagens: imagens.length ? imagens : null,
+    imagem_url,
     updated_at: new Date().toISOString(),
   };
   let produtoId: string;

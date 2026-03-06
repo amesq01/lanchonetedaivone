@@ -3,6 +3,7 @@ import { ChevronDown, ChevronRight, Search } from 'lucide-react';
 import { getCategorias, getProdutos, saveProduto } from '../../lib/api';
 import type { ProdutoWithCategorias } from '../../types/database';
 import type { Categoria } from '../../types/database';
+import { imagensProduto } from '../../types/database';
 
 function getCategoriaIds(p: ProdutoWithCategorias): string[] {
   const ids = (p.produto_categorias ?? []).map((pc) => pc.categoria_id);
@@ -30,7 +31,7 @@ export default function AdminProdutos() {
   const [ativo, setAtivo] = useState(true);
   const [vaiParaCozinha, setVaiParaCozinha] = useState(true);
   const [categoriaIds, setCategoriaIds] = useState<string[]>([]);
-  const [imagemUrl, setImagemUrl] = useState('');
+  const [imagens, setImagens] = useState<string[]>([]);
   const [emPromocao, setEmPromocao] = useState(false);
   const [valorPromocional, setValorPromocional] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -116,7 +117,7 @@ export default function AdminProdutos() {
       setAtivo(prod.ativo);
       setVaiParaCozinha(prod.vai_para_cozinha !== false);
       setCategoriaIds((prod.produto_categorias ?? []).map((pc) => pc.categoria_id));
-      setImagemUrl(prod.imagem_url ?? '');
+      setImagens(imagensProduto(prod));
       setEmPromocao(prod.em_promocao === true);
       setValorPromocional(prod.valor_promocional != null ? String(prod.valor_promocional) : '');
     } else {
@@ -131,7 +132,7 @@ export default function AdminProdutos() {
       setAtivo(true);
       setVaiParaCozinha(true);
       setCategoriaIds([]);
-      setImagemUrl('');
+      setImagens([]);
       setEmPromocao(false);
       setValorPromocional('');
     }
@@ -152,7 +153,8 @@ export default function AdminProdutos() {
         valor: Number(valor),
         quantidade,
         ativo,
-        imagem_url: imagemUrl.trim() || null,
+        imagem_url: imagens.length > 0 ? imagens[0].trim() || null : null,
+        imagens: imagens.map((u) => u.trim()).filter(Boolean),
         vai_para_cozinha: vaiParaCozinha,
         em_promocao: emPromocao,
         valor_promocional: emPromocao && valorPromocional.trim() ? Number(valorPromocional) : null,
@@ -243,7 +245,7 @@ export default function AdminProdutos() {
                           </td>
                           <td className="px-4 py-2 text-sm">{p.ativo ? 'Sim' : 'Não'}</td>
                           <td className="px-4 py-2">
-                            {p.imagem_url ? <img src={p.imagem_url} alt="" className="w-8 h-8 rounded object-cover" /> : <span className="text-stone-400 text-xs">—</span>}
+                            {(imagensProduto(p)[0]) ? <img src={imagensProduto(p)[0]} alt="" className="w-8 h-8 rounded object-cover" /> : <span className="text-stone-400 text-xs">—</span>}
                           </td>
                           <td className="px-4 py-2">
                             <button onClick={() => openForm(p)} className="text-amber-600 hover:underline text-sm">Editar</button>
@@ -296,7 +298,7 @@ export default function AdminProdutos() {
                         </td>
                         <td className="px-4 py-2 text-sm">{p.ativo ? 'Sim' : 'Não'}</td>
                         <td className="px-4 py-2">
-                          {p.imagem_url ? <img src={p.imagem_url} alt="" className="w-8 h-8 rounded object-cover" /> : <span className="text-stone-400 text-xs">—</span>}
+                          {(imagensProduto(p)[0]) ? <img src={imagensProduto(p)[0]} alt="" className="w-8 h-8 rounded object-cover" /> : <span className="text-stone-400 text-xs">—</span>}
                         </td>
                         <td className="px-4 py-2">
                           <button onClick={() => openForm(p)} className="text-amber-600 hover:underline text-sm">Editar</button>
@@ -361,9 +363,26 @@ export default function AdminProdutos() {
                 <input type="number" min="0" value={quantidade} onChange={(e) => setQuantidade(Number(e.target.value))} className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-stone-600">URL da foto do produto</label>
-                <input type="url" value={imagemUrl} onChange={(e) => setImagemUrl(e.target.value)} className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2" placeholder="https://..." />
-                {imagemUrl && <img src={imagemUrl} alt="Preview" className="mt-2 w-20 h-20 rounded object-cover border border-stone-200" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />}
+                <label className="block text-sm font-medium text-stone-600">Fotos do produto (URLs)</label>
+                <p className="text-xs text-stone-500 mt-0.5">Adicione quantas imagens quiser; a primeira será a miniatura.</p>
+                <div className="mt-2 space-y-2">
+                  {imagens.map((url, i) => (
+                    <div key={i} className="flex gap-2 items-start">
+                      <input type="url" value={url} onChange={(e) => setImagens((prev) => { const n = [...prev]; n[i] = e.target.value; return n; })} className="flex-1 rounded-lg border border-stone-300 px-3 py-2 text-sm" placeholder="https://..." />
+                      <button type="button" onClick={() => setImagens((prev) => prev.filter((_, j) => j !== i))} className="rounded-lg border border-red-200 px-2 py-2 text-red-600 hover:bg-red-50 text-sm shrink-0" title="Remover">Remover</button>
+                    </div>
+                  ))}
+                  <button type="button" onClick={() => setImagens((prev) => [...prev, ''])} className="rounded-lg border border-dashed border-stone-300 px-3 py-2 text-sm text-stone-600 hover:bg-stone-50">
+                    + Adicionar outra imagem
+                  </button>
+                </div>
+                {imagens.some((u) => u.trim()) && (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {imagens.filter((u) => u.trim()).map((u, i) => (
+                      <img key={i} src={u} alt="" className="w-16 h-16 rounded object-cover border border-stone-200" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                    ))}
+                  </div>
+                )}
               </div>
               <div className="flex items-center gap-2">
                 <input type="checkbox" id="ativo" checked={ativo} onChange={(e) => setAtivo(e.target.checked)} className="rounded border-stone-300" />
