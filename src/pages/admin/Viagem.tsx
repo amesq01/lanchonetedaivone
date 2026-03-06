@@ -87,7 +87,7 @@ export default function AdminViagem() {
     load();
   };
 
-  const formas = ['dinheiro', 'pix', 'cartão crédito', 'cartão débito'];
+  const formas = ['dinheiro', 'pix', 'cartão de crédito', 'cartão de débito'];
 
   const comandaAberta = (p: any) => (Array.isArray(p.comandas) ? p.comandas[0]?.aberta : p.comandas?.aberta) !== false;
   const emPreparacao = pedidos.filter((p) => p.status !== 'finalizado');
