@@ -316,7 +316,7 @@ export default function CardapioMesa() {
       <table className="cardapio-print-table w-full max-w-6xl mx-auto border-collapse table-fixed sm:table-auto">
         <thead className="hidden print:table-header-group">
           <tr>
-            <td className="print:py-3 print:border-b-2 print:border-stone-800 print:text-center print:align-top">
+            <td className="print:py-3 print:text-center print:align-top">
               <h1 className="text-2xl font-bold text-stone-800 print:text-lg print:font-bold">Lanchonete Terra e Mar</h1>
               <p className="text-sm text-stone-500 print:text-xs print:mt-0.5">Cardápio da mesa</p>
             </td>
