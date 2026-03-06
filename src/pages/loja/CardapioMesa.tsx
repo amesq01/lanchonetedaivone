@@ -87,7 +87,7 @@ function CardItem({ produto, onClick }: { produto: ProdutoWithCategorias; onClic
       className={`cardapio-item rounded-xl border border-stone-200 bg-white p-1.5 sm:p-2 shadow-sm print:shadow-none print:border-stone-300 print:p-3 w-full min-w-0 ${isClickable ? 'cursor-pointer hover:border-amber-200 hover:shadow-md transition print:cursor-default' : ''}`}
     >
       <div className="flex gap-2 sm:gap-4 print:gap-3 min-w-0">
-        <div className="cardapio-item-img h-16 w-16 sm:h-24 sm:w-24 flex-shrink-0 self-center overflow-hidden rounded-lg bg-stone-100 print:h-20 print:w-20 print:rounded">
+        <div className="cardapio-item-img h-20 w-20 sm:h-24 sm:w-24 flex-shrink-0 self-center overflow-hidden rounded-lg bg-stone-100 print:h-20 print:w-20 print:rounded">
           {produto.imagem_url ? (
             <img
               src={produto.imagem_url}
@@ -101,9 +101,9 @@ function CardItem({ produto, onClick }: { produto: ProdutoWithCategorias; onClic
         </div>
         <div className="min-w-0 flex-1 overflow-hidden">
           <span className="block text-xs text-stone-500 print:text-[10px] truncate">Cód: #{produto.codigo}</span>
-          <h3 className="mt-0.5 font-semibold text-stone-800 print:text-sm print:font-bold truncate">{produto.nome || produto.descricao}</h3>
-          {produto.nome && produto.descricao && <p className="mt-0.5 text-sm text-stone-600 print:text-xs print:mt-0 truncate">{produto.descricao}</p>}
-          <div className="mt-1 font-semibold text-amber-600 print:text-sm truncate sm:hidden">
+          <h3 className="font-semibold text-stone-800 print:text-sm print:font-bold truncate">{produto.nome || produto.descricao}</h3>
+          {produto.nome && produto.descricao && <p className="text-sm text-stone-600 print:text-xs truncate">{produto.descricao}</p>}
+          <div className="font-semibold text-amber-600 print:text-sm truncate sm:hidden">
             {emPromo ? (
               <>
                 <span className="text-stone-400 line-through font-normal mr-1">R$ {Number(produto.valor).toFixed(2)}</span>
@@ -114,12 +114,12 @@ function CardItem({ produto, onClick }: { produto: ProdutoWithCategorias; onClic
             )}
           </div>
           {produto.ingredientes && (
-            <p className="mt-3 text-xs text-stone-500 print:mt-1 print:text-[10px] hidden sm:block print:block">
+            <p className="text-xs text-stone-500 print:text-[10px] hidden sm:block print:block">
               <span className="font-medium text-stone-600">Ingredientes:</span> {produto.ingredientes}
             </p>
           )}
           {produto.acompanhamentos && (
-            <p className="mt-1 text-xs text-stone-500 print:text-[10px] hidden sm:block print:block">
+            <p className="text-xs text-stone-500 print:text-[10px] hidden sm:block print:block">
               <span className="font-medium text-stone-600">Acompanhamentos:</span> {produto.acompanhamentos}
             </p>
           )}
