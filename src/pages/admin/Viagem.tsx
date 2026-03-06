@@ -61,7 +61,7 @@ export default function AdminViagem() {
       await clearDescontoComanda(popupImprimir.comanda_id);
     }
     setPopupImprimir(null);
-    printContaViagem({
+    await printContaViagem({
       pedidoNumero: popupImprimir.numero,
       clienteNome: popupImprimir.cliente_nome || (popupImprimir.comandas as any)?.nome_cliente || '-',
       itens: contaParaPrint.itens,

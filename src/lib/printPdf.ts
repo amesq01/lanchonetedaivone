@@ -1,5 +1,12 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import QRCode from 'qrcode';
+
+/** Código PIX Copia e Cola (EMV) */
+const PIX_CODIGO =
+  '00020101021126810014BR.GOV.BCB.PIX2559pix-qr.mercadopago.com/instore/ol/v2/3Z8a9lIADOTW2ZtS0GvMcl5204000053039865802BR5914Ivone Mesquita6009SAO PAULO62080504mpis630437A0';
+const PIX_NOME = 'Ivone Pereira Mesquita';
+const QR_SIZE_MM = 40;
 
 const PAPER_WIDTH_MM = 80;
 const MARGIN_MM = 1;
@@ -18,6 +25,20 @@ function createDoc(): jsPDF {
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(...BLACK);
   return doc;
+}
+
+/** Gera QR code PIX a partir do código e adiciona nome da titular abaixo. Retorna o y final. */
+async function addPixQrCode(doc: jsPDF, y: number): Promise<number> {
+  const dataUrl = await QRCode.toDataURL(PIX_CODIGO, { width: 400, margin: 1 });
+  const qrX = (PAPER_WIDTH_MM - QR_SIZE_MM) / 2;
+  doc.addImage(dataUrl, 'PNG', qrX, y, QR_SIZE_MM, QR_SIZE_MM);
+  y += QR_SIZE_MM + 4;
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(...BLACK);
+  doc.text(PIX_NOME, PAPER_WIDTH_MM / 2, y, { align: 'center' });
+  y += 8;
+  return y;
 }
 
 function addFooter(doc: jsPDF, y: number) {
@@ -106,7 +127,7 @@ function addTotaisSection(
 }
 
 /** Conta da mesa (presencial). */
-export function printContaMesa(opts: {
+export async function printContaMesa(opts: {
   titulo: string;
   clienteNome?: string;
   clienteTelefone?: string;
@@ -163,12 +184,13 @@ export function printContaMesa(opts: {
   if (opts.valorCupom > 0 && opts.cupomCodigo) linhasMesa.push({ label: `Desconto cupom (${opts.cupomCodigo}):`, valor: `- R$ ${opts.valorCupom.toFixed(2)}` });
   if (opts.valorManual > 0) linhasMesa.push({ label: 'Desconto:', valor: `- R$ ${opts.valorManual.toFixed(2)}` });
   y = addTotaisSection(doc, y, opts.subtotal, opts.total, linhasMesa);
+  y = await addPixQrCode(doc, y);
   addFooter(doc, y);
   openAndPrint(doc);
 }
 
 /** Conta do pedido viagem. */
-export function printContaViagem(opts: {
+export async function printContaViagem(opts: {
   pedidoNumero: number;
   clienteNome: string;
   clienteTelefone?: string;
@@ -222,6 +244,7 @@ export function printContaViagem(opts: {
   if (opts.valorCupom > 0 && opts.cupomCodigo) linhasViagem.push({ label: `Desconto cupom (${opts.cupomCodigo}):`, valor: `- R$ ${opts.valorCupom.toFixed(2)}` });
   if (opts.valorManual > 0) linhasViagem.push({ label: 'Desconto:', valor: `- R$ ${opts.valorManual.toFixed(2)}` });
   y = addTotaisSection(doc, y, opts.subtotal, opts.total, linhasViagem);
+  y = await addPixQrCode(doc, y);
   addFooter(doc, y);
   openAndPrint(doc);
 }

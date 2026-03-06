@@ -93,7 +93,7 @@ export default function AdminMesaDetail() {
             return Array.from(map.values());
           })()
       : [];
-    printContaMesa({
+    await printContaMesa({
       titulo,
       clienteNome: isMesaViagem ? undefined : (comanda.nome_cliente || undefined),
       itens,
