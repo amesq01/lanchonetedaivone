@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Plus, ChevronDown, ChevronUp } from 'lucide-react';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 import { getMesas, getComandaByMesa, getProdutos, createPedidoPresencial, getPedidosByComanda, getPedidoStatus, updatePedidoStatus, closeComanda } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
 import type { Produto } from '../../types/database';
-import { imagensProduto } from '../../types/database';
+import { imagensProduto, precoVenda } from '../../types/database';
 
 type ItemCarrinho = { produto: Produto; quantidade: number; observacao: string };
 
@@ -133,7 +133,7 @@ export default function AtendenteMesaDetail() {
       const itens = carrinho.map((i) => ({
         produto_id: i.produto.id,
         quantidade: i.quantidade,
-        valor_unitario: Number(i.produto.valor),
+        valor_unitario: precoVenda(i.produto),
         observacao: i.observacao || undefined,
       }));
       await createPedidoPresencial(comandaId, itens);
@@ -232,14 +232,14 @@ export default function AtendenteMesaDetail() {
         )}
       </div>
 
-      <div className="relative flex gap-2 mb-4">
+      <div className="relative mb-4">
             <input
               ref={inputRef}
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Buscar por nome ou código..."
-              className="flex-1 rounded-lg border border-stone-300 px-3 py-2"
+              className="w-full rounded-lg border border-stone-300 px-3 py-2"
             />
             {s && filtrados.length > 0 && dropdownRect && createPortal(
               <div
@@ -252,18 +252,24 @@ export default function AtendenteMesaDetail() {
                       {imagensProduto(p)[0] ? <img src={imagensProduto(p)[0]} alt="" className="w-full h-full object-cover" /> : <span className="text-stone-400 text-xs">IMG</span>}
                     </div>
                     <div className="flex-1 min-w-0 flex flex-col sm:flex-row sm:items-center sm:gap-2">
-                      <span className="text-sm font-medium text-stone-500">{p.codigo}</span>
+                      <span className="text-sm font-medium text-stone-500">#{p.codigo}</span>
                       <span className="text-stone-800 truncate text-sm">{p.nome || p.descricao}</span>
                     </div>
-                    <span className="flex-shrink-0 text-amber-600 font-medium text-sm">R$ {Number(p.valor).toFixed(2)}</span>
+                    <div className="flex-shrink-0 text-right text-[10px]">
+                      {p.em_promocao && p.valor_promocional != null && Number(p.valor_promocional) > 0 ? (
+                        <>
+                          <span className="text-stone-500 block">De: <span className="line-through text-stone-400">R$ {Number(p.valor).toFixed(2)}</span></span>
+                          <span className="text-amber-600 font-medium">Por: R$ {Number(p.valor_promocional).toFixed(2)}</span>
+                        </>
+                      ) : (
+                        <span className="text-amber-600 font-medium text-sm">R$ {precoVenda(p).toFixed(2)}</span>
+                      )}
+                    </div>
                   </button>
                 ))}
               </div>,
               document.body
             )}
-            <button type="button" onClick={() => setSearch(search || ' ')} className="rounded-lg bg-amber-600 p-2 text-white hover:bg-amber-700" title="Adicionar item">
-              <Plus className="h-5 w-5" />
-            </button>
           </div>
 
           {carrinho.length > 0 && (
