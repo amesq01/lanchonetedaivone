@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { getMesas, getMesaIdsComComandaAberta, getMesasComComandaAberta, getComandaByMesaComAtendente, openComanda, getPedidosPresencialHoje } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
@@ -16,6 +16,7 @@ const statusLabel: Record<string, string> = {
 export default function AtendenteMesas() {
   const { profile } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [mesas, setMesas] = useState<Mesa[]>([]);
   const [ocupadas, setOcupadas] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
@@ -26,13 +27,29 @@ export default function AtendenteMesas() {
   const [acordaoAberto, setAcordaoAberto] = useState<string | null>(null);
   const [acordaoPedidosAberto, setAcordaoPedidosAberto] = useState(false);
   const [mesaAbertaPor, setMesaAbertaPor] = useState<Record<string, string>>({});
+  const [mesaAtendenteId, setMesaAtendenteId] = useState<Record<string, string>>({});
   const [erroAbrir, setErroAbrir] = useState<string | null>(null);
   const [alertaMesaOcupada, setAlertaMesaOcupada] = useState<{ mesaNome: string; atendente_nome: string } | null>(null);
   const [verificandoMesa, setVerificandoMesa] = useState(false);
+  const [toastMesaOcupada, setToastMesaOcupada] = useState<string | null>(null);
 
   useEffect(() => {
     load();
   }, []);
+
+  useEffect(() => {
+    const nome = (location.state as { mesaOcupadaPorOutro?: string } | null)?.mesaOcupadaPorOutro;
+    if (nome) {
+      setToastMesaOcupada(`Essa mesa foi aberta por ${nome}. Apenas esse atendente pode acessá-la.`);
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+  }, [location.state, location.pathname, navigate]);
+
+  useEffect(() => {
+    if (!toastMesaOcupada) return;
+    const t = setTimeout(() => setToastMesaOcupada(null), 6000);
+    return () => clearTimeout(t);
+  }, [toastMesaOcupada]);
 
   async function load() {
     const [list, ocup, pedidos, abertasComAtendente] = await Promise.all([
@@ -45,8 +62,13 @@ export default function AtendenteMesas() {
     setOcupadas(ocup);
     setPedidosHoje(pedidos);
     const porMesa: Record<string, string> = {};
-    abertasComAtendente.forEach((a) => { porMesa[a.mesa_id] = a.atendente_nome; });
+    const atendenteIdPorMesa: Record<string, string> = {};
+    abertasComAtendente.forEach((a) => {
+      porMesa[a.mesa_id] = a.atendente_nome;
+      atendenteIdPorMesa[a.mesa_id] = a.atendente_id;
+    });
     setMesaAbertaPor(porMesa);
+    setMesaAtendenteId(atendenteIdPorMesa);
     setLoading(false);
   }
 
@@ -98,6 +120,11 @@ export default function AtendenteMesas() {
 
   return (
     <div>
+      {toastMesaOcupada && (
+        <div className="fixed top-4 right-4 z-[80] max-w-sm rounded-xl border border-amber-200 bg-amber-50 p-4 shadow-lg text-amber-800 font-medium">
+          {toastMesaOcupada}
+        </div>
+      )}
       <h1 className="text-xl font-bold text-stone-800 mb-4">Mesas</h1>
       <p className="text-stone-600 mb-4">Toque em uma mesa disponível para abrir.</p>
 
@@ -156,13 +183,23 @@ export default function AtendenteMesas() {
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
         {mesas.map((m) => {
           const aberta = ocupadas.has(m.id);
+          const abertaPorMim = aberta && mesaAtendenteId[m.id] === profile?.id;
           return (
-            <div key={m.id}>
-              {aberta ? (
-                <Link to={`/pdv/mesas/${m.id}`} className="block rounded-xl bg-amber-100 p-4 text-center font-medium text-amber-800 shadow-sm hover:bg-amber-200">
+            <div key={m.id} className="min-w-0">
+              {abertaPorMim ? (
+                <Link to={`/pdv/mesas/${m.id}`} className="block min-w-0 overflow-hidden rounded-xl bg-amber-100 p-4 text-center font-medium text-amber-800 shadow-sm hover:bg-amber-200">
                   {m.nome}
-                  <span className="block text-sm font-normal text-amber-700">Aberta por {mesaAbertaPor[m.id] || 'outro atendente'}</span>
+                  <span className="block min-w-0 truncate text-sm font-normal text-amber-700" title="Aberta por você">Aberta por você</span>
                 </Link>
+              ) : aberta ? (
+                <button
+                  type="button"
+                  onClick={() => setToastMesaOcupada(`Esta mesa está aberta por ${mesaAbertaPor[m.id] || 'outro atendente'}. Apenas esse atendente pode acessá-la.`)}
+                  className="block w-full min-w-0 overflow-hidden rounded-xl bg-amber-100 p-4 text-center font-medium text-amber-800 shadow-sm hover:bg-amber-200"
+                >
+                  {m.nome}
+                  <span className="block min-w-0 truncate text-sm font-normal text-amber-700" title={`Aberta por ${mesaAbertaPor[m.id] || 'outro atendente'}`}>Aberta por {mesaAbertaPor[m.id] || 'outro atendente'}</span>
+                </button>
               ) : (
                 <button type="button" onClick={() => handleClicarMesaDisponivel(m)} disabled={verificandoMesa} className="block w-full rounded-xl bg-white p-4 text-center font-medium text-stone-700 shadow-sm border border-stone-200 hover:border-amber-400 hover:bg-amber-50 disabled:opacity-70">
                   {m.nome}

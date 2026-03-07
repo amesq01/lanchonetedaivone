@@ -82,8 +82,8 @@ export async function getComandaByMesaComAtendente(mesaId: string): Promise<{ co
   return { comanda, atendente_nome: (profile as { nome: string } | null)?.nome ?? '-' };
 }
 
-/** Mesas (presencial) com comanda aberta e nome do atendente que abriu. Exclui mesa viagem. */
-export async function getMesasComComandaAberta(): Promise<{ mesa_id: string; atendente_nome: string }[]> {
+/** Mesas (presencial) com comanda aberta, atendente_id e nome. Exclui mesa viagem. */
+export async function getMesasComComandaAberta(): Promise<{ mesa_id: string; atendente_id: string; atendente_nome: string }[]> {
   const [comandasData, mesasData] = await Promise.all([
     supabase.from('comandas').select('mesa_id, atendente_id').eq('aberta', true),
     getMesas(),
@@ -96,7 +96,7 @@ export async function getMesasComComandaAberta(): Promise<{ mesa_id: string; ate
   const { data: profiles } = await supabase.from('profiles').select('id, nome').in('id', ids);
   const nomes: Record<string, string> = {};
   (profiles ?? []).forEach((r: any) => { nomes[r.id] = r.nome; });
-  return filtradas.map((c) => ({ mesa_id: c.mesa_id, atendente_nome: nomes[c.atendente_id] ?? '-' }));
+  return filtradas.map((c) => ({ mesa_id: c.mesa_id, atendente_id: c.atendente_id, atendente_nome: nomes[c.atendente_id] ?? '-' }));
 }
 
 /** Mesa IDs que têm comanda aberta (uma única requisição em vez de N) */

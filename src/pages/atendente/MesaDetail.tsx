@@ -73,12 +73,16 @@ export default function AtendenteMesaDetail() {
         setLoading(false);
         return;
       }
+      if (r.comanda.atendente_id !== profile?.id) {
+        setLoading(false);
+        navigate('/pdv/mesas', { replace: true, state: { mesaOcupadaPorOutro: r.atendente_nome } });
+        return;
+      }
       setComandaId(r.comanda.id);
       setClienteNome(r.comanda.nome_cliente);
       setAtendenteQueAbriu(r.atendente_nome);
       setComandaInvalidada(false);
-      if (r.comanda.atendente_id !== profile?.id) setMesaAbertaPorOutro({ atendente_nome: r.atendente_nome });
-      else setMesaAbertaPorOutro(null);
+      setMesaAbertaPorOutro(null);
       getPedidosByComanda(r.comanda.id).then(setPedidos);
       setLoading(false);
     });
@@ -229,20 +233,6 @@ export default function AtendenteMesaDetail() {
             type="button"
             onClick={() => navigate('/pdv/mesas')}
             className="rounded-lg bg-amber-600 px-4 py-2 text-white font-medium hover:bg-amber-700"
-          >
-            Voltar às mesas
-          </button>
-        </div>
-      )}
-      {mesaAbertaPorOutro && !comandaInvalidada && (
-        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-4 flex flex-wrap items-center justify-between gap-2">
-          <p className="text-red-800 font-medium">
-            Esta mesa foi aberta por {mesaAbertaPorOutro.atendente_nome}. Apenas esse atendente pode lançar pedidos aqui.
-          </p>
-          <button
-            type="button"
-            onClick={() => navigate('/pdv/mesas')}
-            className="rounded-lg bg-stone-600 px-4 py-2 text-white font-medium hover:bg-stone-700"
           >
             Voltar às mesas
           </button>
