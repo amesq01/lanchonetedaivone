@@ -310,6 +310,34 @@ export async function getPedidosViagemAbertos() {
   return (data ?? []) as any[];
 }
 
+/** Pedidos presencial (mesas) criados na data atual (fuso Brasília). */
+export async function getPedidosPresencialHoje() {
+  const { desde, ate } = hojeBrasiliaUTC();
+  const { data } = await supabase
+    .from('pedidos')
+    .select('*, pedido_itens(*, produtos(*)), comandas(nome_cliente, mesa_id, mesas(numero, nome))')
+    .eq('origem', 'presencial')
+    .neq('status', 'cancelado')
+    .gte('created_at', desde)
+    .lte('created_at', ate)
+    .order('created_at', { ascending: false });
+  return (data ?? []) as any[];
+}
+
+/** Pedidos viagem criados na data atual (fuso Brasília). */
+export async function getPedidosViagemHoje() {
+  const { desde, ate } = hojeBrasiliaUTC();
+  const { data } = await supabase
+    .from('pedidos')
+    .select('*, pedido_itens(*, produtos(*)), comandas(nome_cliente, aberta)')
+    .eq('origem', 'viagem')
+    .neq('status', 'cancelado')
+    .gte('created_at', desde)
+    .lte('created_at', ate)
+    .order('created_at', { ascending: false });
+  return (data ?? []) as any[];
+}
+
 /** Retorna início e fim do dia de hoje em Brasília (America/Sao_Paulo) em ISO UTC. */
 function hojeBrasiliaUTC(): { desde: string; ate: string } {
   const brDateStr = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });

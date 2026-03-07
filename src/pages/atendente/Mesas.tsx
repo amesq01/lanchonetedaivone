@@ -1,8 +1,16 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { getMesas, getMesaIdsComComandaAberta, openComanda } from '../../lib/api';
+import { ChevronDown, ChevronUp } from 'lucide-react';
+import { getMesas, getMesaIdsComComandaAberta, openComanda, getPedidosPresencialHoje } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
 import type { Mesa } from '../../types/database';
+
+const statusLabel: Record<string, string> = {
+  novo_pedido: 'Novo pedido',
+  em_preparacao: 'Em preparação',
+  finalizado: 'Finalizado',
+  cancelado: 'Cancelado',
+};
 
 export default function AtendenteMesas() {
   const { profile } = useAuth();
@@ -13,18 +21,23 @@ export default function AtendenteMesas() {
   const [popup, setPopup] = useState<{ mesa: Mesa } | null>(null);
   const [nomeCliente, setNomeCliente] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [pedidosHoje, setPedidosHoje] = useState<any[]>([]);
+  const [acordaoAberto, setAcordaoAberto] = useState<string | null>(null);
+  const [acordaoPedidosAberto, setAcordaoPedidosAberto] = useState(false);
 
   useEffect(() => {
     load();
   }, []);
 
   async function load() {
-    const [list, ocup] = await Promise.all([
+    const [list, ocup, pedidos] = await Promise.all([
       getMesas(),
       getMesaIdsComComandaAberta(),
+      getPedidosPresencialHoje(),
     ]);
     setMesas(list.filter((m) => !m.is_viagem));
     setOcupadas(ocup);
+    setPedidosHoje(pedidos);
     setLoading(false);
   }
 
@@ -48,6 +61,59 @@ export default function AtendenteMesas() {
     <div>
       <h1 className="text-xl font-bold text-stone-800 mb-4">Mesas</h1>
       <p className="text-stone-600 mb-4">Toque em uma mesa disponível para abrir.</p>
+
+      {/* Accordion: Pedidos de hoje (mesas) */}
+      <div className="mb-6 rounded-xl border border-stone-200 bg-white overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setAcordaoPedidosAberto((a) => !a)}
+          className="flex w-full items-center justify-between p-3 text-left font-medium text-stone-800 hover:bg-stone-50"
+        >
+          <span>Pedidos de hoje (mesas)</span>
+          <span className="text-sm font-normal text-stone-500 mr-2">{pedidosHoje.length} pedido(s)</span>
+          {acordaoPedidosAberto ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+        </button>
+        {acordaoPedidosAberto && (
+          <div className="border-t border-stone-100">
+            {pedidosHoje.length === 0 ? (
+              <p className="p-3 text-sm text-stone-500">Nenhum pedido de mesa hoje.</p>
+            ) : (
+              pedidosHoje.map((p) => {
+                const mesaNome = (p.comandas as any)?.mesas?.nome ?? (p.comandas as any)?.mesas?.numero != null ? `Mesa ${(p.comandas as any).mesas.numero}` : '-';
+                const cliente = (p.comandas as any)?.nome_cliente ?? '-';
+                const expandido = acordaoAberto === p.id;
+                return (
+                  <div key={p.id} className="border-t border-stone-100 first:border-t-0">
+                    <button
+                      type="button"
+                      onClick={() => setAcordaoAberto(expandido ? null : p.id)}
+                      className="flex w-full items-center justify-between p-3 text-left text-sm hover:bg-stone-50"
+                    >
+                      <span className="font-medium text-stone-800">Pedido #{p.numero}</span>
+                      <span className="text-stone-500 text-xs mr-2">{mesaNome} · {cliente}</span>
+                      <span className="text-xs px-2 py-0.5 rounded bg-stone-100 text-stone-600">{statusLabel[p.status] ?? p.status}</span>
+                      {expandido ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                    </button>
+                    {expandido && (
+                      <div className="px-3 pb-3 pt-0 text-sm text-stone-600 border-t border-stone-100 bg-stone-50/50">
+                        <ul className="list-disc list-inside">
+                          {(p.pedido_itens ?? []).map((i: any) => (
+                            <li key={i.id}>{i.quantidade}x {i.produtos?.nome || i.produtos?.descricao}{i.observacao ? ` (${i.observacao})` : ''}</li>
+                          ))}
+                        </ul>
+                        <p className="mt-2 text-xs text-stone-500">
+                          {p.created_at ? new Date(p.created_at).toLocaleString('pt-BR') : ''}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        )}
+      </div>
+
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
         {mesas.map((m) => {
           const aberta = ocupadas.has(m.id);
