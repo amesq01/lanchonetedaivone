@@ -251,8 +251,67 @@ export async function getComandaAbertaOuErro(comandaId: string) {
   return row;
 }
 
+/** Agrupa itens por produto_id somando quantidade. */
+function agruparItensPorProduto(itens: { produto_id: string; quantidade: number }[]): Record<string, number> {
+  const byId: Record<string, number> = {};
+  for (const i of itens) {
+    byId[i.produto_id] = (byId[i.produto_id] ?? 0) + i.quantidade;
+  }
+  return byId;
+}
+
+/**
+ * Decrementa estoque dos produtos ao lançar pedido.
+ * Se quantidade ficar negativa, lança erro.
+ * Se quantidade chegar a 0, marca produto como inativo (ativo = false).
+ */
+export async function decrementarEstoque(itens: { produto_id: string; quantidade: number }[]) {
+  if (itens.length === 0) return;
+  const porProduto = agruparItensPorProduto(itens);
+  const ids = Object.keys(porProduto);
+  const { data: produtos, error: err } = await supabase.from('produtos').select('id, nome, quantidade').in('id', ids);
+  if (err) throw err;
+  const lista = (produtos ?? []) as { id: string; nome: string | null; quantidade: number }[];
+  const byId: Record<string, { nome: string | null; quantidade: number }> = {};
+  lista.forEach((p) => { byId[p.id] = { nome: p.nome, quantidade: Number(p.quantidade) ?? 0 }; });
+  for (const produtoId of ids) {
+    const atual = byId[produtoId]?.quantidade ?? 0;
+    const pedido = porProduto[produtoId] ?? 0;
+    if (atual < pedido) {
+      const nome = byId[produtoId]?.nome ?? 'Produto';
+      throw new Error(`${nome} sem estoque suficiente. Disponível: ${atual}.`);
+    }
+  }
+  const now = new Date().toISOString();
+  for (const produtoId of ids) {
+    const qty = porProduto[produtoId];
+    const atual = byId[produtoId]?.quantidade ?? 0;
+    const novaQtd = Math.max(0, atual - qty);
+    await (supabase as any).from('produtos').update({ quantidade: novaQtd, ativo: novaQtd > 0, updated_at: now }).eq('id', produtoId);
+  }
+}
+
+/**
+ * Restaura estoque ao cancelar pedido: soma as quantidades dos itens de volta ao produto e reativa (ativo = true) se voltar a ter quantidade.
+ */
+export async function restaurarEstoque(pedidoId: string) {
+  const { data: itens, error } = await supabase.from('pedido_itens').select('produto_id, quantidade').eq('pedido_id', pedidoId);
+  if (error) throw error;
+  if (!itens?.length) return;
+  const porProduto = agruparItensPorProduto(itens as { produto_id: string; quantidade: number }[]);
+  const now = new Date().toISOString();
+  for (const produtoId of Object.keys(porProduto)) {
+    const qty = porProduto[produtoId];
+    const { data: row } = await supabase.from('produtos').select('quantidade').eq('id', produtoId).single();
+    const atual = (row as { quantidade: number } | null) ? Number((row as any).quantidade) : 0;
+    const novaQtd = atual + qty;
+    await (supabase as any).from('produtos').update({ quantidade: novaQtd, ativo: true, updated_at: now }).eq('id', produtoId);
+  }
+}
+
 export async function createPedidoPresencial(comandaId: string, itens: { produto_id: string; quantidade: number; valor_unitario: number; observacao?: string }[]) {
   await getComandaAbertaOuErro(comandaId);
+  await decrementarEstoque(itens);
   const numero = await nextPedidoNumero();
   const { data: pedido, error: e1 } = await (supabase as any).from('pedidos').insert({ numero, comanda_id: comandaId, origem: 'presencial', status: 'novo_pedido' }).select().single();
   if (e1) throw e1;
@@ -262,6 +321,7 @@ export async function createPedidoPresencial(comandaId: string, itens: { produto
 }
 
 export async function createPedidoViagem(nomeCliente: string, atendenteId: string, itens: { produto_id: string; quantidade: number; valor_unitario: number; observacao?: string }[]) {
+  await decrementarEstoque(itens);
   const numero = await nextPedidoNumero();
   const { data: mesaViagem } = await supabase.from('mesas').select('id').eq('is_viagem', true).single();
   if (!mesaViagem) throw new Error('Mesa VIAGEM não encontrada');
@@ -290,6 +350,12 @@ export async function updatePedidoStatus(
   status: 'novo_pedido' | 'em_preparacao' | 'finalizado' | 'cancelado',
   opts?: { motivo_cancelamento?: string; cancelado_por?: string }
 ) {
+  if (status === 'cancelado') {
+    const { data: atual } = await supabase.from('pedidos').select('status').eq('id', pedidoId).single();
+    if ((atual as { status: string } | null)?.status !== 'cancelado') {
+      await restaurarEstoque(pedidoId);
+    }
+  }
   const now = new Date().toISOString();
   const payload: Record<string, unknown> = { status, updated_at: now };
   if (status === 'finalizado') {
@@ -440,6 +506,7 @@ export async function createPedidoOnline(payload: {
 }) {
   const { allowed, message } = await canPlaceOrderOnline();
   if (!allowed) throw new Error(message ?? 'A lanchonete está fechada para pedidos online.');
+  await decrementarEstoque(payload.itens);
   const tipoEntrega = payload.tipo_entrega ?? 'entrega';
   const taxa = tipoEntrega === 'retirada' ? 0 : await getConfig('taxa_entrega');
   const numero = await nextPedidoNumero();
