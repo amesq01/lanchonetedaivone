@@ -356,7 +356,11 @@ function ModalProduto({
                 <>R$ {preco.toFixed(2)}</>
               )}
             </div>
-            <button type="button" onClick={(e) => { e.stopPropagation(); onClose(); }} className="flex-1 min-w-[140px] rounded-xl bg-amber-600 py-3 px-3 text-white font-semibold opacity-90 hover:opacity-100 hover:bg-amber-700 flex items-center justify-center gap-1.5 transition-opacity">
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onClose(); }}
+              className="flex-1 min-w-[140px] rounded-xl bg-amber-600 py-3 px-3 text-white font-semibold opacity-90 hover:opacity-100 hover:bg-amber-700 flex items-center justify-center gap-1.5 transition-opacity"
+            >
               <ShoppingCart className="w-5 h-5" />
               Adicionar ao carrinho
             </button>
@@ -422,14 +426,20 @@ function CardProduto({
           {quantidade > 0 && (
             <div className="text-xs font-medium text-stone-600">{labelAdicionado(quantidade)}</div>
           )}
-          <div className="flex items-center gap-2">
-            <button type="button" onClick={(e) => { e.stopPropagation(); onOpenModal(); }} className="flex-1 min-w-0 rounded-lg bg-amber-600 py-2 px-3 text-white font-medium opacity-80 hover:opacity-100 hover:bg-amber-700 flex items-center justify-center gap-1.5 transition-opacity" aria-label="Adicionar ao carrinho" title="Adicionar ao carrinho">
-              <span>Adicionar ao</span>
-              <ShoppingCart className="w-5 h-5 flex-shrink-0" />
+          <div className="flex items-center gap-2 min-w-0 max-sm:justify-end">
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onOpenModal(); }}
+              className="flex-1 min-w-0 rounded-lg bg-amber-600 py-2 px-3 text-white font-medium opacity-80 hover:opacity-100 hover:bg-amber-700 flex items-center justify-center gap-1.5 transition-opacity max-sm:flex-none max-sm:w-[208px] max-sm:min-w-0 max-sm:h-[44px] max-sm:bg-[#f57c00] max-sm:hover:bg-[#e66d00] max-sm:text-[12px] max-sm:font-semibold max-sm:py-2 max-sm:px-3 max-sm:gap-1.5 max-sm:justify-end max-sm:rounded-none max-sm:[clip-path:path('M0,44_C10,44_20,43.5_30,42_C42,39_56,33_72,24_C92,12_118,5_156,4_L208,4_L208,44_Z')]"
+              aria-label="Adicionar ao carrinho"
+              title="Adicionar ao carrinho"
+            >
+              <span className="truncate">Adicionar ao</span>
+              <ShoppingCart className="w-4 h-4 flex-shrink-0 max-sm:w-3.5 max-sm:h-3.5" />
             </button>
             {quantidade > 0 && (
-              <button type="button" onClick={(e) => { e.stopPropagation(); onRemove(); }} className="flex-shrink-0 w-9 h-9 rounded-lg border border-red-300 text-red-600 hover:bg-red-50 flex items-center justify-center" aria-label="Retirar do carrinho" title="Retirar do carrinho">
-                <Trash2 className="w-4 h-4" />
+              <button type="button" onClick={(e) => { e.stopPropagation(); onRemove(); }} className="flex-shrink-0 w-9 h-9 max-sm:w-8 max-sm:h-8 rounded-lg border border-red-300 text-red-600 hover:bg-red-50 flex items-center justify-center" aria-label="Retirar do carrinho" title="Retirar do carrinho">
+                <Trash2 className="w-4 h-4 max-sm:w-3.5 max-sm:h-3.5" />
               </button>
             )}
           </div>
