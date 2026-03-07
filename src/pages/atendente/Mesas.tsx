@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, useNavigate } from 'react-router-dom';
 import { ChevronDown, ChevronUp } from 'lucide-react';
-import { getMesas, getMesaIdsComComandaAberta, openComanda, getPedidosPresencialHoje } from '../../lib/api';
+import { getMesas, getMesaIdsComComandaAberta, getMesasComComandaAberta, getComandaByMesaComAtendente, openComanda, getPedidosPresencialHoje } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
 import type { Mesa } from '../../types/database';
 
@@ -24,28 +25,43 @@ export default function AtendenteMesas() {
   const [pedidosHoje, setPedidosHoje] = useState<any[]>([]);
   const [acordaoAberto, setAcordaoAberto] = useState<string | null>(null);
   const [acordaoPedidosAberto, setAcordaoPedidosAberto] = useState(false);
+  const [mesaAbertaPor, setMesaAbertaPor] = useState<Record<string, string>>({});
+  const [erroAbrir, setErroAbrir] = useState<string | null>(null);
+  const [alertaMesaOcupada, setAlertaMesaOcupada] = useState<{ mesaNome: string; atendente_nome: string } | null>(null);
+  const [verificandoMesa, setVerificandoMesa] = useState(false);
 
   useEffect(() => {
     load();
   }, []);
 
   async function load() {
-    const [list, ocup, pedidos] = await Promise.all([
+    const [list, ocup, pedidos, abertasComAtendente] = await Promise.all([
       getMesas(),
       getMesaIdsComComandaAberta(),
       getPedidosPresencialHoje(),
+      getMesasComComandaAberta(),
     ]);
     setMesas(list.filter((m) => !m.is_viagem));
     setOcupadas(ocup);
     setPedidosHoje(pedidos);
+    const porMesa: Record<string, string> = {};
+    abertasComAtendente.forEach((a) => { porMesa[a.mesa_id] = a.atendente_nome; });
+    setMesaAbertaPor(porMesa);
     setLoading(false);
   }
 
   async function handleAbrir(e: React.FormEvent) {
     e.preventDefault();
     if (!popup || !nomeCliente.trim() || !profile?.id) return;
+    setErroAbrir(null);
     setSubmitting(true);
     try {
+      const jaAberta = await getComandaByMesaComAtendente(popup.mesa.id);
+      if (jaAberta) {
+        setErroAbrir(`Esta mesa já está aberta por ${jaAberta.atendente_nome}. Outro atendente não pode abri-la.`);
+        setSubmitting(false);
+        return;
+      }
       await openComanda(popup.mesa.id, profile.id, nomeCliente.trim());
       setPopup(null);
       setNomeCliente('');
@@ -55,7 +71,30 @@ export default function AtendenteMesas() {
     }
   }
 
+  async function handleClicarMesaDisponivel(mesa: Mesa) {
+    setVerificandoMesa(true);
+    setAlertaMesaOcupada(null);
+    try {
+      const jaAberta = await getComandaByMesaComAtendente(mesa.id);
+      if (jaAberta) {
+        setAlertaMesaOcupada({
+          mesaNome: mesa.nome,
+          atendente_nome: jaAberta.atendente_nome || 'outro atendente',
+        });
+        load();
+        return;
+      }
+      setPopup({ mesa });
+    } catch {
+      setAlertaMesaOcupada({ mesaNome: mesa.nome, atendente_nome: 'outro atendente' });
+    } finally {
+      setVerificandoMesa(false);
+    }
+  }
+
   if (loading) return <p className="text-stone-500">Carregando...</p>;
+
+  const pedidosHojeMeus = pedidosHoje.filter((p) => (p.comandas as any)?.atendente_id === profile?.id);
 
   return (
     <div>
@@ -69,16 +108,16 @@ export default function AtendenteMesas() {
           onClick={() => setAcordaoPedidosAberto((a) => !a)}
           className="flex w-full items-center justify-between p-3 text-left font-medium text-stone-800 hover:bg-stone-50"
         >
-          <span>Pedidos de hoje (mesas)</span>
-          <span className="text-sm font-normal text-stone-500 mr-2">{pedidosHoje.length} pedido(s)</span>
+          <span>Meus pedidos de hoje (mesas)</span>
+          <span className="text-sm font-normal text-stone-500 mr-2">{pedidosHojeMeus.length} pedido(s)</span>
           {acordaoPedidosAberto ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
         </button>
         {acordaoPedidosAberto && (
           <div className="border-t border-stone-100">
-            {pedidosHoje.length === 0 ? (
+            {pedidosHojeMeus.length === 0 ? (
               <p className="p-3 text-sm text-stone-500">Nenhum pedido de mesa hoje.</p>
             ) : (
-              pedidosHoje.map((p) => {
+              pedidosHojeMeus.map((p) => {
                 const mesaNome = (p.comandas as any)?.mesas?.nome ?? (p.comandas as any)?.mesas?.numero != null ? `Mesa ${(p.comandas as any).mesas.numero}` : '-';
                 const cliente = (p.comandas as any)?.nome_cliente ?? '-';
                 const expandido = acordaoAberto === p.id;
@@ -122,12 +161,12 @@ export default function AtendenteMesas() {
               {aberta ? (
                 <Link to={`/pdv/mesas/${m.id}`} className="block rounded-xl bg-amber-100 p-4 text-center font-medium text-amber-800 shadow-sm hover:bg-amber-200">
                   {m.nome}
-                  <span className="block text-sm font-normal text-amber-700">Aberta</span>
+                  <span className="block text-sm font-normal text-amber-700">Aberta por {mesaAbertaPor[m.id] || 'outro atendente'}</span>
                 </Link>
               ) : (
-                <button type="button" onClick={() => setPopup({ mesa: m })} className="block w-full rounded-xl bg-white p-4 text-center font-medium text-stone-700 shadow-sm border border-stone-200 hover:border-amber-400 hover:bg-amber-50">
+                <button type="button" onClick={() => handleClicarMesaDisponivel(m)} disabled={verificandoMesa} className="block w-full rounded-xl bg-white p-4 text-center font-medium text-stone-700 shadow-sm border border-stone-200 hover:border-amber-400 hover:bg-amber-50 disabled:opacity-70">
                   {m.nome}
-                  <span className="block text-sm font-normal text-stone-500">Disponível</span>
+                  <span className="block text-sm font-normal text-stone-500">{verificandoMesa ? 'Verificando...' : 'Disponível'}</span>
                 </button>
               )}
             </div>
@@ -139,6 +178,7 @@ export default function AtendenteMesas() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
             <h3 className="font-semibold text-stone-800 mb-2">Abrir {popup.mesa.nome}</h3>
+            {erroAbrir && <p className="text-sm text-red-600 mb-3">{erroAbrir}</p>}
             <form onSubmit={handleAbrir}>
               <label className="block text-sm font-medium text-stone-600 mb-1">Nome do cliente</label>
               <input value={nomeCliente} onChange={(e) => setNomeCliente(e.target.value)} required className="w-full rounded-lg border border-stone-300 px-3 py-2 mb-4" placeholder="Ex: João" />
@@ -146,13 +186,38 @@ export default function AtendenteMesas() {
                 <button type="submit" disabled={submitting} className="flex-1 rounded-lg bg-amber-600 py-2 text-white hover:bg-amber-700 disabled:opacity-50">
                   Abrir
                 </button>
-                <button type="button" onClick={() => { setPopup(null); setNomeCliente(''); }} className="rounded-lg border border-stone-300 px-4 py-2 text-stone-600">
+                <button type="button" onClick={() => { setPopup(null); setNomeCliente(''); setErroAbrir(null); }} className="rounded-lg border border-stone-300 px-4 py-2 text-stone-600">
                   Cancelar
                 </button>
               </div>
             </form>
           </div>
         </div>
+      )}
+
+      {/* Alerta: mesa já aberta por outro atendente (portal no body para ficar sempre no topo) */}
+      {alertaMesaOcupada && createPortal(
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4" role="alertdialog" aria-modal="true" aria-labelledby="alerta-mesa-titulo">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl border-2 border-amber-300">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="flex-shrink-0 w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center">
+                <span className="text-2xl" aria-hidden>⚠️</span>
+              </div>
+              <h2 id="alerta-mesa-titulo" className="text-lg font-semibold text-stone-800">Mesa já em uso</h2>
+            </div>
+            <p className="text-stone-600 mb-6">
+              A <strong>{alertaMesaOcupada.mesaNome}</strong> já está aberta por <strong>{alertaMesaOcupada.atendente_nome}</strong>. Outro atendente não pode abri-la.
+            </p>
+            <button
+              type="button"
+              onClick={() => setAlertaMesaOcupada(null)}
+              className="w-full rounded-lg bg-amber-600 py-2.5 font-medium text-white hover:bg-amber-700"
+            >
+              Entendi
+            </button>
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );

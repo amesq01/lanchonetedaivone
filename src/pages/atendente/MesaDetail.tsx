@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ChevronDown, ChevronUp } from 'lucide-react';
-import { getMesas, getComandaByMesa, getProdutos, createPedidoPresencial, getPedidosByComanda, getPedidoStatus, updatePedidoStatus, closeComanda } from '../../lib/api';
+import { getMesas, getComandaByMesaComAtendente, getProdutos, createPedidoPresencial, getPedidosByComanda, getPedidoStatus, updatePedidoStatus, closeComanda } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
 import type { Produto } from '../../types/database';
 import { imagensProduto, precoVenda } from '../../types/database';
@@ -29,6 +29,10 @@ export default function AtendenteMesaDetail() {
   const [fechando, setFechando] = useState(false);
   /** Mesa foi encerrada ou reaberta por outro atendente; não permite lançar pedido. */
   const [comandaInvalidada, setComandaInvalidada] = useState(false);
+  /** Mesa foi aberta por outro atendente; só quem abriu pode lançar pedidos. */
+  const [mesaAbertaPorOutro, setMesaAbertaPorOutro] = useState<{ atendente_nome: string } | null>(null);
+  /** Nome do atendente que abriu a mesa (para exibir "aberta por X"). */
+  const [atendenteQueAbriu, setAtendenteQueAbriu] = useState<string>('');
   const inputRef = useRef<HTMLInputElement>(null);
   const [dropdownRect, setDropdownRect] = useState<{ top: number; left: number; width: number } | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -41,14 +45,19 @@ export default function AtendenteMesaDetail() {
 
   const revalidarComanda = useCallback(() => {
     if (!mesaId || !comandaId) return;
-    getComandaByMesa(mesaId).then((c) => {
-      if (!c) {
+    getComandaByMesaComAtendente(mesaId).then((r) => {
+      if (!r) {
         setComandaInvalidada(true);
+        setMesaAbertaPorOutro(null);
+        setAtendenteQueAbriu('');
         return;
       }
-      if (c.id !== comandaId) setComandaInvalidada(true);
+      if (r.comanda.id !== comandaId) setComandaInvalidada(true);
+      setAtendenteQueAbriu(r.atendente_nome);
+      if (r.comanda.atendente_id !== profile?.id) setMesaAbertaPorOutro({ atendente_nome: r.atendente_nome });
+      else setMesaAbertaPorOutro(null);
     });
-  }, [mesaId, comandaId]);
+  }, [mesaId, comandaId, profile?.id]);
 
   useEffect(() => {
     if (!mesaId) return;
@@ -56,20 +65,25 @@ export default function AtendenteMesaDetail() {
       const m = mesas.find((x) => x.id === mesaId);
       setMesaNome(m?.nome ?? '');
     });
-    getComandaByMesa(mesaId).then((c) => {
-      if (!c) {
+    getComandaByMesaComAtendente(mesaId).then((r) => {
+      if (!r) {
         setComandaId(null);
+        setMesaAbertaPorOutro(null);
+        setAtendenteQueAbriu('');
         setLoading(false);
         return;
       }
-      setComandaId(c.id);
-      setClienteNome(c.nome_cliente);
+      setComandaId(r.comanda.id);
+      setClienteNome(r.comanda.nome_cliente);
+      setAtendenteQueAbriu(r.atendente_nome);
       setComandaInvalidada(false);
-      getPedidosByComanda(c.id).then(setPedidos);
+      if (r.comanda.atendente_id !== profile?.id) setMesaAbertaPorOutro({ atendente_nome: r.atendente_nome });
+      else setMesaAbertaPorOutro(null);
+      getPedidosByComanda(r.comanda.id).then(setPedidos);
       setLoading(false);
     });
     getProdutos(true).then(setProdutos);
-  }, [mesaId]);
+  }, [mesaId, profile?.id]);
 
   useEffect(() => {
     if (!mesaId || !comandaId) return;
@@ -220,12 +234,27 @@ export default function AtendenteMesaDetail() {
           </button>
         </div>
       )}
+      {mesaAbertaPorOutro && !comandaInvalidada && (
+        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-4 flex flex-wrap items-center justify-between gap-2">
+          <p className="text-red-800 font-medium">
+            Esta mesa foi aberta por {mesaAbertaPorOutro.atendente_nome}. Apenas esse atendente pode lançar pedidos aqui.
+          </p>
+          <button
+            type="button"
+            onClick={() => navigate('/pdv/mesas')}
+            className="rounded-lg bg-stone-600 px-4 py-2 text-white font-medium hover:bg-stone-700"
+          >
+            Voltar às mesas
+          </button>
+        </div>
+      )}
       <div className="mb-4 flex items-center justify-between flex-wrap gap-2">
         <div>
           <h1 className="text-xl font-bold text-stone-800">{mesaNome}</h1>
+          {atendenteQueAbriu && <p className="text-stone-600">Aberta por {atendenteQueAbriu}</p>}
           <p className="text-stone-600">Cliente: {clienteNome}</p>
         </div>
-        {podeFecharMesa && !comandaInvalidada && (
+        {podeFecharMesa && !comandaInvalidada && !mesaAbertaPorOutro && (
           <button onClick={() => setPopupFecharMesa(true)} className="rounded-lg border border-stone-300 px-4 py-2 text-stone-600 hover:bg-stone-50 text-sm">
             Fechar mesa (sem pedidos)
           </button>
@@ -239,9 +268,10 @@ export default function AtendenteMesaDetail() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Buscar por nome ou código..."
-              className="w-full rounded-lg border border-stone-300 px-3 py-2"
+              className="w-full rounded-lg border border-stone-300 px-3 py-2 disabled:opacity-50 disabled:bg-stone-50"
+              disabled={!!mesaAbertaPorOutro || comandaInvalidada}
             />
-            {s && filtrados.length > 0 && dropdownRect && createPortal(
+            {s && filtrados.length > 0 && dropdownRect && !mesaAbertaPorOutro && !comandaInvalidada && createPortal(
               <div
                 className="fixed z-[9999] rounded-lg border border-stone-200 bg-white shadow-lg max-h-[75vh] overflow-y-auto overflow-x-hidden overscroll-contain"
                 style={{ top: dropdownRect.top, left: dropdownRect.left, width: dropdownRect.width }}
@@ -283,18 +313,18 @@ export default function AtendenteMesaDetail() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="font-medium text-stone-800">{item.produto.codigo} - {item.produto.nome || item.produto.descricao}</div>
-                      <input type="text" value={item.observacao} onChange={(e) => setObs(i, e.target.value)} placeholder="Observação (ex: sem cebola)" className="mt-1 w-full text-sm rounded border border-stone-200 px-2 py-1" />
+                      <input type="text" value={item.observacao} onChange={(e) => setObs(i, e.target.value)} placeholder="Observação (ex: sem cebola)" className="mt-1 w-full text-sm rounded border border-stone-200 px-2 py-1 disabled:opacity-50 disabled:bg-stone-50" disabled={!!mesaAbertaPorOutro || comandaInvalidada} />
                     </div>
                     <div className="flex items-center gap-1">
-                      <button type="button" onClick={() => updateQtd(i, -1)} className="w-8 h-8 rounded border border-stone-300 text-stone-600">−</button>
+                      <button type="button" onClick={() => updateQtd(i, -1)} className="w-8 h-8 rounded border border-stone-300 text-stone-600 disabled:opacity-50 disabled:cursor-not-allowed" disabled={!!mesaAbertaPorOutro || comandaInvalidada}>−</button>
                       <span className="w-8 text-center font-medium">{item.quantidade}</span>
-                      <button type="button" onClick={() => updateQtd(i, 1)} className="w-8 h-8 rounded border border-stone-300 text-stone-600">+</button>
+                      <button type="button" onClick={() => updateQtd(i, 1)} className="w-8 h-8 rounded border border-stone-300 text-stone-600 disabled:opacity-50 disabled:cursor-not-allowed" disabled={!!mesaAbertaPorOutro || comandaInvalidada}>+</button>
                     </div>
                   </li>
                 ))}
               </ul>
               <div className="p-3 border-t border-stone-100">
-                <button onClick={finalizarPedido} disabled={enviando || comandaInvalidada} className="w-full rounded-lg bg-amber-600 py-2 font-medium text-white hover:bg-amber-700 disabled:opacity-50">
+                <button onClick={finalizarPedido} disabled={enviando || comandaInvalidada || !!mesaAbertaPorOutro} className="w-full rounded-lg bg-amber-600 py-2 font-medium text-white hover:bg-amber-700 disabled:opacity-50">
                   {enviando ? 'Enviando...' : 'Finalizar pedido'}
                 </button>
               </div>
@@ -315,7 +345,7 @@ export default function AtendenteMesaDetail() {
                     <li key={i.id}>{i.quantidade}x {i.produtos?.nome || i.produtos?.descricao} {i.observacao ? `(${i.observacao})` : ''}</li>
                   ))}
                 </ul>
-                {p.status === 'novo_pedido' && (
+                {p.status === 'novo_pedido' && !mesaAbertaPorOutro && (
                   <button onClick={() => setPopupCancelar({ pedidoId: p.id })} className="text-sm text-red-600 hover:underline">Cancelar pedido</button>
                 )}
               </div>

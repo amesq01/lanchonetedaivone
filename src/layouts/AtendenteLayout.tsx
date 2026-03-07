@@ -99,6 +99,11 @@ export default function AtendenteLayout() {
         </div>
       </header>
       <main className="flex-1 overflow-auto p-4 md:p-6">
+        {profile?.nome && (
+          <p className="text-stone-600 mb-4">
+            Olá, <span className="font-semibold text-stone-800">{profile.nome}</span>
+          </p>
+        )}
         <Outlet />
       </main>
     </div>

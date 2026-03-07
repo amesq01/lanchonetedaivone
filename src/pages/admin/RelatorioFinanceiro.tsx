@@ -134,6 +134,7 @@ export default function RelatorioFinanceiro() {
                   <th className="px-4 py-3 text-left text-sm font-medium text-stone-600">Origem</th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-stone-600">Cliente</th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-stone-600">Mesa</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-stone-600">Atendente</th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-stone-600">Pagamento</th>
                   <th className="px-4 py-3 text-right text-sm font-medium text-stone-600">Subtotal</th>
                   <th className="px-4 py-3 text-right text-sm font-medium text-stone-600">Taxa</th>
@@ -149,6 +150,7 @@ export default function RelatorioFinanceiro() {
                     <td className="px-4 py-2 text-sm">{p.origem}</td>
                     <td className="px-4 py-2 text-sm">{p.cliente_nome ?? '-'}</td>
                     <td className="px-4 py-2 text-sm">{p.mesa ?? '-'}</td>
+                    <td className="px-4 py-2 text-sm">{p.atendente_nome ?? '-'}</td>
                     <td className="px-4 py-2 text-sm">{p.forma_pagamento ?? '-'}</td>
                     <td className="px-4 py-2 text-right text-sm">R$ {Number(p.subtotal ?? 0).toFixed(2)}</td>
                     <td className="px-4 py-2 text-right text-sm">{Number(p.taxa ?? 0) > 0 ? `R$ ${Number(p.taxa).toFixed(2)}` : '-'}</td>

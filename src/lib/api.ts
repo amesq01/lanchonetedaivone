@@ -74,6 +74,31 @@ export async function getComandaByMesa(mesaId: string) {
   return data as Database['public']['Tables']['comandas']['Row'] | null;
 }
 
+/** Comanda aberta da mesa + nome do atendente que abriu. Retorna null se não houver comanda aberta. */
+export async function getComandaByMesaComAtendente(mesaId: string): Promise<{ comanda: Database['public']['Tables']['comandas']['Row']; atendente_nome: string } | null> {
+  const comanda = await getComandaByMesa(mesaId);
+  if (!comanda) return null;
+  const { data: profile } = await supabase.from('profiles').select('nome').eq('id', comanda.atendente_id).maybeSingle();
+  return { comanda, atendente_nome: (profile as { nome: string } | null)?.nome ?? '-' };
+}
+
+/** Mesas (presencial) com comanda aberta e nome do atendente que abriu. Exclui mesa viagem. */
+export async function getMesasComComandaAberta(): Promise<{ mesa_id: string; atendente_nome: string }[]> {
+  const [comandasData, mesasData] = await Promise.all([
+    supabase.from('comandas').select('mesa_id, atendente_id').eq('aberta', true),
+    getMesas(),
+  ]);
+  const comandas = (comandasData.data ?? []) as { mesa_id: string; atendente_id: string }[];
+  const mesasPresencial = new Set((mesasData ?? []).filter((m: any) => !m.is_viagem).map((m: any) => m.id));
+  const filtradas = comandas.filter((c) => mesasPresencial.has(c.mesa_id));
+  if (!filtradas.length) return [];
+  const ids = [...new Set(filtradas.map((c) => c.atendente_id))];
+  const { data: profiles } = await supabase.from('profiles').select('id, nome').in('id', ids);
+  const nomes: Record<string, string> = {};
+  (profiles ?? []).forEach((r: any) => { nomes[r.id] = r.nome; });
+  return filtradas.map((c) => ({ mesa_id: c.mesa_id, atendente_nome: nomes[c.atendente_id] ?? '-' }));
+}
+
 /** Mesa IDs que têm comanda aberta (uma única requisição em vez de N) */
 export async function getMesaIdsComComandaAberta(): Promise<Set<string>> {
   const { data } = await supabase.from('comandas').select('mesa_id').eq('aberta', true);
@@ -315,7 +340,7 @@ export async function getPedidosPresencialHoje() {
   const { desde, ate } = hojeBrasiliaUTC();
   const { data } = await supabase
     .from('pedidos')
-    .select('*, pedido_itens(*, produtos(*)), comandas(nome_cliente, mesa_id, mesas(numero, nome))')
+    .select('*, pedido_itens(*, produtos(*)), comandas(nome_cliente, mesa_id, atendente_id, mesas(numero, nome))')
     .eq('origem', 'presencial')
     .neq('status', 'cancelado')
     .gte('created_at', desde)
@@ -329,7 +354,7 @@ export async function getPedidosViagemHoje() {
   const { desde, ate } = hojeBrasiliaUTC();
   const { data } = await supabase
     .from('pedidos')
-    .select('*, pedido_itens(*, produtos(*)), comandas(nome_cliente, aberta)')
+    .select('*, pedido_itens(*, produtos(*)), comandas(nome_cliente, aberta, atendente_id)')
     .eq('origem', 'viagem')
     .neq('status', 'cancelado')
     .gte('created_at', desde)
@@ -505,7 +530,7 @@ export async function getTotalComanda(comandaId: string): Promise<{ itens: { des
 export async function getRelatorioFinanceiro(desde: string, ate: string) {
   const { data } = await supabase
     .from('pedidos')
-    .select('id, numero, origem, encerrado_em, created_at, cliente_nome, desconto, taxa_entrega, forma_pagamento, comanda_id, comandas(nome_cliente, mesa_id, mesas(numero, nome))')
+    .select('id, numero, origem, encerrado_em, created_at, cliente_nome, desconto, taxa_entrega, forma_pagamento, comanda_id, comandas(nome_cliente, mesa_id, atendente_id, mesas(numero, nome))')
     .eq('status', 'finalizado')
     .gte('encerrado_em', desde)
     .lte('encerrado_em', ate)
@@ -519,6 +544,16 @@ export async function getRelatorioFinanceiro(desde: string, ate: string) {
   for (const i of itens) {
     totalPorPedido[i.pedido_id] = (totalPorPedido[i.pedido_id] ?? 0) + i.quantidade * i.valor_unitario;
   }
+  const atendenteIds = [...new Set(pedidos.map((p: any) => {
+    const c = p.comandas;
+    const atendenteId = c && (Array.isArray(c) ? c[0]?.atendente_id : c.atendente_id);
+    return atendenteId;
+  }).filter(Boolean))] as string[];
+  const nomesAtendente: Record<string, string> = {};
+  if (atendenteIds.length) {
+    const { data: profiles } = await supabase.from('profiles').select('id, nome').in('id', atendenteIds);
+    (profiles ?? []).forEach((r: any) => { nomesAtendente[r.id] = r.nome; });
+  }
   const linhas = pedidos.map((p: any) => {
     const subtotal = totalPorPedido[p.id] ?? 0;
     const desconto = Number(p.desconto ?? 0);
@@ -528,6 +563,7 @@ export async function getRelatorioFinanceiro(desde: string, ate: string) {
     const clienteNome = p.origem === 'presencial' && comanda
       ? (Array.isArray(comanda) ? comanda[0]?.nome_cliente : comanda.nome_cliente)
       : p.cliente_nome;
+    const atendenteId = comanda && (Array.isArray(comanda) ? comanda[0]?.atendente_id : comanda.atendente_id);
     return {
       ...p,
       cliente_nome: clienteNome ?? '-',
@@ -535,6 +571,7 @@ export async function getRelatorioFinanceiro(desde: string, ate: string) {
       desconto,
       subtotal,
       taxa,
+      atendente_nome: atendenteId ? (nomesAtendente[atendenteId] ?? '-') : '-',
     };
   });
 
@@ -578,11 +615,13 @@ export async function getRelatorioFinanceiro(desde: string, ate: string) {
       taxa: 0,
       desconto: descontoTotal,
       total: totalMesa,
+      atendente_nome: (primeiro as any).atendente_nome ?? '-',
     });
   }
 
   for (const p of online) {
     (p as any).mesa = '-';
+    (p as any).atendente_nome = '-';
   }
 
   const resultado = [...aggregated, ...online].sort(
@@ -623,18 +662,31 @@ export async function clearDescontoComanda(comandaId: string) {
 export async function getRelatorioCancelamentos(desde: string, ate: string) {
   const { data } = await supabase
     .from('pedidos')
-    .select('id, numero, origem, motivo_cancelamento, cancelado_por, cancelado_em, created_at, cliente_nome')
+    .select('id, numero, origem, motivo_cancelamento, cancelado_por, cancelado_em, created_at, cliente_nome, comanda_id, comandas(atendente_id)')
     .eq('status', 'cancelado')
     .gte('cancelado_em', desde)
     .lte('cancelado_em', ate)
     .order('cancelado_em', { ascending: false });
   const pedidos = (data ?? []) as any[];
   if (pedidos.length === 0) return { itens: [], total: 0 };
-  const ids = [...new Set(pedidos.map((p) => p.cancelado_por).filter(Boolean))] as string[];
-  const { data: profiles } = ids.length ? await supabase.from('profiles').select('id, nome').in('id', ids) : { data: [] };
+  const idsCancelado = [...new Set(pedidos.map((p) => p.cancelado_por).filter(Boolean))] as string[];
+  const idsAtendente = [...new Set(pedidos.map((p: any) => {
+    const c = p.comandas;
+    return c && (Array.isArray(c) ? c[0]?.atendente_id : c.atendente_id);
+  }).filter(Boolean))] as string[];
+  const todosIds = [...new Set([...idsCancelado, ...idsAtendente])];
+  const { data: profiles } = todosIds.length ? await supabase.from('profiles').select('id, nome').in('id', todosIds) : { data: [] };
   const nomes: Record<string, string> = {};
   (profiles ?? []).forEach((r: any) => { nomes[r.id] = r.nome; });
-  const itens = pedidos.map((p) => ({ ...p, cancelado_por_nome: p.cancelado_por ? nomes[p.cancelado_por] ?? p.cancelado_por : '-' }));
+  const itens = pedidos.map((p: any) => {
+    const comanda = p.comandas;
+    const atendenteId = comanda && (Array.isArray(comanda) ? comanda[0]?.atendente_id : comanda.atendente_id);
+    return {
+      ...p,
+      cancelado_por_nome: p.cancelado_por ? nomes[p.cancelado_por] ?? p.cancelado_por : '-',
+      atendente_nome: atendenteId ? (nomes[atendenteId] ?? '-') : '-',
+    };
+  });
   return { itens, total: itens.length };
 }
 

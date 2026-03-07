@@ -66,6 +66,8 @@ export default function AtendenteViagem() {
 
   if (loading) return <p className="text-stone-500">Carregando...</p>;
 
+  const pedidosHojeMeus = pedidosHoje.filter((p) => (p.comandas as any)?.atendente_id === profile?.id);
+
   return (
     <div>
       {toast && (
@@ -79,23 +81,23 @@ export default function AtendenteViagem() {
         NOVO PEDIDO
       </Link>
 
-      {/* Accordion: Pedidos de hoje (viagem) */}
+      {/* Accordion: Pedidos de hoje (viagem) - somente deste atendente */}
       <div className="mb-6 rounded-xl border border-stone-200 bg-white overflow-hidden">
         <button
           type="button"
           onClick={() => setAcordaoPedidosAberto((a) => !a)}
           className="flex w-full items-center justify-between p-3 text-left font-medium text-stone-800 hover:bg-stone-50"
         >
-          <span>Pedidos de hoje (viagem)</span>
-          <span className="text-sm font-normal text-stone-500 mr-2">{pedidosHoje.length} pedido(s)</span>
+          <span>Meus pedidos de hoje (viagem)</span>
+          <span className="text-sm font-normal text-stone-500 mr-2">{pedidosHojeMeus.length} pedido(s)</span>
           {acordaoPedidosAberto ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
         </button>
         {acordaoPedidosAberto && (
           <div className="border-t border-stone-100">
-            {pedidosHoje.length === 0 ? (
+            {pedidosHojeMeus.length === 0 ? (
               <p className="p-3 text-sm text-stone-500">Nenhum pedido de viagem hoje.</p>
             ) : (
-              pedidosHoje.map((p) => {
+              pedidosHojeMeus.map((p) => {
                 const expandido = acordaoAberto === p.id;
                 return (
                   <div key={p.id} className="border-t border-stone-100 first:border-t-0">

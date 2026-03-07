@@ -127,6 +127,7 @@ export default function RelatorioCancelamentos() {
                 <th className="px-4 py-3 text-left text-sm font-medium text-stone-600">Data/hora</th>
                 <th className="px-4 py-3 text-left text-sm font-medium text-stone-600">Pedido #</th>
                 <th className="px-4 py-3 text-left text-sm font-medium text-stone-600">Origem</th>
+                <th className="px-4 py-3 text-left text-sm font-medium text-stone-600">Atendente (realizou)</th>
                 <th className="px-4 py-3 text-left text-sm font-medium text-stone-600">Quem cancelou</th>
                 <th className="px-4 py-3 text-left text-sm font-medium text-stone-600">Motivo</th>
               </tr>
@@ -137,6 +138,7 @@ export default function RelatorioCancelamentos() {
                   <td className="px-4 py-2 text-sm">{p.cancelado_em ? new Date(p.cancelado_em).toLocaleString('pt-BR') : '-'}</td>
                   <td className="px-4 py-2">{p.numero}</td>
                   <td className="px-4 py-2 text-sm">{p.origem}</td>
+                  <td className="px-4 py-2 text-sm">{p.atendente_nome ?? '-'}</td>
                   <td className="px-4 py-2 text-sm">{p.cancelado_por_nome ?? '-'}</td>
                   <td className="px-4 py-2 text-sm max-w-xs">{p.motivo_cancelamento ?? '-'}</td>
                 </tr>
