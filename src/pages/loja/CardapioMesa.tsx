@@ -121,10 +121,10 @@ function CardItem({ produto, onClick }: { produto: ProdutoWithCategorias; onClic
           {produto.nome && produto.descricao && <p className="text-sm text-stone-600 print:text-xs truncate">{produto.descricao}</p>}
           <div className="font-semibold text-amber-600 print:text-sm truncate sm:hidden">
             {emPromo ? (
-              <>
-                <span className="text-stone-400 line-through font-normal mr-1">R$ {Number(produto.valor).toFixed(2)}</span>
-                R$ {valor.toFixed(2)}
-              </>
+              <div className="flex flex-row items-baseline gap-1.5">
+                <span className="text-xs text-stone-500 font-normal shrink-0">De: <span className="line-through text-stone-400">R$ {Number(produto.valor).toFixed(2)}</span></span>
+                <span className="text-amber-600 shrink-0">Por: R$ {valor.toFixed(2)}</span>
+              </div>
             ) : (
               <>R$ {valor.toFixed(2)}</>
             )}
@@ -142,10 +142,10 @@ function CardItem({ produto, onClick }: { produto: ProdutoWithCategorias; onClic
         </div>
         <div className="hidden sm:flex flex-shrink-0 self-center font-semibold text-amber-600 print:text-sm print:flex sm:mr-[15px]">
           {emPromo ? (
-            <>
-              <span className="text-stone-400 line-through font-normal mr-1">R$ {Number(produto.valor).toFixed(2)}</span>
-              R$ {valor.toFixed(2)}
-            </>
+            <div className="flex flex-col items-end">
+              <span className="text-xs text-stone-500 font-normal">De: <span className="line-through text-stone-400">R$ {Number(produto.valor).toFixed(2)}</span></span>
+              <span className="text-amber-600">Por: R$ {valor.toFixed(2)}</span>
+            </div>
           ) : (
             <>R$ {valor.toFixed(2)}</>
           )}
