@@ -4,7 +4,6 @@ import { useAuth } from '../contexts/AuthContext';
 import { useNovoPedidoOnline } from '../hooks/useNovoPedidoOnline';
 import { getAdminSidebarCounts, getLanchoneteAberta, setLanchoneteAberta as setLanchoneteAbertaApi } from '../lib/api';
 import {
-  LayoutDashboard,
   UtensilsCrossed,
   Truck,
   ShoppingBag,
@@ -91,7 +90,7 @@ export default function AdminLayout() {
       <aside className="no-print w-56 flex flex-col border-r border-stone-200 bg-white">
         <div className="p-4 border-b border-stone-200">
           <NavLink to="/admin" className="flex items-center gap-2 font-bold text-stone-800">
-            <LayoutDashboard className="h-6 w-6 text-amber-600" />
+            <img src="/logo-terra-mar.png" alt="Terra & Mar" className="h-8 w-8 rounded-full object-contain flex-shrink-0" />
             Admin
           </NavLink>
         </div>
