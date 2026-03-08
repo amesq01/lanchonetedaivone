@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getComandaByMesa, getComandaWithPedidos, getTotalComanda, closeComanda, getMesas, updatePedidoStatus, updatePedidoItens, getProdutos, getCuponsAtivos, applyDescontoComanda, clearDescontoComanda } from '../../lib/api';
+import type { FraçãoPagamento } from '../../lib/api';
 import { printContaMesa } from '../../lib/printPdf';
 import { useAuth } from '../../contexts/AuthContext';
 import type { Comanda } from '../../types/database';
@@ -18,7 +19,9 @@ export default function AdminMesaDetail() {
   const [isMesaViagem, setIsMesaViagem] = useState(false);
   const [loading, setLoading] = useState(true);
   const [popupPagamento, setPopupPagamento] = useState(false);
-  const [formaPagamento, setFormaPagamento] = useState('');
+  const [fracoesPagamento, setFracoesPagamento] = useState<FraçãoPagamento[]>([]);
+  const [novaFraçãoValor, setNovaFraçãoValor] = useState('');
+  const [novaFraçãoForma, setNovaFraçãoForma] = useState('');
   const [contaItens, setContaItens] = useState<{ itens: { codigo: string; descricao: string; quantidade: number; valor: number }[]; total: number } | null>(null);
   const [popupImprimir, setPopupImprimir] = useState(false);
   const [cupons, setCupons] = useState<Cupom[]>([]);
@@ -147,14 +150,50 @@ export default function AdminMesaDetail() {
       setPopupPedidosNaoFinalizados(true);
       return;
     }
+    const sub = contaItens?.total ?? 0;
+    const cupomSel = cupomDesconto ? cupons.find((c) => c.id === cupomDesconto) : null;
+    let vCupom = cupomSel ? (sub * Number(cupomSel.porcentagem)) / 100 : 0;
+    if (cupomSel?.valor_maximo != null) vCupom = Math.min(vCupom, Number(cupomSel.valor_maximo));
+    const vManual = Math.max(0, Number(descontoManual) || 0);
+    const totalInicial = Math.max(0, sub - Math.min(sub, vCupom + vManual));
+    setNovaFraçãoValor(totalInicial.toFixed(2));
+    setNovaFraçãoForma('');
     setPopupPagamento(true);
   };
 
   const confirmarEncerramento = async () => {
-    if (!comanda || !formaPagamento) return;
-    await closeComanda(comanda.id, formaPagamento);
-    setPopupPagamento(false);
-    navigate('/admin/mesas');
+    if (!comanda || fracoesPagamento.length === 0) return;
+    const totalConta = totalComDesconto;
+    const totalPago = fracoesPagamento.reduce((s, f) => s + f.valor, 0);
+    if (totalPago < totalConta - 0.01) {
+      alert(`Valor pago (R$ ${totalPago.toFixed(2)}) é menor que o total da conta (R$ ${totalConta.toFixed(2)}).`);
+      return;
+    }
+    try {
+      await closeComanda(comanda.id, fracoesPagamento);
+      setPopupPagamento(false);
+      setFracoesPagamento([]);
+      setNovaFraçãoValor('');
+      setNovaFraçãoForma('');
+      navigate('/admin/mesas');
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Erro ao encerrar.');
+    }
+  };
+
+  const adicionarFraçãoPagamento = () => {
+    const v = Math.max(0, Number(novaFraçãoValor.replace(',', '.')));
+    const forma = novaFraçãoForma || formas[0];
+    if (v <= 0) return;
+    setFracoesPagamento((prev) => [...prev, { valor: v, forma_pagamento: forma }]);
+    const novoTotalPago = totalPago + v;
+    const restante = Math.max(0, totalComDesconto - novoTotalPago);
+    setNovaFraçãoValor(restante.toFixed(2));
+    setNovaFraçãoForma('');
+  };
+
+  const removerFraçãoPagamento = (index: number) => {
+    setFracoesPagamento((prev) => prev.filter((_, i) => i !== index));
   };
 
   const confirmarCancelarPedido = async () => {
@@ -227,7 +266,6 @@ export default function AdminMesaDetail() {
   if (loading) return <p className="text-stone-500">Carregando...</p>;
   if (!comanda) return <p className="text-stone-500">Mesa não está aberta.</p>;
 
-  const formas = ['dinheiro', 'pix', 'cartão crédito', 'cartão débito'];
   const pedidosNaMesa = pedidos.filter((p) => p.status !== 'cancelado');
   const cupomSelecionado = cupomDesconto ? cupons.find((c) => c.id === cupomDesconto) : null;
   const subtotal = contaItens?.total ?? 0;
@@ -236,6 +274,10 @@ export default function AdminMesaDetail() {
   const valorManual = Math.max(0, Number(descontoManual) || 0);
   const valorDesconto = Math.min(subtotal, valorCupom + valorManual);
   const totalComDesconto = subtotal - valorDesconto;
+
+  const formas = ['dinheiro', 'pix', 'cartão crédito', 'cartão débito'];
+  const totalPago = fracoesPagamento.reduce((s, f) => s + f.valor, 0);
+  const podeConfirmarPagamento = fracoesPagamento.length > 0 && totalPago >= totalComDesconto - 0.01;
 
   function totalPedido(p: any) {
     const sub = (p.pedido_itens ?? []).reduce((s: number, i: any) => s + (i.quantidade || 0) * Number(i.valor_unitario || 0), 0);
@@ -499,20 +541,44 @@ export default function AdminMesaDetail() {
 
       {popupPagamento && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
-            <h3 className="font-semibold text-stone-800 mb-4">Forma de pagamento</h3>
-            <div className="space-y-2">
-              {formas.map((f) => (
-                <button key={f} onClick={() => setFormaPagamento(f)} className={`block w-full rounded-lg border py-2 text-left px-3 ${formaPagamento === f ? 'border-amber-500 bg-amber-50' : 'border-stone-200'}`}>
-                  {f}
-                </button>
-              ))}
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+            <h3 className="font-semibold text-stone-800 mb-2">Pagamento da conta</h3>
+            <p className="text-sm text-stone-500 mb-3">Adicione as frações de pagamento até completar o total. Cada fração pode ter uma forma de pagamento diferente.</p>
+            <p className="text-sm font-medium text-amber-700 mb-3">Total da conta: R$ {totalComDesconto.toFixed(2)}</p>
+            <div className="flex gap-2 mb-2">
+              <input
+                type="text"
+                inputMode="decimal"
+                value={novaFraçãoValor}
+                onChange={(e) => setNovaFraçãoValor(e.target.value)}
+                placeholder="Valor (ex: 25,50)"
+                className="flex-1 rounded-lg border border-stone-300 px-3 py-2 text-sm"
+              />
+              <select value={novaFraçãoForma} onChange={(e) => setNovaFraçãoForma(e.target.value)} className="rounded-lg border border-stone-300 px-3 py-2 text-sm min-w-[140px]">
+                {formas.map((f) => (
+                  <option key={f} value={f}>{f}</option>
+                ))}
+              </select>
+              <button type="button" onClick={adicionarFraçãoPagamento} disabled={!novaFraçãoValor.trim() || Number(novaFraçãoValor.replace(',', '.')) <= 0} className="rounded-lg bg-stone-700 px-3 py-2 text-white text-sm hover:bg-stone-800 disabled:opacity-50">
+                Adicionar
+              </button>
             </div>
-            <div className="mt-4 flex gap-2">
-              <button onClick={confirmarEncerramento} disabled={!formaPagamento} className="flex-1 rounded-lg bg-amber-600 py-2 text-white hover:bg-amber-700 disabled:opacity-50">
+            {fracoesPagamento.length > 0 && (
+              <ul className="mb-3 rounded-lg border border-stone-200 divide-y divide-stone-100 max-h-32 overflow-y-auto">
+                {fracoesPagamento.map((f, i) => (
+                  <li key={i} className="flex items-center justify-between px-3 py-2 text-sm">
+                    <span>{f.forma_pagamento}: R$ {f.valor.toFixed(2)}</span>
+                    <button type="button" onClick={() => removerFraçãoPagamento(i)} className="text-red-600 hover:underline">Remover</button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <p className="text-sm font-medium text-stone-700 mb-3">Total pago: R$ {totalPago.toFixed(2)} {totalPago >= totalComDesconto - 0.01 ? '✓' : `(falta R$ ${(totalComDesconto - totalPago).toFixed(2)})`}</p>
+            <div className="flex gap-2">
+              <button onClick={confirmarEncerramento} disabled={!podeConfirmarPagamento} className="flex-1 rounded-lg bg-amber-600 py-2 text-white hover:bg-amber-700 disabled:opacity-50">
                 Confirmar encerramento
               </button>
-              <button onClick={() => setPopupPagamento(false)} className="rounded-lg border border-stone-300 px-4 py-2 text-stone-600">Cancelar</button>
+              <button onClick={() => { setPopupPagamento(false); setFracoesPagamento([]); setNovaFraçãoValor(''); setNovaFraçãoForma(''); }} className="rounded-lg border border-stone-300 px-4 py-2 text-stone-600">Cancelar</button>
             </div>
           </div>
         </div>

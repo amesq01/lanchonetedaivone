@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { getPedidosOnlinePendentes, getPedidosOnlineTodos, getPedidosOnlineEncerradosHoje, acceptPedidoOnline, setImprimidoEntregaPedido, encerrarPedidoOnline, updatePedidoStatus, updatePedidoItens, getProdutos } from '../../lib/api';
+import type { FraçãoPagamento } from '../../lib/api';
 import { printPedidoEntrega } from '../../lib/printPdf';
 import { useAuth } from '../../contexts/AuthContext';
 import type { Produto } from '../../types/database';
@@ -20,6 +21,15 @@ export default function AdminPedidosOnline() {
   const [carrinhoEdicao, setCarrinhoEdicao] = useState<{ produto: Produto; quantidade: number; observacao: string }[]>([]);
   const [searchEdicao, setSearchEdicao] = useState('');
   const [enviandoEdicao, setEnviandoEdicao] = useState(false);
+  const [popupEncerrar, setPopupEncerrar] = useState<{ pedido: any; total: number } | null>(null);
+  const [fracoesEncerrar, setFracoesEncerrar] = useState<FraçãoPagamento[]>([]);
+  const [novaFraçãoValor, setNovaFraçãoValor] = useState('');
+  const [novaFraçãoForma, setNovaFraçãoForma] = useState('');
+
+  const formasPagamento = ['dinheiro', 'pix', 'cartão crédito', 'cartão débito'];
+  const totalPagoEncerrar = fracoesEncerrar.reduce((s, f) => s + f.valor, 0);
+  const totalEncerramento = popupEncerrar?.total ?? 0;
+  const podeConfirmarEncerrar = popupEncerrar && fracoesEncerrar.length > 0 && totalPagoEncerrar >= totalEncerramento - 0.01;
 
   const STATUS_EDITAVEL = ['novo_pedido', 'aguardando_aceite'];
   const pedidoPodeEditarSemConfirmacao = (p: any) => STATUS_EDITAVEL.includes(p.status);
@@ -56,9 +66,43 @@ export default function AdminPedidosOnline() {
     setImprimidoEntregaPedido(p.id).then(load);
   }
 
-  async function handleEncerrar(pedidoId: string) {
-    await encerrarPedidoOnline(pedidoId);
-    load();
+  function abrirEncerrar(p: any) {
+    const total = totalPedido(p);
+    setPopupEncerrar({ pedido: p, total });
+    setFracoesEncerrar([]);
+    setNovaFraçãoValor(total.toFixed(2));
+    setNovaFraçãoForma('');
+  }
+
+  const adicionarFraçãoEncerrar = () => {
+    const v = Math.max(0, Number(novaFraçãoValor.replace(',', '.')));
+    const forma = novaFraçãoForma || formasPagamento[0];
+    if (v <= 0) return;
+    setFracoesEncerrar((prev) => [...prev, { valor: v, forma_pagamento: forma }]);
+    const novoTotalPago = totalPagoEncerrar + v;
+    const restante = Math.max(0, totalEncerramento - novoTotalPago);
+    setNovaFraçãoValor(restante.toFixed(2));
+    setNovaFraçãoForma('');
+  };
+
+  const removerFraçãoEncerrar = (index: number) => {
+    setFracoesEncerrar((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  async function confirmarEncerrar() {
+    if (!popupEncerrar || fracoesEncerrar.length === 0) return;
+    if (totalPagoEncerrar < totalEncerramento - 0.01) {
+      alert(`Valor pago (R$ ${totalPagoEncerrar.toFixed(2)}) é menor que o total do pedido (R$ ${totalEncerramento.toFixed(2)}).`);
+      return;
+    }
+    try {
+      await encerrarPedidoOnline(popupEncerrar.pedido.id, fracoesEncerrar);
+      setPopupEncerrar(null);
+      setFracoesEncerrar([]);
+      load();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Erro ao encerrar.');
+    }
   }
 
   async function confirmarCancelarPedido() {
@@ -209,7 +253,7 @@ export default function AdminPedidosOnline() {
                         </button>
                       ) : (
                         <>
-                          <button onClick={() => handleEncerrar(p.id)} className="rounded-lg bg-amber-600 px-4 py-2 text-white hover:bg-amber-700">
+                          <button onClick={() => abrirEncerrar(p)} className="rounded-lg bg-amber-600 px-4 py-2 text-white hover:bg-amber-700">
                             Encerrar pedido
                           </button>
                           <button onClick={() => handleImprimirEntrega(p)} className="rounded-lg border border-stone-300 px-4 py-2 text-sm text-stone-600 hover:bg-stone-50">
@@ -304,6 +348,38 @@ export default function AdminPedidosOnline() {
             <div className="flex gap-2">
               <button onClick={() => { abrirEdicao(confirmarEdicaoAvancada); setConfirmarEdicaoAvancada(null); }} className="flex-1 rounded-lg bg-amber-600 py-2 text-white hover:bg-amber-700">Sim, editar</button>
               <button onClick={() => setConfirmarEdicaoAvancada(null)} className="rounded-lg border border-stone-300 px-4 py-2 text-stone-600">Não</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {popupEncerrar && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+            <h3 className="font-semibold text-stone-800 mb-2">Encerrar pedido #{popupEncerrar.pedido.numero}</h3>
+            <p className="text-sm text-stone-500 mb-3">Adicione as frações de pagamento até completar o total do pedido.</p>
+            <p className="text-sm font-medium text-amber-700 mb-3">Total do pedido: R$ {totalEncerramento.toFixed(2)}</p>
+            <div className="flex gap-2 mb-2">
+              <input type="text" inputMode="decimal" value={novaFraçãoValor} onChange={(e) => setNovaFraçãoValor(e.target.value)} placeholder="Valor (ex: 25,50)" className="flex-1 rounded-lg border border-stone-300 px-3 py-2 text-sm" />
+              <select value={novaFraçãoForma} onChange={(e) => setNovaFraçãoForma(e.target.value)} className="rounded-lg border border-stone-300 px-3 py-2 text-sm min-w-[140px]">
+                {formasPagamento.map((f) => (<option key={f} value={f}>{f}</option>))}
+              </select>
+              <button type="button" onClick={adicionarFraçãoEncerrar} disabled={!novaFraçãoValor.trim() || Number(novaFraçãoValor.replace(',', '.')) <= 0} className="rounded-lg bg-stone-700 px-3 py-2 text-white text-sm hover:bg-stone-800 disabled:opacity-50">Adicionar</button>
+            </div>
+            {fracoesEncerrar.length > 0 && (
+              <ul className="mb-3 rounded-lg border border-stone-200 divide-y divide-stone-100 max-h-32 overflow-y-auto">
+                {fracoesEncerrar.map((f, i) => (
+                  <li key={i} className="flex items-center justify-between px-3 py-2 text-sm">
+                    <span>{f.forma_pagamento}: R$ {f.valor.toFixed(2)}</span>
+                    <button type="button" onClick={() => removerFraçãoEncerrar(i)} className="text-red-600 hover:underline">Remover</button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <p className="text-sm font-medium text-stone-700 mb-3">Total pago: R$ {totalPagoEncerrar.toFixed(2)} {totalPagoEncerrar >= totalEncerramento - 0.01 ? '✓' : `(falta R$ ${(totalEncerramento - totalPagoEncerrar).toFixed(2)})`}</p>
+            <div className="flex gap-2">
+              <button onClick={confirmarEncerrar} disabled={!podeConfirmarEncerrar} className="flex-1 rounded-lg bg-amber-600 py-2 text-white hover:bg-amber-700 disabled:opacity-50">Confirmar encerramento</button>
+              <button onClick={() => { setPopupEncerrar(null); setFracoesEncerrar([]); setNovaFraçãoValor(''); setNovaFraçãoForma(''); }} className="rounded-lg border border-stone-300 px-4 py-2 text-stone-600">Cancelar</button>
             </div>
           </div>
         </div>

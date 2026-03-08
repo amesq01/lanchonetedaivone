@@ -45,6 +45,7 @@ export default function RelatorioFinanceiro() {
   );
   const [pedidos, setPedidos] = useState<any[]>([]);
   const [totalGeral, setTotalGeral] = useState(0);
+  const [totalPorFormaPagamento, setTotalPorFormaPagamento] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -54,6 +55,7 @@ export default function RelatorioFinanceiro() {
       .then((r) => {
         setPedidos(r.pedidos);
         setTotalGeral(r.totalGeral);
+        setTotalPorFormaPagamento(r.totalPorFormaPagamento ?? {});
       })
       .finally(() => setLoading(false));
   }, [periodo, dataRef]);
@@ -161,7 +163,22 @@ export default function RelatorioFinanceiro() {
               </tbody>
             </table>
           </div>
-          <div className="text-lg font-semibold text-stone-800">Total do período: R$ {totalGeral.toFixed(2)}</div>
+          <div className="text-lg font-semibold text-stone-800 mb-4">Total do período: R$ {totalGeral.toFixed(2)}</div>
+          {Object.keys(totalPorFormaPagamento).length > 0 && (
+            <div className="rounded-xl bg-stone-50 border border-stone-200 p-4">
+              <h3 className="font-semibold text-stone-700 mb-2">Total por forma de pagamento</h3>
+              <ul className="space-y-1 text-sm">
+                {Object.entries(totalPorFormaPagamento)
+                  .sort(([, a], [, b]) => b - a)
+                  .map(([forma, valor]) => (
+                    <li key={forma} className="flex justify-between">
+                      <span className="text-stone-600">{forma}</span>
+                      <span className="font-medium text-stone-800">R$ {valor.toFixed(2)}</span>
+                    </li>
+                  ))}
+              </ul>
+            </div>
+          )}
         </>
       )}
     </div>

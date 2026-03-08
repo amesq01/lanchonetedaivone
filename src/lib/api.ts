@@ -163,10 +163,49 @@ export async function openComanda(mesaId: string, atendenteId: string, nomeClien
   return data as Database['public']['Tables']['comandas']['Row'];
 }
 
-export async function closeComanda(comandaId: string, formaPagamento: string) {
+/** Total a pagar da comanda (soma itens - descontos dos pedidos). */
+export async function getTotalAPagarComanda(comandaId: string): Promise<number> {
+  const { total } = await getTotalComanda(comandaId);
+  const { data: peds } = await supabase.from('pedidos').select('desconto').eq('comanda_id', comandaId).neq('status', 'cancelado');
+  const descontoTotal = (peds ?? []).reduce((s: number, p: any) => s + Number(p.desconto ?? 0), 0);
+  return Math.max(0, total - descontoTotal);
+}
+
+export type FraçãoPagamento = { valor: number; forma_pagamento: string };
+
+export async function closeComanda(comandaId: string, pagamentosOrForma: FraçãoPagamento[] | string) {
+  const totalAPagar = await getTotalAPagarComanda(comandaId);
+  const pagamentos: FraçãoPagamento[] = typeof pagamentosOrForma === 'string'
+    ? (totalAPagar > 0 ? [{ valor: totalAPagar, forma_pagamento: pagamentosOrForma }] : [])
+    : pagamentosOrForma;
+  if (pagamentos.length === 0) {
+    if (totalAPagar > 0.01) throw new Error('Informe ao menos uma forma de pagamento.');
+    const now = new Date().toISOString();
+    const resumo = typeof pagamentosOrForma === 'string' ? pagamentosOrForma : 'Sem consumo';
+    await (supabase as any).from('comandas').update({ aberta: false, forma_pagamento: resumo, encerrada_em: now, updated_at: now }).eq('id', comandaId);
+    await (supabase as any).from('pedidos').update({ encerrado_em: now, forma_pagamento: resumo, updated_at: now }).eq('comanda_id', comandaId).neq('status', 'cancelado');
+    return;
+  }
+  const totalPago = pagamentos.reduce((s, p) => s + p.valor, 0);
+  if (totalPago < totalAPagar - 0.01) throw new Error(`Valor pago (R$ ${totalPago.toFixed(2)}) é menor que o total da conta (R$ ${totalAPagar.toFixed(2)}).`);
   const now = new Date().toISOString();
-  await (supabase as any).from('comandas').update({ aberta: false, forma_pagamento: formaPagamento, encerrada_em: now, updated_at: now }).eq('id', comandaId);
-  await (supabase as any).from('pedidos').update({ encerrado_em: now, forma_pagamento: formaPagamento, updated_at: now }).eq('comanda_id', comandaId).neq('status', 'cancelado');
+  const resumo = pagamentos.length === 1 ? pagamentos[0].forma_pagamento : `Misto (${pagamentos.map((p) => p.forma_pagamento).join(', ')})`;
+  for (const p of pagamentos) {
+    if (p.valor > 0) await (supabase as any).from('pagamentos').insert({ comanda_id: comandaId, valor: p.valor, forma_pagamento: p.forma_pagamento });
+  }
+  await (supabase as any).from('comandas').update({ aberta: false, forma_pagamento: resumo, encerrada_em: now, updated_at: now }).eq('id', comandaId);
+  await (supabase as any).from('pedidos').update({ encerrado_em: now, forma_pagamento: resumo, updated_at: now }).eq('comanda_id', comandaId).neq('status', 'cancelado');
+}
+
+/** Total a pagar de um pedido (subtotal - desconto + taxa). */
+export async function getTotalAPagarPedido(pedidoId: string): Promise<number> {
+  const { data: ped } = await supabase.from('pedidos').select('desconto, taxa_entrega').eq('id', pedidoId).single();
+  if (!ped) throw new Error('Pedido não encontrado.');
+  const { data: itens } = await supabase.from('pedido_itens').select('quantidade, valor_unitario').eq('pedido_id', pedidoId);
+  const subtotal = (itens ?? []).reduce((s: number, i: any) => s + i.quantidade * Number(i.valor_unitario), 0);
+  const desconto = Number((ped as any).desconto ?? 0);
+  const taxa = Number((ped as any).taxa_entrega ?? 0);
+  return Math.max(0, subtotal - desconto + taxa);
 }
 
 export async function getComandaWithPedidos(comandaId: string) {
@@ -540,9 +579,17 @@ export async function setImprimidoEntregaPedido(pedidoId: string) {
   await (supabase as any).from('pedidos').update({ imprimido_entrega_em: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('id', pedidoId);
 }
 
-export async function encerrarPedidoOnline(pedidoId: string) {
+export async function encerrarPedidoOnline(pedidoId: string, pagamentos: FraçãoPagamento[]) {
+  if (!pagamentos?.length) throw new Error('Informe ao menos uma forma de pagamento.');
+  const totalAPagar = await getTotalAPagarPedido(pedidoId);
+  const totalPago = pagamentos.reduce((s, p) => s + p.valor, 0);
+  if (totalPago < totalAPagar - 0.01) throw new Error(`Valor pago (R$ ${totalPago.toFixed(2)}) é menor que o total do pedido (R$ ${totalAPagar.toFixed(2)}).`);
   const now = new Date().toISOString();
-  await (supabase as any).from('pedidos').update({ encerrado_em: now, updated_at: now }).eq('id', pedidoId);
+  const resumo = pagamentos.length === 1 ? pagamentos[0].forma_pagamento : `Misto (${pagamentos.map((p) => p.forma_pagamento).join(', ')})`;
+  for (const p of pagamentos) {
+    await (supabase as any).from('pagamentos').insert({ pedido_id: pedidoId, valor: p.valor, forma_pagamento: p.forma_pagamento });
+  }
+  await (supabase as any).from('pedidos').update({ encerrado_em: now, forma_pagamento: resumo, updated_at: now }).eq('id', pedidoId);
 }
 
 export async function createPedidoOnline(payload: {
@@ -715,7 +762,9 @@ export async function getRelatorioFinanceiro(desde: string, ate: string) {
   }
 
   const aggregated: any[] = [];
+  const comandaIds: string[] = [];
   for (const [comandaId, grupo] of porComanda) {
+    comandaIds.push(comandaId);
     const numeros = grupo.map((p) => p.numero).sort((a, b) => a - b);
     const descontoTotal = grupo.reduce((s, p) => s + p.desconto, 0);
     const subtotalMesa = grupo.reduce((s, p) => s + p.subtotal, 0);
@@ -724,6 +773,7 @@ export async function getRelatorioFinanceiro(desde: string, ate: string) {
     const comanda = (primeiro as any).comandas;
     aggregated.push({
       id: 'comanda-' + comandaId,
+      comanda_id: comandaId,
       numero: numeros.join(', '),
       origem: 'presencial',
       encerrado_em: primeiro.encerrado_em,
@@ -748,7 +798,42 @@ export async function getRelatorioFinanceiro(desde: string, ate: string) {
     (a, b) => new Date(a.encerrado_em || 0).getTime() - new Date(b.encerrado_em || 0).getTime()
   );
   const totalGeral = resultado.reduce((s, p) => s + p.total, 0);
-  return { pedidos: resultado, totalGeral };
+
+  const pedidoIdsOnline = online.map((p: any) => p.id);
+  const pagamentosComanda = comandaIds.length
+    ? await supabase.from('pagamentos').select('comanda_id, valor, forma_pagamento').in('comanda_id', comandaIds)
+    : { data: [] };
+  const pagamentosPedido = pedidoIdsOnline.length
+    ? await supabase.from('pagamentos').select('pedido_id, valor, forma_pagamento').in('pedido_id', pedidoIdsOnline)
+    : { data: [] };
+  const pagamentosByComanda: Record<string, { valor: number; forma_pagamento: string }[]> = {};
+  const pagamentosByPedido: Record<string, { valor: number; forma_pagamento: string }[]> = {};
+  for (const row of (pagamentosComanda.data ?? []) as any[]) {
+    if (!row.comanda_id) continue;
+    if (!pagamentosByComanda[row.comanda_id]) pagamentosByComanda[row.comanda_id] = [];
+    pagamentosByComanda[row.comanda_id].push({ valor: Number(row.valor), forma_pagamento: row.forma_pagamento });
+  }
+  for (const row of (pagamentosPedido.data ?? []) as any[]) {
+    if (!row.pedido_id) continue;
+    if (!pagamentosByPedido[row.pedido_id]) pagamentosByPedido[row.pedido_id] = [];
+    pagamentosByPedido[row.pedido_id].push({ valor: Number(row.valor), forma_pagamento: row.forma_pagamento });
+  }
+  const totalPorFormaPagamento: Record<string, number> = {};
+  const fmtPagamento = (lista: { valor: number; forma_pagamento: string }[]) =>
+    lista.length ? lista.map((x) => `${x.forma_pagamento} R$ ${x.valor.toFixed(2)}`).join(', ') : null;
+  for (const row of resultado) {
+    if (row.comanda_id && pagamentosByComanda[row.comanda_id]?.length) {
+      row.forma_pagamento = fmtPagamento(pagamentosByComanda[row.comanda_id]) ?? row.forma_pagamento;
+    }
+    if (row.origem === 'online' && row.id && pagamentosByPedido[row.id]?.length) {
+      row.forma_pagamento = fmtPagamento(pagamentosByPedido[row.id]) ?? row.forma_pagamento;
+    }
+    const list = row.comanda_id ? pagamentosByComanda[row.comanda_id] : row.origem === 'online' ? pagamentosByPedido[row.id] : null;
+    if (list) for (const x of list) {
+      totalPorFormaPagamento[x.forma_pagamento] = (totalPorFormaPagamento[x.forma_pagamento] ?? 0) + x.valor;
+    }
+  }
+  return { pedidos: resultado, totalGeral, totalPorFormaPagamento };
 }
 
 /** Aplica desconto nos pedidos da comanda (cupom and/or manual). cupomId pode ser null para só desconto manual. */

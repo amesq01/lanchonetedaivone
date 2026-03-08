@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { getPedidosViagemAbertos, getTotalComanda, getCuponsAtivos, applyDescontoComanda, clearDescontoComanda, getProdutos, updatePedidoItens, updatePedidoStatus } from '../../lib/api';
+import { getPedidosViagemAbertos, getTotalComanda, getTotalAPagarComanda, closeComanda, getCuponsAtivos, applyDescontoComanda, clearDescontoComanda, getProdutos, updatePedidoItens, updatePedidoStatus } from '../../lib/api';
+import type { FraçãoPagamento } from '../../lib/api';
 import { printContaViagem } from '../../lib/printPdf';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
@@ -12,7 +13,10 @@ export default function AdminViagem() {
   const [loading, setLoading] = useState(true);
   const [accordionFinalizados, setAccordionFinalizados] = useState(false);
   const [popupPagamento, setPopupPagamento] = useState<{ pedidoId: string; comandaId: string } | null>(null);
-  const [formaPagamento, setFormaPagamento] = useState('');
+  const [totalContaEncerramento, setTotalContaEncerramento] = useState(0);
+  const [fracoesPagamento, setFracoesPagamento] = useState<FraçãoPagamento[]>([]);
+  const [novaFraçãoValor, setNovaFraçãoValor] = useState('');
+  const [novaFraçãoForma, setNovaFraçãoForma] = useState('');
   const [popupImprimir, setPopupImprimir] = useState<any | null>(null);
   const [contaItensPedido, setContaItensPedido] = useState<{ itens: { codigo: string; descricao: string; quantidade: number; valor: number }[]; total: number } | null>(null);
   const [cupomDesconto, setCupomDesconto] = useState('');
@@ -90,19 +94,48 @@ export default function AdminViagem() {
 
   const handleEncerrarPedido = (pedido: any) => {
     setPopupPagamento({ pedidoId: pedido.id, comandaId: pedido.comanda_id });
-  };
-
-  const confirmarEncerramento = async () => {
-    if (!popupPagamento || !formaPagamento) return;
-    const now = new Date().toISOString();
-    await (supabase as any).from('comandas').update({ aberta: false, forma_pagamento: formaPagamento, encerrada_em: now }).eq('id', popupPagamento.comandaId);
-    await (supabase as any).from('pedidos').update({ encerrado_em: now, forma_pagamento: formaPagamento, updated_at: now }).eq('id', popupPagamento.pedidoId);
-    setPopupPagamento(null);
-    setFormaPagamento('');
-    load();
+    setFracoesPagamento([]);
+    setNovaFraçãoForma('');
+    getTotalAPagarComanda(pedido.comanda_id).then((total) => {
+      setTotalContaEncerramento(total);
+      setNovaFraçãoValor(total.toFixed(2));
+    });
   };
 
   const formas = ['dinheiro', 'pix', 'cartão de crédito', 'cartão de débito'];
+  const totalPagoViagem = fracoesPagamento.reduce((s, f) => s + f.valor, 0);
+  const podeConfirmarEncerramentoViagem = popupPagamento && fracoesPagamento.length > 0 && totalPagoViagem >= totalContaEncerramento - 0.01;
+
+  const adicionarFraçãoViagem = () => {
+    const v = Math.max(0, Number(novaFraçãoValor.replace(',', '.')));
+    const forma = novaFraçãoForma || formas[0];
+    if (v <= 0) return;
+    setFracoesPagamento((prev) => [...prev, { valor: v, forma_pagamento: forma }]);
+    const novoTotalPago = totalPagoViagem + v;
+    const restante = Math.max(0, totalContaEncerramento - novoTotalPago);
+    setNovaFraçãoValor(restante.toFixed(2));
+    setNovaFraçãoForma('');
+  };
+
+  const removerFraçãoViagem = (index: number) => {
+    setFracoesPagamento((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const confirmarEncerramento = async () => {
+    if (!popupPagamento || fracoesPagamento.length === 0) return;
+    if (totalPagoViagem < totalContaEncerramento - 0.01) {
+      alert(`Valor pago (R$ ${totalPagoViagem.toFixed(2)}) é menor que o total da conta (R$ ${totalContaEncerramento.toFixed(2)}).`);
+      return;
+    }
+    try {
+      await closeComanda(popupPagamento.comandaId, fracoesPagamento);
+      setPopupPagamento(null);
+      setFracoesPagamento([]);
+      load();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Erro ao encerrar.');
+    }
+  };
 
   const addItemEdicao = (produto: Produto, qtd = 1, obs = '') => {
     setCarrinhoEdicao((c) => {
@@ -398,20 +431,31 @@ export default function AdminViagem() {
 
       {popupPagamento && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
-            <h3 className="font-semibold text-stone-800 mb-4">Forma de pagamento</h3>
-            <div className="space-y-2">
-              {formas.map((f) => (
-                <button key={f} onClick={() => setFormaPagamento(f)} className={`block w-full rounded-lg border py-2 text-left px-3 ${formaPagamento === f ? 'border-amber-500 bg-amber-50' : 'border-stone-200'}`}>
-                  {f}
-                </button>
-              ))}
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+            <h3 className="font-semibold text-stone-800 mb-2">Pagamento da conta (viagem)</h3>
+            <p className="text-sm text-stone-500 mb-3">Adicione as frações de pagamento até completar o total.</p>
+            <p className="text-sm font-medium text-amber-700 mb-3">Total da conta: R$ {totalContaEncerramento.toFixed(2)}</p>
+            <div className="flex gap-2 mb-2">
+              <input type="text" inputMode="decimal" value={novaFraçãoValor} onChange={(e) => setNovaFraçãoValor(e.target.value)} placeholder="Valor (ex: 25,50)" className="flex-1 rounded-lg border border-stone-300 px-3 py-2 text-sm" />
+              <select value={novaFraçãoForma} onChange={(e) => setNovaFraçãoForma(e.target.value)} className="rounded-lg border border-stone-300 px-3 py-2 text-sm min-w-[140px]">
+                {formas.map((f) => (<option key={f} value={f}>{f}</option>))}
+              </select>
+              <button type="button" onClick={adicionarFraçãoViagem} disabled={!novaFraçãoValor.trim() || Number(novaFraçãoValor.replace(',', '.')) <= 0} className="rounded-lg bg-stone-700 px-3 py-2 text-white text-sm hover:bg-stone-800 disabled:opacity-50">Adicionar</button>
             </div>
-            <div className="mt-4 flex gap-2">
-              <button onClick={confirmarEncerramento} disabled={!formaPagamento} className="flex-1 rounded-lg bg-amber-600 py-2 text-white hover:bg-amber-700 disabled:opacity-50">
-                Confirmar encerramento
-              </button>
-              <button onClick={() => setPopupPagamento(null)} className="rounded-lg border border-stone-300 px-4 py-2 text-stone-600">Cancelar</button>
+            {fracoesPagamento.length > 0 && (
+              <ul className="mb-3 rounded-lg border border-stone-200 divide-y divide-stone-100 max-h-32 overflow-y-auto">
+                {fracoesPagamento.map((f, i) => (
+                  <li key={i} className="flex items-center justify-between px-3 py-2 text-sm">
+                    <span>{f.forma_pagamento}: R$ {f.valor.toFixed(2)}</span>
+                    <button type="button" onClick={() => removerFraçãoViagem(i)} className="text-red-600 hover:underline">Remover</button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <p className="text-sm font-medium text-stone-700 mb-3">Total pago: R$ {totalPagoViagem.toFixed(2)} {totalPagoViagem >= totalContaEncerramento - 0.01 ? '✓' : `(falta R$ ${(totalContaEncerramento - totalPagoViagem).toFixed(2)})`}</p>
+            <div className="flex gap-2">
+              <button onClick={confirmarEncerramento} disabled={!podeConfirmarEncerramentoViagem} className="flex-1 rounded-lg bg-amber-600 py-2 text-white hover:bg-amber-700 disabled:opacity-50">Confirmar encerramento</button>
+              <button onClick={() => { setPopupPagamento(null); setFracoesPagamento([]); setNovaFraçãoValor(''); setNovaFraçãoForma(''); }} className="rounded-lg border border-stone-300 px-4 py-2 text-stone-600">Cancelar</button>
             </div>
           </div>
         </div>
