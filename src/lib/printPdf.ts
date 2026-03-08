@@ -249,6 +249,113 @@ export async function printContaViagem(opts: {
   openAndPrint(doc);
 }
 
+/** Imprime um pedido (comanda) em qualquer contexto: mesa, viagem ou online. tituloSuffix ex.: "Mesa 2", "Viagem", "Entrega", "Retirada". */
+export function printPedido(
+  pedido: {
+    numero: number;
+    cliente_nome?: string;
+    cliente_whatsapp?: string;
+    cliente_endereco?: string;
+    ponto_referencia?: string;
+    forma_pagamento?: string;
+    troco_para?: number;
+    observacoes?: string;
+    desconto?: number;
+    taxa_entrega?: number;
+    comandas?: { nome_cliente?: string };
+    pedido_itens?: Array<{
+      quantidade: number;
+      valor_unitario: number;
+      observacao?: string;
+      produtos?: { codigo?: string; nome?: string; descricao?: string };
+    }>;
+  },
+  tituloSuffix: string
+) {
+  const doc = createDoc();
+  let y = 10;
+  doc.setTextColor(...BLACK);
+  doc.setFontSize(14);
+  doc.text('Lanchonete Terra e Mar', PAPER_WIDTH_MM / 2, y, { align: 'center' });
+  y += 8;
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(...BLACK);
+  const titulo = `Pedido #${pedido.numero}${tituloSuffix ? ` - ${tituloSuffix}` : ''}`;
+  const tituloLines = doc.splitTextToSize(titulo, CONTENT_WIDTH);
+  doc.text(tituloLines, PAPER_WIDTH_MM / 2, y, { align: 'center' });
+  y += tituloLines.length * 5 + 4;
+  doc.setFontSize(10);
+  const nomeCliente = pedido.cliente_nome || (pedido.comandas as { nome_cliente?: string } | undefined)?.nome_cliente;
+  if (nomeCliente) {
+    doc.setTextColor(...BLACK);
+    doc.setFont('helvetica', 'bold');
+    doc.text((nomeCliente || '').toUpperCase(), MARGIN_MM, y);
+    doc.setFont('helvetica', 'normal');
+    y += 5;
+  }
+  if (pedido.cliente_whatsapp) {
+    doc.setTextColor(...BLACK);
+    doc.text('Tel.: ', MARGIN_MM, y);
+    const w = doc.getTextWidth('Tel.: ');
+    doc.text(pedido.cliente_whatsapp, MARGIN_MM + w, y);
+    y += 4;
+  }
+  if (pedido.cliente_endereco) {
+    const addrLines = doc.splitTextToSize(pedido.cliente_endereco, CONTENT_WIDTH);
+    doc.text(addrLines, MARGIN_MM, y);
+    y += addrLines.length * 4 + 2;
+  }
+  if (pedido.ponto_referencia) {
+    doc.text(`Ref: ${pedido.ponto_referencia}`, MARGIN_MM, y);
+    y += 4;
+  }
+  if (pedido.forma_pagamento != null || pedido.troco_para != null) {
+    doc.text(`Pagamento: ${pedido.forma_pagamento || '-'}${pedido.troco_para ? ` - Troco R$ ${Number(pedido.troco_para).toFixed(2)}` : ''}`, MARGIN_MM, y);
+    y += 4;
+  }
+  if (pedido.observacoes) {
+    const obsLines = doc.splitTextToSize(pedido.observacoes, CONTENT_WIDTH);
+    doc.text(obsLines, MARGIN_MM, y);
+    y += obsLines.length * 4 + 2;
+  }
+  y += 4;
+
+  const itens = pedido.pedido_itens ?? [];
+  const subtotal = itens.reduce((s, i) => s + (i.quantidade || 0) * Number(i.valor_unitario || 0), 0);
+  const desconto = Number(pedido.desconto ?? 0);
+  const taxa = Number(pedido.taxa_entrega ?? 0);
+  const total = Math.max(0, subtotal - desconto + taxa);
+
+  autoTable(doc, {
+    startY: y,
+    head: [['Cod', 'Produto', 'Qtd', 'Valor unit.', 'Valor']],
+    body: itens.map((i) => {
+      const qtd = i.quantidade || 0;
+      const unit = Number(i.valor_unitario || 0);
+      const valor = qtd * unit;
+      return [
+        (i.produtos?.codigo ?? '-'),
+        `${(i.produtos?.nome || i.produtos?.descricao) ?? '-'}${i.observacao ? ` (${i.observacao})` : ''}`,
+        String(qtd),
+        (qtd > 0 ? valor / qtd : 0).toFixed(2),
+        valor.toFixed(2),
+      ];
+    }),
+    margin: { left: MARGIN_MM, right: MARGIN_MM },
+    tableWidth: CONTENT_WIDTH,
+    ...TABLE_STYLES,
+  });
+  y = (doc as any).lastAutoTable.finalY + 6;
+
+  const linhasExtra: LinhaTotal[] = [];
+  if (desconto > 0) linhasExtra.push({ label: 'Desconto:', valor: `- R$ ${desconto.toFixed(2)}` });
+  if (taxa > 0) linhasExtra.push({ label: 'Taxa entrega:', valor: `R$ ${taxa.toFixed(2)}` });
+  y = addTotaisSection(doc, y, subtotal, total, linhasExtra);
+  addFooter(doc, y);
+  openAndPrint(doc);
+}
+
 /** Pedido para entrega/retirada (online). Mesmo esquema visual das impressões de mesa e viagem. */
 export function printPedidoEntrega(pedido: {
   numero: number;

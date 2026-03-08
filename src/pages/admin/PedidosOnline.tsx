@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { getPedidosOnlinePendentes, getPedidosOnlineTodos, getPedidosOnlineEncerradosHoje, acceptPedidoOnline, setImprimidoEntregaPedido, encerrarPedidoOnline, updatePedidoStatus, updatePedidoItens, getProdutos } from '../../lib/api';
+import { getPedidosOnlinePendentes, getPedidosOnlineTodos, getPedidosOnlineEncerradosHoje, acceptPedidoOnline, setImprimidoEntregaPedido, encerrarPedidoOnline, updatePedidoStatus, updatePedidoItens, getProdutos, getMesasFechadasParaTransferencia, getComandaByMesa, openComanda, movePedidosParaOutraComanda } from '../../lib/api';
 import type { FraçãoPagamento } from '../../lib/api';
-import { printPedidoEntrega } from '../../lib/printPdf';
+import { printPedido } from '../../lib/printPdf';
 import { useAuth } from '../../contexts/AuthContext';
 import type { Produto } from '../../types/database';
 import { precoVenda, imagensProduto } from '../../types/database';
@@ -25,6 +25,11 @@ export default function AdminPedidosOnline() {
   const [fracoesEncerrar, setFracoesEncerrar] = useState<FraçãoPagamento[]>([]);
   const [novaFraçãoValor, setNovaFraçãoValor] = useState('');
   const [novaFraçãoForma, setNovaFraçãoForma] = useState('');
+  const [popupEnviarParaMesa, setPopupEnviarParaMesa] = useState<{ pedido: any } | null>(null);
+  const [mesasParaEnviar, setMesasParaEnviar] = useState<{ mesaId: string; mesaNome: string }[]>([]);
+  const [mesaIdEnviar, setMesaIdEnviar] = useState('');
+  const [novoNomeClienteEnviar, setNovoNomeClienteEnviar] = useState('');
+  const [enviandoEnviar, setEnviandoEnviar] = useState(false);
 
   const formasPagamento = ['dinheiro', 'pix', 'cartão crédito', 'cartão débito'];
   const totalPagoEncerrar = fracoesEncerrar.reduce((s, f) => s + f.valor, 0);
@@ -61,9 +66,10 @@ export default function AdminPedidosOnline() {
     load();
   }
 
-  function handleImprimirEntrega(p: any) {
-    printPedidoEntrega(p);
-    setImprimidoEntregaPedido(p.id).then(load);
+  function handleImprimirPedido(p: any) {
+    const titulo = p.tipo_entrega === 'retirada' ? 'Retirada' : 'Entrega';
+    printPedido(p, titulo);
+    if (p.status === 'finalizado' && !p.imprimido_entrega_em) setImprimidoEntregaPedido(p.id).then(load);
   }
 
   function abrirEncerrar(p: any) {
@@ -102,6 +108,33 @@ export default function AdminPedidosOnline() {
       load();
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Erro ao encerrar.');
+    }
+  }
+
+  function abrirEnviarParaMesa(p: any) {
+    setPopupEnviarParaMesa({ pedido: p });
+    setMesaIdEnviar('');
+    setNovoNomeClienteEnviar('');
+    getMesasFechadasParaTransferencia().then(setMesasParaEnviar);
+  }
+
+  async function confirmarEnviarParaMesa() {
+    if (!popupEnviarParaMesa || !mesaIdEnviar || !novoNomeClienteEnviar.trim() || !profile?.id) return;
+    setEnviandoEnviar(true);
+    try {
+      const comandaExistente = await getComandaByMesa(mesaIdEnviar);
+      if (comandaExistente) {
+        alert('Esta mesa já está aberta. Escolha outra mesa livre.');
+        return;
+      }
+      const novaComanda = await openComanda(mesaIdEnviar, profile.id, novoNomeClienteEnviar.trim());
+      await movePedidosParaOutraComanda([popupEnviarParaMesa.pedido.id], novaComanda.id);
+      setPopupEnviarParaMesa(null);
+      load();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Erro ao enviar para mesa.');
+    } finally {
+      setEnviandoEnviar(false);
     }
   }
 
@@ -203,11 +236,17 @@ export default function AdminPedidosOnline() {
                   </ul>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
+                  <button type="button" onClick={() => handleImprimirPedido(p)} className="rounded-lg border border-stone-300 px-4 py-2 text-stone-700 hover:bg-stone-50">
+                    Imprimir pedido
+                  </button>
                   <button type="button" onClick={() => (pedidoPodeEditarSemConfirmacao(p) ? abrirEdicao(p) : setConfirmarEdicaoAvancada(p))} className="rounded-lg border border-amber-300 px-4 py-2 text-amber-700 hover:bg-amber-50">
                     Editar pedido
                   </button>
                   <button onClick={() => handleAceitar(p.id)} className="rounded-lg bg-green-600 px-4 py-2 text-white hover:bg-green-700">
                     Aceitar pedido
+                  </button>
+                  <button type="button" onClick={() => abrirEnviarParaMesa(p)} className="rounded-lg border border-stone-400 px-4 py-2 text-stone-700 hover:bg-stone-50">
+                    Enviar para mesa
                   </button>
                   <button onClick={() => setPopupCancelar({ pedidoId: p.id, adminOverride: false })} className="rounded-lg border border-red-300 px-4 py-2 text-red-700 hover:bg-red-50">
                     Cancelar pedido
@@ -242,24 +281,18 @@ export default function AdminPedidosOnline() {
                   </ul>
                 </div>
                 <div className="min-w-[200px] w-[200px] flex flex-col items-center justify-center gap-2 shrink-0">
+                  <button type="button" onClick={() => handleImprimirPedido(p)} className="rounded-lg border border-stone-300 px-4 py-2 text-sm text-stone-700 hover:bg-stone-50">
+                    Imprimir pedido
+                  </button>
                   <button type="button" onClick={() => (pedidoPodeEditarSemConfirmacao(p) ? abrirEdicao(p) : setConfirmarEdicaoAvancada(p))} className="rounded-lg border border-amber-300 px-4 py-2 text-sm text-amber-700 hover:bg-amber-50">
                     Editar pedido
                   </button>
                   {p.status === 'finalizado' && (
                     <>
-                      {!p.imprimido_entrega_em ? (
-                        <button onClick={() => handleImprimirEntrega(p)} className="rounded-lg border border-stone-300 px-4 py-2 text-stone-700 hover:bg-stone-50">
-                          Imprimir pedido para entrega
+                      {!p.imprimido_entrega_em ? null : (
+                        <button onClick={() => abrirEncerrar(p)} className="rounded-lg bg-amber-600 px-4 py-2 text-white hover:bg-amber-700">
+                          Encerrar pedido
                         </button>
-                      ) : (
-                        <>
-                          <button onClick={() => abrirEncerrar(p)} className="rounded-lg bg-amber-600 px-4 py-2 text-white hover:bg-amber-700">
-                            Encerrar pedido
-                          </button>
-                          <button onClick={() => handleImprimirEntrega(p)} className="rounded-lg border border-stone-300 px-4 py-2 text-sm text-stone-600 hover:bg-stone-50">
-                            Reimprimir
-                          </button>
-                        </>
                       )}
                     </>
                   )}
@@ -268,6 +301,9 @@ export default function AdminPedidosOnline() {
                       Aguardando finalização na cozinha
                     </span>
                   )}
+                  <button type="button" onClick={() => abrirEnviarParaMesa(p)} className="rounded-lg border border-stone-400 px-4 py-2 text-sm text-stone-700 hover:bg-stone-50">
+                    Enviar para mesa
+                  </button>
                   <button onClick={() => setPopupCancelar({ pedidoId: p.id, adminOverride: !pedidoPodeEditarSemConfirmacao(p) })} className="rounded-lg border border-red-300 px-4 py-2 text-sm text-red-700 hover:bg-red-50">
                     Cancelar pedido
                   </button>
@@ -277,6 +313,31 @@ export default function AdminPedidosOnline() {
           </div>
         )}
       </section>
+
+      {popupEnviarParaMesa && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
+            <h3 className="font-semibold text-stone-800 mb-2">Enviar pedido #{popupEnviarParaMesa.pedido.numero} para mesa</h3>
+            <p className="text-sm text-stone-500 mb-3">Escolha uma mesa que não esteja aberta. Será aberta uma comanda e o pedido será transferido.</p>
+            <label className="block text-sm font-medium text-stone-600 mb-1">Mesa de destino (livre)</label>
+            <select value={mesaIdEnviar} onChange={(e) => setMesaIdEnviar(e.target.value)} className="w-full rounded-lg border border-stone-300 px-3 py-2 mb-2">
+              <option value="">Selecione...</option>
+              {mesasParaEnviar.map((m) => (
+                <option key={m.mesaId} value={m.mesaId}>{m.mesaNome}</option>
+              ))}
+            </select>
+            <label className="block text-sm font-medium text-stone-600 mb-1 mt-2">Nome do cliente (mesa de destino)</label>
+            <input type="text" value={novoNomeClienteEnviar} onChange={(e) => setNovoNomeClienteEnviar(e.target.value)} placeholder="Ex: João" className="w-full rounded-lg border border-stone-300 px-3 py-2 mb-4" />
+            {mesasParaEnviar.length === 0 && <p className="text-sm text-amber-600 mb-2">Nenhuma mesa livre no momento.</p>}
+            <div className="flex gap-2">
+              <button onClick={confirmarEnviarParaMesa} disabled={!mesaIdEnviar || !novoNomeClienteEnviar.trim() || enviandoEnviar || mesasParaEnviar.length === 0} className="flex-1 rounded-lg bg-amber-600 py-2 text-white hover:bg-amber-700 disabled:opacity-50">
+                {enviandoEnviar ? 'Enviando...' : 'Confirmar'}
+              </button>
+              <button onClick={() => setPopupEnviarParaMesa(null)} className="rounded-lg border border-stone-300 px-4 py-2 text-stone-600">Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {popupEditar && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 overflow-y-auto">

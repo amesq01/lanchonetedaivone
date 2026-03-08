@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getComandaByMesa, getComandaWithPedidos, getTotalComanda, closeComanda, getMesas, updatePedidoStatus, updatePedidoItens, getProdutos, getCuponsAtivos, applyDescontoComanda, clearDescontoComanda } from '../../lib/api';
+import { getComandaByMesa, getComandaWithPedidos, getTotalComanda, closeComanda, getMesas, updatePedidoStatus, updatePedidoItens, getProdutos, getCuponsAtivos, applyDescontoComanda, clearDescontoComanda, getMesasFechadasParaTransferencia, openComanda, movePedidosParaOutraComanda } from '../../lib/api';
 import type { FraçãoPagamento } from '../../lib/api';
-import { printContaMesa } from '../../lib/printPdf';
+import { printContaMesa, printPedido } from '../../lib/printPdf';
 import { useAuth } from '../../contexts/AuthContext';
 import type { Comanda } from '../../types/database';
 import type { Cupom } from '../../types/database';
@@ -38,6 +38,13 @@ export default function AdminMesaDetail() {
   const [carrinhoEdicao, setCarrinhoEdicao] = useState<{ produto: Produto; quantidade: number; observacao: string }[]>([]);
   const [searchEdicao, setSearchEdicao] = useState('');
   const [enviandoEdicao, setEnviandoEdicao] = useState(false);
+  const [popupMoverTodos, setPopupMoverTodos] = useState(false);
+  const [popupMoverSelecionados, setPopupMoverSelecionados] = useState(false);
+  const [pedidosSelecionados, setPedidosSelecionados] = useState<Set<string>>(new Set());
+  const [mesasDestino, setMesasDestino] = useState<{ mesaId: string; mesaNome: string }[]>([]);
+  const [mesaIdDestino, setMesaIdDestino] = useState('');
+  const [novoNomeClienteDestino, setNovoNomeClienteDestino] = useState('');
+  const [enviandoTransferencia, setEnviandoTransferencia] = useState(false);
 
   useEffect(() => {
     if (!mesaId) return;
@@ -196,6 +203,78 @@ export default function AdminMesaDetail() {
     setFracoesPagamento((prev) => prev.filter((_, i) => i !== index));
   };
 
+  const abrirModalMoverTodos = () => {
+    getMesasFechadasParaTransferencia(mesaId ?? undefined).then(setMesasDestino);
+    setMesaIdDestino('');
+    setNovoNomeClienteDestino(comanda?.nome_cliente ?? '');
+    setPopupMoverTodos(true);
+  };
+
+  const abrirModalMoverSelecionados = () => {
+    if (pedidosSelecionados.size === 0) return;
+    getMesasFechadasParaTransferencia(mesaId ?? undefined).then(setMesasDestino);
+    setMesaIdDestino('');
+    setNovoNomeClienteDestino('');
+    setPopupMoverSelecionados(true);
+  };
+
+  const togglePedidoSelecionado = (pedidoId: string) => {
+    setPedidosSelecionados((prev) => {
+      const next = new Set(prev);
+      if (next.has(pedidoId)) next.delete(pedidoId);
+      else next.add(pedidoId);
+      return next;
+    });
+  };
+
+  const confirmarMoverTodos = async () => {
+    if (!comanda || !mesaIdDestino || !novoNomeClienteDestino.trim() || !profile?.id) return;
+    setEnviandoTransferencia(true);
+    try {
+      const comandaExistente = await getComandaByMesa(mesaIdDestino);
+      if (comandaExistente) {
+        alert('Esta mesa já está aberta. Escolha outra mesa livre.');
+        return;
+      }
+      const ids = pedidosNaMesa.map((p) => p.id);
+      const novaComanda = await openComanda(mesaIdDestino, profile.id, novoNomeClienteDestino.trim());
+      await movePedidosParaOutraComanda(ids, novaComanda.id, { fecharComandasOrigemIds: [comanda.id] });
+      setPopupMoverTodos(false);
+      navigate('/admin/mesas');
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Erro ao transferir.');
+    } finally {
+      setEnviandoTransferencia(false);
+    }
+  };
+
+  const confirmarMoverSelecionados = async () => {
+    if (!mesaIdDestino || !novoNomeClienteDestino.trim() || !profile?.id) {
+      alert('Escolha a mesa de destino e informe o nome do cliente.');
+      return;
+    }
+    setEnviandoTransferencia(true);
+    try {
+      const comandaExistente = await getComandaByMesa(mesaIdDestino);
+      if (comandaExistente) {
+        alert('Esta mesa já está aberta. Escolha outra mesa livre.');
+        return;
+      }
+      const novaComanda = await openComanda(mesaIdDestino, profile.id, novoNomeClienteDestino.trim());
+      await movePedidosParaOutraComanda(Array.from(pedidosSelecionados), novaComanda.id);
+      setPopupMoverSelecionados(false);
+      setPedidosSelecionados(new Set());
+      if (comanda) {
+        getComandaWithPedidos(comanda.id).then((r) => { if (r) { setComanda(r.comanda as Comanda); setPedidos(r.pedidos); } });
+        getTotalComanda(comanda.id).then(setContaItens);
+      }
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Erro ao transferir.');
+    } finally {
+      setEnviandoTransferencia(false);
+    }
+  };
+
   const confirmarCancelarPedido = async () => {
     if (!popupCancelar || !motivoCancelamento.trim()) return;
     try {
@@ -314,24 +393,48 @@ export default function AdminMesaDetail() {
           <h1 className="text-2xl font-bold text-stone-800">{mesaNome}</h1>
           <p className="text-stone-600">Cliente: {comanda.nome_cliente}</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <button onClick={handleAbrirImprimir} className="rounded-lg border border-stone-300 px-4 py-2 text-stone-700 hover:bg-stone-50">
             Imprimir conta
           </button>
           <button onClick={handleEncerrar} className="rounded-lg bg-amber-600 px-4 py-2 text-white hover:bg-amber-700">
             Encerrar mesa
           </button>
+          {pedidosNaMesa.length > 0 && (
+            <>
+              <button onClick={abrirModalMoverTodos} className="rounded-lg border border-amber-400 px-4 py-2 text-amber-700 hover:bg-amber-50">
+                Mover todos para outra mesa
+              </button>
+              {pedidosSelecionados.size > 0 && (
+                <button onClick={abrirModalMoverSelecionados} className="rounded-lg border border-stone-400 px-4 py-2 text-stone-700 hover:bg-stone-50">
+                  Mover selecionados ({pedidosSelecionados.size})
+                </button>
+              )}
+            </>
+          )}
         </div>
       </div>
       <div className="rounded-xl bg-white p-4 shadow-sm mb-6">
-        <h3 className="font-semibold text-stone-800 mb-2">Pedidos</h3>
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="font-semibold text-stone-800">Pedidos</h3>
+          {pedidosNaMesa.length > 0 && (
+            <span className="text-sm text-stone-500">Marque os pedidos e use &quot;Mover selecionados&quot; para transferir apenas alguns</span>
+          )}
+        </div>
         {pedidosNaMesa.length === 0 ? (
           <p className="text-sm text-stone-500 py-2">Nenhum pedido nesta mesa.</p>
         ) : (
           <div className="space-y-4">
             {pedidosNaMesa.map((p) => (
               <div key={p.id} className="rounded-lg border border-stone-200 bg-stone-50/50 p-4 flex flex-wrap items-stretch justify-between gap-4">
-                <div className="flex-1 min-w-0">
+                <div className="flex items-start gap-2 flex-1 min-w-0">
+                  <input
+                    type="checkbox"
+                    checked={pedidosSelecionados.has(p.id)}
+                    onChange={() => togglePedidoSelecionado(p.id)}
+                    className="mt-1 rounded border-stone-300"
+                  />
+                  <div className="flex-1 min-w-0">
                   <div className="font-semibold text-stone-800">{(comanda as any)?.profiles?.nome ? `Pedido #${p.numero} – ${(comanda as any).profiles.nome}` : `Pedido #${p.numero}`}</div>
                   <p className="text-sm font-medium text-amber-700 mt-0.5">Total: R$ {totalPedido(p).toFixed(2)}</p>
                   <ul className="mt-2 text-sm text-stone-600">
@@ -339,7 +442,10 @@ export default function AdminMesaDetail() {
                       <li key={i.id}>{i.quantidade}x {i.produtos?.nome || i.produtos?.descricao} - R$ {(i.quantidade * i.valor_unitario).toFixed(2)}</li>
                     ))}
                   </ul>
-                  <div className="mt-2 flex gap-2">
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <button type="button" onClick={() => printPedido(p, mesaNome || 'Mesa')} className="text-sm text-stone-600 hover:underline">
+                      Imprimir pedido
+                    </button>
                     <button
                       onClick={() => {
                         if (pedidoPodeEditarSemConfirmacao(p)) abrirEdicao(p);
@@ -350,6 +456,7 @@ export default function AdminMesaDetail() {
                       Editar pedido
                     </button>
                     <button onClick={() => setPopupCancelar({ pedidoId: p.id, adminOverride: !pedidoPodeEditarSemConfirmacao(p) })} className="text-sm text-red-600 hover:underline">Cancelar pedido</button>
+                  </div>
                   </div>
                 </div>
                 {p.status === 'finalizado' && (
@@ -579,6 +686,56 @@ export default function AdminMesaDetail() {
                 Confirmar encerramento
               </button>
               <button onClick={() => { setPopupPagamento(false); setFracoesPagamento([]); setNovaFraçãoValor(''); setNovaFraçãoForma(''); }} className="rounded-lg border border-stone-300 px-4 py-2 text-stone-600">Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {popupMoverTodos && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
+            <h3 className="font-semibold text-stone-800 mb-2">Mover todos os pedidos para outra mesa</h3>
+            <p className="text-sm text-stone-500 mb-3">Escolha uma mesa que não esteja aberta. Será aberta uma comanda e os pedidos serão transferidos. Esta mesa ficará livre.</p>
+            <label className="block text-sm font-medium text-stone-600 mb-1">Mesa de destino (livre)</label>
+            <select value={mesaIdDestino} onChange={(e) => setMesaIdDestino(e.target.value)} className="w-full rounded-lg border border-stone-300 px-3 py-2 mb-2">
+              <option value="">Selecione...</option>
+              {mesasDestino.map((m) => (
+                <option key={m.mesaId} value={m.mesaId}>{m.mesaNome}</option>
+              ))}
+            </select>
+            <label className="block text-sm font-medium text-stone-600 mb-1 mt-2">Nome do cliente (mesa de destino)</label>
+            <input type="text" value={novoNomeClienteDestino} onChange={(e) => setNovoNomeClienteDestino(e.target.value)} placeholder="Ex: Maria" className="w-full rounded-lg border border-stone-300 px-3 py-2 mb-4" />
+            {mesasDestino.length === 0 && <p className="text-sm text-amber-600 mb-2">Nenhuma outra mesa livre no momento.</p>}
+            <div className="flex gap-2">
+              <button onClick={confirmarMoverTodos} disabled={!mesaIdDestino || !novoNomeClienteDestino.trim() || enviandoTransferencia || mesasDestino.length === 0} className="flex-1 rounded-lg bg-amber-600 py-2 text-white hover:bg-amber-700 disabled:opacity-50">
+                {enviandoTransferencia ? 'Transferindo...' : 'Confirmar'}
+              </button>
+              <button onClick={() => setPopupMoverTodos(false)} className="rounded-lg border border-stone-300 px-4 py-2 text-stone-600">Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {popupMoverSelecionados && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
+            <h3 className="font-semibold text-stone-800 mb-2">Mover pedidos selecionados</h3>
+            <p className="text-sm text-stone-500 mb-3">Escolha uma mesa que não esteja aberta e informe o nome do cliente. Será aberta uma comanda na mesa de destino.</p>
+            <label className="block text-sm font-medium text-stone-600 mb-1">Mesa de destino (livre)</label>
+            <select value={mesaIdDestino} onChange={(e) => setMesaIdDestino(e.target.value)} className="w-full rounded-lg border border-stone-300 px-3 py-2 mb-3">
+              <option value="">Selecione...</option>
+              {mesasDestino.map((m) => (
+                <option key={m.mesaId} value={m.mesaId}>{m.mesaNome}</option>
+              ))}
+            </select>
+            <label className="block text-sm font-medium text-stone-600 mb-1">Nome do cliente (mesa de destino)</label>
+            <input type="text" value={novoNomeClienteDestino} onChange={(e) => setNovoNomeClienteDestino(e.target.value)} placeholder="Ex: Maria" className="w-full rounded-lg border border-stone-300 px-3 py-2 mb-4" />
+            {mesasDestino.length === 0 && <p className="text-sm text-amber-600 mb-2">Nenhuma outra mesa livre no momento.</p>}
+            <div className="flex gap-2">
+              <button onClick={confirmarMoverSelecionados} disabled={!mesaIdDestino || !novoNomeClienteDestino.trim() || enviandoTransferencia || mesasDestino.length === 0} className="flex-1 rounded-lg bg-amber-600 py-2 text-white hover:bg-amber-700 disabled:opacity-50">
+                {enviandoTransferencia ? 'Transferindo...' : 'Confirmar'}
+              </button>
+              <button onClick={() => setPopupMoverSelecionados(false)} className="rounded-lg border border-stone-300 px-4 py-2 text-stone-600">Cancelar</button>
             </div>
           </div>
         </div>

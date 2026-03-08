@@ -4,6 +4,16 @@ import type { ProdutoWithCategorias } from '../types/database';
 
 type ConfigKey = 'taxa_entrega' | 'quantidade_mesas';
 
+/** Exige que o usuário atual seja admin. Usado para transferência de pedidos entre mesas. */
+async function exigirAdminTransferencia(): Promise<void> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Não autorizado.');
+  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+  if ((profile as { role: string } | null)?.role !== 'admin') {
+    throw new Error('Apenas o admin pode transferir pedidos entre mesas.');
+  }
+}
+
 export async function getConfig(key: ConfigKey): Promise<number> {
   const { data } = await supabase.from('config').select('value').eq('key', key).single();
   const row = data as { value?: unknown } | null;
@@ -74,6 +84,12 @@ export async function getComandaByMesa(mesaId: string) {
   return data as Database['public']['Tables']['comandas']['Row'] | null;
 }
 
+/** Todas as comandas abertas de uma mesa (viagem pode ter várias). */
+export async function getComandasAbertasByMesa(mesaId: string): Promise<Database['public']['Tables']['comandas']['Row'][]> {
+  const { data } = await supabase.from('comandas').select('*').eq('mesa_id', mesaId).eq('aberta', true).order('created_at');
+  return (data ?? []) as Database['public']['Tables']['comandas']['Row'][];
+}
+
 /** Comanda aberta da mesa + nome do atendente que abriu. Retorna null se não houver comanda aberta. */
 export async function getComandaByMesaComAtendente(mesaId: string): Promise<{ comanda: Database['public']['Tables']['comandas']['Row']; atendente_nome: string } | null> {
   const comanda = await getComandaByMesa(mesaId);
@@ -104,6 +120,54 @@ export async function getMesaIdsComComandaAberta(): Promise<Set<string>> {
   const { data } = await supabase.from('comandas').select('mesa_id').eq('aberta', true);
   const rows = (data ?? []) as { mesa_id: string }[];
   return new Set(rows.map((r) => r.mesa_id));
+}
+
+/** Mesas SEM comanda aberta (livres) para transferência. Apenas admin. Exclui mesa Viagem e mesaIdExcluir se informado. No destino será aberta uma nova comanda. Ordenadas por número (menor para maior). */
+export async function getMesasFechadasParaTransferencia(mesaIdExcluir?: string): Promise<{ mesaId: string; mesaNome: string }[]> {
+  await exigirAdminTransferencia();
+  const [comandasAbertasRes, mesasRes] = await Promise.all([
+    supabase.from('comandas').select('mesa_id').eq('aberta', true),
+    supabase.from('mesas').select('id, nome, is_viagem, numero'),
+  ]);
+  const comandasAbertas = (comandasAbertasRes.data ?? []) as { mesa_id: string }[];
+  const mesasAbertasIds = new Set(comandasAbertas.map((c) => c.mesa_id));
+  const mesas = (mesasRes.data ?? []) as { id: string; nome: string; is_viagem: boolean; numero: number }[];
+  const out: { mesaId: string; mesaNome: string; numero: number }[] = [];
+  for (const m of mesas) {
+    if (m.is_viagem) continue;
+    if (mesaIdExcluir && m.id === mesaIdExcluir) continue;
+    if (mesasAbertasIds.has(m.id)) continue;
+    out.push({ mesaId: m.id, mesaNome: m.nome ?? `Mesa ${m.id}`, numero: typeof m.numero === 'number' && !Number.isNaN(m.numero) ? m.numero : 0 });
+  }
+  out.sort((a, b) => a.numero - b.numero);
+  return out.map(({ mesaId, mesaNome }) => ({ mesaId, mesaNome }));
+}
+
+/** Transfere pedidos para outra comanda. Apenas admin. A mesa de destino deve estar com comanda aberta. Se passar fecharComandasOrigemIds, comandas de origem que ficarem sem pedidos são encerradas (mesa fica livre para novo atendimento). */
+export async function movePedidosParaOutraComanda(
+  pedidoIds: string[],
+  comandaIdDestino: string,
+  opts?: { novoNomeCliente?: string; fecharComandasOrigemIds?: string[] }
+) {
+  await exigirAdminTransferencia();
+  if (!pedidoIds.length) throw new Error('Nenhum pedido selecionado.');
+  const { data: dest, error: errDest } = await supabase.from('comandas').select('id, aberta').eq('id', comandaIdDestino).maybeSingle();
+  if (errDest) throw new Error('Erro ao verificar mesa de destino.');
+  if (!dest) throw new Error('Mesa de destino não encontrada.');
+  if (!(dest as { aberta: boolean }).aberta) throw new Error('A mesa de destino não está com comanda aberta. Só é possível transferir para uma mesa que esteja aberta.');
+  const now = new Date().toISOString();
+  await (supabase as any).from('pedidos').update({ comanda_id: comandaIdDestino, updated_at: now }).in('id', pedidoIds);
+  if (opts?.novoNomeCliente != null && opts.novoNomeCliente.trim()) {
+    await (supabase as any).from('comandas').update({ nome_cliente: opts.novoNomeCliente.trim(), updated_at: now }).eq('id', comandaIdDestino);
+  }
+  if (opts?.fecharComandasOrigemIds?.length) {
+    for (const cid of opts.fecharComandasOrigemIds) {
+      const { data: rest } = await supabase.from('pedidos').select('id').eq('comanda_id', cid).limit(1);
+      if (!(rest ?? []).length) {
+        await (supabase as any).from('comandas').update({ aberta: false, forma_pagamento: 'Transferido', encerrada_em: now, updated_at: now }).eq('id', cid);
+      }
+    }
+  }
 }
 
 /** Mesa IDs que têm comanda aberta com pelo menos um pedido não finalizado/cancelado */
@@ -488,8 +552,20 @@ export async function getPedidosCozinha() {
   });
 }
 
+/** Pedidos que estão na mesa Viagem (comanda da mesa viagem aberta). Não usa origem do pedido, para que pedidos movidos para outra mesa deixem de aparecer aqui. */
 export async function getPedidosViagemAbertos() {
-  const { data } = await supabase.from('pedidos').select('*, pedido_itens(*, produtos(*)), comandas(nome_cliente, aberta, profiles(nome))').eq('origem', 'viagem').neq('status', 'cancelado').order('created_at', { ascending: false });
+  const { data: mesas } = await supabase.from('mesas').select('id').eq('is_viagem', true).limit(1);
+  const viagemMesaId = (mesas ?? [])[0]?.id;
+  if (!viagemMesaId) return [];
+  const { data: comandas } = await supabase.from('comandas').select('id').eq('mesa_id', viagemMesaId).eq('aberta', true);
+  const comandaIds = (comandas ?? []).map((c: { id: string }) => c.id);
+  if (!comandaIds.length) return [];
+  const { data } = await supabase
+    .from('pedidos')
+    .select('*, pedido_itens(*, produtos(*)), comandas(nome_cliente, aberta, profiles(nome))')
+    .in('comanda_id', comandaIds)
+    .neq('status', 'cancelado')
+    .order('created_at', { ascending: false });
   return (data ?? []) as any[];
 }
 

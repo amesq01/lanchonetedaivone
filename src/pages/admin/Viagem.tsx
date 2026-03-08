@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { getPedidosViagemAbertos, getTotalComanda, getTotalAPagarComanda, closeComanda, getCuponsAtivos, applyDescontoComanda, clearDescontoComanda, getProdutos, updatePedidoItens, updatePedidoStatus } from '../../lib/api';
+import { getPedidosViagemAbertos, getTotalComanda, getTotalAPagarComanda, closeComanda, getCuponsAtivos, applyDescontoComanda, clearDescontoComanda, getProdutos, updatePedidoItens, updatePedidoStatus, getMesasFechadasParaTransferencia, getComandaByMesa, openComanda, movePedidosParaOutraComanda } from '../../lib/api';
 import type { FraçãoPagamento } from '../../lib/api';
-import { printContaViagem } from '../../lib/printPdf';
+import { printContaViagem, printPedido } from '../../lib/printPdf';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import type { Cupom } from '../../types/database';
@@ -30,6 +30,12 @@ export default function AdminViagem() {
   const [popupCancelar, setPopupCancelar] = useState<{ pedidoId: string; adminOverride?: boolean } | null>(null);
   const [motivoCancelamento, setMotivoCancelamento] = useState('');
   const [confirmarEdicaoAvancada, setConfirmarEdicaoAvancada] = useState<any | null>(null);
+  const [pedidosSelecionadosViagem, setPedidosSelecionadosViagem] = useState<Set<string>>(new Set());
+  const [popupMoverSelecionadosViagem, setPopupMoverSelecionadosViagem] = useState(false);
+  const [mesasDestino, setMesasDestino] = useState<{ mesaId: string; mesaNome: string }[]>([]);
+  const [mesaIdDestinoViagem, setMesaIdDestinoViagem] = useState('');
+  const [novoNomeClienteDestinoViagem, setNovoNomeClienteDestinoViagem] = useState('');
+  const [enviandoTransferenciaViagem, setEnviandoTransferenciaViagem] = useState(false);
 
   const { profile } = useAuth();
   const STATUS_EDITAVEL = ['novo_pedido', 'aguardando_aceite'];
@@ -217,17 +223,81 @@ export default function AdminViagem() {
   const valorManualPrint = Math.max(0, Number(descontoManual) || 0);
   const valorDescontoPrint = Math.min(subtotalPrint, valorCupomPrint + valorManualPrint);
 
+  const togglePedidoSelecionadoViagem = (pedidoId: string) => {
+    setPedidosSelecionadosViagem((prev) => {
+      const next = new Set(prev);
+      if (next.has(pedidoId)) next.delete(pedidoId);
+      else next.add(pedidoId);
+      return next;
+    });
+  };
+
+  const abrirMoverSelecionadosViagem = () => {
+    if (pedidosSelecionadosViagem.size === 0) return;
+    const primeiroSelecionado = pedidos.find((p) => pedidosSelecionadosViagem.has(p.id));
+    const nomeInicial = primeiroSelecionado?.cliente_nome || (primeiroSelecionado?.comandas as any)?.nome_cliente || '';
+    setMesaIdDestinoViagem('');
+    setNovoNomeClienteDestinoViagem(nomeInicial);
+    setPopupMoverSelecionadosViagem(true);
+    getMesasFechadasParaTransferencia()
+      .then(setMesasDestino)
+      .catch((e) => {
+        alert(e instanceof Error ? e.message : 'Erro ao carregar mesas.');
+        setMesasDestino([]);
+      });
+  };
+
+  const confirmarMoverSelecionadosViagem = async () => {
+    if (!mesaIdDestinoViagem || !novoNomeClienteDestinoViagem.trim() || pedidosSelecionadosViagem.size === 0 || !profile?.id) return;
+    const ids = Array.from(pedidosSelecionadosViagem);
+    const pedidosMovidos = pedidos.filter((p) => ids.includes(p.id));
+    const comandasMovidas = [...new Set(pedidosMovidos.map((p) => p.comanda_id).filter(Boolean))] as string[];
+    const fecharComandasOrigemIds = comandasMovidas.filter((comandaId) => {
+      const totalNaComanda = pedidos.filter((p) => p.comanda_id === comandaId).length;
+      const movendo = pedidosMovidos.filter((p) => p.comanda_id === comandaId).length;
+      return totalNaComanda === movendo;
+    });
+    setEnviandoTransferenciaViagem(true);
+    try {
+      const comandaExistente = await getComandaByMesa(mesaIdDestinoViagem);
+      if (comandaExistente) {
+        alert('Esta mesa já está aberta. Escolha outra mesa livre.');
+        return;
+      }
+      const novaComanda = await openComanda(mesaIdDestinoViagem, profile.id, novoNomeClienteDestinoViagem.trim());
+      await movePedidosParaOutraComanda(ids, novaComanda.id, { fecharComandasOrigemIds });
+      setPopupMoverSelecionadosViagem(false);
+      setPedidosSelecionadosViagem(new Set());
+      load();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Erro ao transferir.');
+    } finally {
+      setEnviandoTransferenciaViagem(false);
+    }
+  };
+
   if (loading) return <p className="text-stone-500">Carregando...</p>;
 
   return (
     <div className="no-print">
-      <h1 className="text-2xl font-bold text-stone-800 mb-6">Mesa VIAGEM</h1>
-      <p className="text-stone-600 mb-4">Pedidos para viagem. Encerre cada pedido após o pagamento.</p>
+      <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-stone-800">Mesa VIAGEM</h1>
+          <p className="text-stone-600">Pedidos para viagem. Marque os pedidos e use &quot;Mover selecionados&quot; para enviar a uma mesa livre (sem comanda aberta).</p>
+        </div>
+        {pedidosSelecionadosViagem.size > 0 && (
+          <button onClick={abrirMoverSelecionadosViagem} className="rounded-lg border border-amber-400 px-4 py-2 text-amber-700 hover:bg-amber-50">
+            Mover selecionados para mesa local ({pedidosSelecionadosViagem.size})
+          </button>
+        )}
+      </div>
 
       <div className="space-y-4">
         {emPreparacao.map((p) => (
           <div key={p.id} className="rounded-xl bg-white p-4 shadow-sm flex flex-wrap items-stretch justify-between gap-4">
-            <div className="flex-1 min-w-0">
+            <div className="flex items-start gap-2 flex-1 min-w-0">
+              <input type="checkbox" checked={pedidosSelecionadosViagem.has(p.id)} onChange={() => togglePedidoSelecionadoViagem(p.id)} className="mt-1 rounded border-stone-300" />
+              <div className="flex-1 min-w-0">
               <div className="font-semibold text-stone-800">{(p.comandas as any)?.profiles?.nome ? `Pedido #${p.numero} – ${(p.comandas as any).profiles.nome}` : `Pedido #${p.numero}`}</div>
               <p className="text-sm font-medium text-amber-700 mt-0.5">Total: R$ {totalPedido(p).toFixed(2)}</p>
               <span className="text-stone-600">- {p.cliente_nome || (p.comandas as any)?.nome_cliente}</span>
@@ -236,8 +306,12 @@ export default function AdminViagem() {
                   <li key={i.id}>{i.quantidade}x {i.produtos?.nome || i.produtos?.descricao}</li>
                 ))}
               </ul>
+              </div>
             </div>
             <div className="min-w-[200px] w-[200px] flex flex-col items-center justify-center gap-2 shrink-0">
+              <button type="button" onClick={() => printPedido(p, 'Viagem')} className="rounded-lg border border-stone-300 px-4 py-2 text-sm text-stone-700 hover:bg-stone-50 mb-2">
+                Imprimir pedido
+              </button>
               <button type="button" onClick={() => pedidoPodeEditarSemConfirmacao(p) ? abrirEdicao(p) : setConfirmarEdicaoAvancada(p)} className="rounded-lg border border-amber-300 px-4 py-2 text-sm text-amber-700 hover:bg-amber-50 mb-2">
                 Editar pedido
               </button>
@@ -252,7 +326,9 @@ export default function AdminViagem() {
         ))}
         {prontosEncerrar.map((p) => (
           <div key={p.id} className="rounded-xl bg-white p-4 shadow-sm border-l-4 border-amber-500 flex flex-wrap items-stretch justify-between gap-4">
-            <div className="flex-1 min-w-0">
+            <div className="flex items-start gap-2 flex-1 min-w-0">
+              <input type="checkbox" checked={pedidosSelecionadosViagem.has(p.id)} onChange={() => togglePedidoSelecionadoViagem(p.id)} className="mt-1 rounded border-stone-300" />
+              <div className="flex-1 min-w-0">
               <div className="font-semibold text-stone-800">{(p.comandas as any)?.profiles?.nome ? `Pedido #${p.numero} – ${(p.comandas as any).profiles.nome}` : `Pedido #${p.numero}`}</div>
               <p className="text-sm font-medium text-amber-700 mt-0.5">Total: R$ {totalPedido(p).toFixed(2)}</p>
               <span className="text-stone-600">- {p.cliente_nome || (p.comandas as any)?.nome_cliente}</span>
@@ -261,8 +337,12 @@ export default function AdminViagem() {
                   <li key={i.id}>{i.quantidade}x {i.produtos?.nome || i.produtos?.descricao}</li>
                 ))}
               </ul>
+              </div>
             </div>
             <div className="min-w-[200px] w-[200px] flex flex-col items-center justify-center gap-2 shrink-0">
+              <button type="button" onClick={() => printPedido(p, 'Viagem')} className="rounded-lg border border-stone-300 px-4 py-2 text-sm text-stone-700 hover:bg-stone-50">
+                Imprimir pedido
+              </button>
               <button type="button" onClick={() => pedidoPodeEditarSemConfirmacao(p) ? abrirEdicao(p) : setConfirmarEdicaoAvancada(p)} className="rounded-lg border border-amber-300 px-4 py-2 text-sm text-amber-700 hover:bg-amber-50">
                 Editar pedido
               </button>
@@ -456,6 +536,31 @@ export default function AdminViagem() {
             <div className="flex gap-2">
               <button onClick={confirmarEncerramento} disabled={!podeConfirmarEncerramentoViagem} className="flex-1 rounded-lg bg-amber-600 py-2 text-white hover:bg-amber-700 disabled:opacity-50">Confirmar encerramento</button>
               <button onClick={() => { setPopupPagamento(null); setFracoesPagamento([]); setNovaFraçãoValor(''); setNovaFraçãoForma(''); }} className="rounded-lg border border-stone-300 px-4 py-2 text-stone-600">Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {popupMoverSelecionadosViagem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
+            <h3 className="font-semibold text-stone-800 mb-2">Mover pedidos selecionados para mesa livre</h3>
+            <p className="text-sm text-stone-500 mb-3">Escolha uma mesa que não esteja aberta e informe o nome do cliente. Será aberta uma comanda na mesa e {pedidosSelecionadosViagem.size} pedido(s) serão transferidos.</p>
+            <label className="block text-sm font-medium text-stone-600 mb-1">Mesa de destino (livre)</label>
+            <select value={mesaIdDestinoViagem} onChange={(e) => setMesaIdDestinoViagem(e.target.value)} className="w-full rounded-lg border border-stone-300 px-3 py-2 mb-2">
+              <option value="">Selecione...</option>
+              {mesasDestino.map((m) => (
+                <option key={m.mesaId} value={m.mesaId}>{m.mesaNome}</option>
+              ))}
+            </select>
+            <label className="block text-sm font-medium text-stone-600 mb-1 mt-2">Nome do cliente (mesa de destino)</label>
+            <input type="text" value={novoNomeClienteDestinoViagem} onChange={(e) => setNovoNomeClienteDestinoViagem(e.target.value)} placeholder="Ex: João" className="w-full rounded-lg border border-stone-300 px-3 py-2 mb-4" />
+            {mesasDestino.length === 0 && <p className="text-sm text-amber-600 mb-2">Nenhuma mesa livre no momento.</p>}
+            <div className="flex gap-2">
+              <button onClick={confirmarMoverSelecionadosViagem} disabled={!mesaIdDestinoViagem || !novoNomeClienteDestinoViagem.trim() || enviandoTransferenciaViagem || mesasDestino.length === 0} className="flex-1 rounded-lg bg-amber-600 py-2 text-white hover:bg-amber-700 disabled:opacity-50">
+                {enviandoTransferenciaViagem ? 'Transferindo...' : 'Confirmar'}
+              </button>
+              <button onClick={() => setPopupMoverSelecionadosViagem(false)} className="rounded-lg border border-stone-300 px-4 py-2 text-stone-600">Cancelar</button>
             </div>
           </div>
         </div>
