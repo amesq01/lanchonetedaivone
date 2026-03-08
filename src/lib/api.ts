@@ -227,15 +227,60 @@ export async function openComanda(mesaId: string, atendenteId: string, nomeClien
   return data as Database['public']['Tables']['comandas']['Row'];
 }
 
-/** Total a pagar da comanda (soma itens - descontos dos pedidos). */
+/** Lista de pagamentos já registrados na comanda (parciais e os que forem inseridos no encerramento). */
+export async function getPagamentosComanda(comandaId: string): Promise<{ id: string; valor: number; forma_pagamento: string; nome_quem_pagou: string | null; tipo: string | null; pedido_ids: string[] | null; created_at: string }[]> {
+  const { data } = await supabase.from('pagamentos').select('id, valor, forma_pagamento, nome_quem_pagou, tipo, pedido_ids, created_at').eq('comanda_id', comandaId).order('created_at', { ascending: true });
+  const rows = (data ?? []) as any[];
+  return rows.map((r) => ({
+    id: r.id,
+    valor: Number(r.valor),
+    forma_pagamento: r.forma_pagamento ?? '',
+    nome_quem_pagou: r.nome_quem_pagou ?? null,
+    tipo: r.tipo ?? null,
+    pedido_ids: Array.isArray(r.pedido_ids) ? r.pedido_ids : null,
+    created_at: r.created_at ?? '',
+  }));
+}
+
+/** Total a pagar da comanda (soma itens - descontos - pagamentos já registrados). */
 export async function getTotalAPagarComanda(comandaId: string): Promise<number> {
   const { total } = await getTotalComanda(comandaId);
   const { data: peds } = await supabase.from('pedidos').select('desconto').eq('comanda_id', comandaId).neq('status', 'cancelado');
   const descontoTotal = (peds ?? []).reduce((s: number, p: any) => s + Number(p.desconto ?? 0), 0);
-  return Math.max(0, total - descontoTotal);
+  const totalBruto = Math.max(0, total - descontoTotal);
+  const { data: pagamentosData } = await supabase.from('pagamentos').select('valor').eq('comanda_id', comandaId);
+  const jaPago = (pagamentosData ?? []).reduce((s: number, r: any) => s + Number(r.valor ?? 0), 0);
+  return Math.max(0, totalBruto - jaPago);
 }
 
-export type FraçãoPagamento = { valor: number; forma_pagamento: string };
+export type FraçãoPagamento = { valor: number; forma_pagamento: string; nome_quem_pagou?: string };
+
+/** Registra um pagamento parcial na comanda (antes do encerramento). tipo: 'parcial_pedidos' (valor dos pedidos selecionados) ou 'parcial_avulso'. */
+export async function addPagamentoParcial(
+  comandaId: string,
+  opts: { valor: number; forma_pagamento: string; nome_quem_pagou: string; tipo: 'parcial_pedidos' | 'parcial_avulso'; pedido_ids?: string[] }
+) {
+  if (opts.valor <= 0) throw new Error('Valor deve ser maior que zero.');
+  if (!opts.nome_quem_pagou?.trim()) throw new Error('Informe o nome de quem pagou.');
+  await (supabase as any).from('pagamentos').insert({
+    comanda_id: comandaId,
+    valor: opts.valor,
+    forma_pagamento: opts.forma_pagamento,
+    nome_quem_pagou: opts.nome_quem_pagou.trim(),
+    tipo: opts.tipo,
+    pedido_ids: opts.pedido_ids ?? null,
+  });
+}
+
+/** Remove um pagamento parcial da comanda (só parciais; exige confirmação na UI). */
+export async function deletePagamentoParcial(pagamentoId: string): Promise<void> {
+  const { data } = await supabase.from('pagamentos').select('id, tipo').eq('id', pagamentoId).single();
+  if (!data) throw new Error('Pagamento não encontrado.');
+  const tipo = (data as any).tipo;
+  if (tipo !== 'parcial_pedidos' && tipo !== 'parcial_avulso') throw new Error('Só é possível excluir pagamentos parciais.');
+  const { error } = await supabase.from('pagamentos').delete().eq('id', pagamentoId);
+  if (error) throw error;
+}
 
 export async function closeComanda(comandaId: string, pagamentosOrForma: FraçãoPagamento[] | string) {
   const totalAPagar = await getTotalAPagarComanda(comandaId);
@@ -251,11 +296,19 @@ export async function closeComanda(comandaId: string, pagamentosOrForma: Fraçã
     return;
   }
   const totalPago = pagamentos.reduce((s, p) => s + p.valor, 0);
-  if (totalPago < totalAPagar - 0.01) throw new Error(`Valor pago (R$ ${totalPago.toFixed(2)}) é menor que o total da conta (R$ ${totalAPagar.toFixed(2)}).`);
+  if (totalPago < totalAPagar - 0.01) throw new Error(`Valor pago (R$ ${totalPago.toFixed(2)}) é menor que o total restante da conta (R$ ${totalAPagar.toFixed(2)}).`);
   const now = new Date().toISOString();
   const resumo = pagamentos.length === 1 ? pagamentos[0].forma_pagamento : `Misto (${pagamentos.map((p) => p.forma_pagamento).join(', ')})`;
   for (const p of pagamentos) {
-    if (p.valor > 0) await (supabase as any).from('pagamentos').insert({ comanda_id: comandaId, valor: p.valor, forma_pagamento: p.forma_pagamento });
+    if (p.valor > 0) {
+      await (supabase as any).from('pagamentos').insert({
+        comanda_id: comandaId,
+        valor: p.valor,
+        forma_pagamento: p.forma_pagamento,
+        nome_quem_pagou: p.nome_quem_pagou?.trim() || null,
+        tipo: null,
+      });
+    }
   }
   await (supabase as any).from('comandas').update({ aberta: false, forma_pagamento: resumo, encerrada_em: now, updated_at: now }).eq('id', comandaId);
   await (supabase as any).from('pedidos').update({ encerrado_em: now, forma_pagamento: resumo, updated_at: now }).eq('comanda_id', comandaId).neq('status', 'cancelado');
@@ -877,26 +930,34 @@ export async function getRelatorioFinanceiro(desde: string, ate: string) {
 
   const pedidoIdsOnline = online.map((p: any) => p.id);
   const pagamentosComanda = comandaIds.length
-    ? await supabase.from('pagamentos').select('comanda_id, valor, forma_pagamento').in('comanda_id', comandaIds)
+    ? await supabase.from('pagamentos').select('comanda_id, valor, forma_pagamento, nome_quem_pagou').in('comanda_id', comandaIds)
     : { data: [] };
   const pagamentosPedido = pedidoIdsOnline.length
-    ? await supabase.from('pagamentos').select('pedido_id, valor, forma_pagamento').in('pedido_id', pedidoIdsOnline)
+    ? await supabase.from('pagamentos').select('pedido_id, valor, forma_pagamento, nome_quem_pagou').in('pedido_id', pedidoIdsOnline)
     : { data: [] };
-  const pagamentosByComanda: Record<string, { valor: number; forma_pagamento: string }[]> = {};
-  const pagamentosByPedido: Record<string, { valor: number; forma_pagamento: string }[]> = {};
+  const pagamentosByComanda: Record<string, { valor: number; forma_pagamento: string; nome_quem_pagou?: string | null }[]> = {};
+  const pagamentosByPedido: Record<string, { valor: number; forma_pagamento: string; nome_quem_pagou?: string | null }[]> = {};
   for (const row of (pagamentosComanda.data ?? []) as any[]) {
     if (!row.comanda_id) continue;
     if (!pagamentosByComanda[row.comanda_id]) pagamentosByComanda[row.comanda_id] = [];
-    pagamentosByComanda[row.comanda_id].push({ valor: Number(row.valor), forma_pagamento: row.forma_pagamento });
+    pagamentosByComanda[row.comanda_id].push({
+      valor: Number(row.valor),
+      forma_pagamento: row.forma_pagamento,
+      nome_quem_pagou: row.nome_quem_pagou ?? null,
+    });
   }
   for (const row of (pagamentosPedido.data ?? []) as any[]) {
     if (!row.pedido_id) continue;
     if (!pagamentosByPedido[row.pedido_id]) pagamentosByPedido[row.pedido_id] = [];
-    pagamentosByPedido[row.pedido_id].push({ valor: Number(row.valor), forma_pagamento: row.forma_pagamento });
+    pagamentosByPedido[row.pedido_id].push({
+      valor: Number(row.valor),
+      forma_pagamento: row.forma_pagamento,
+      nome_quem_pagou: row.nome_quem_pagou ?? null,
+    });
   }
   const totalPorFormaPagamento: Record<string, number> = {};
-  const fmtPagamento = (lista: { valor: number; forma_pagamento: string }[]) =>
-    lista.length ? lista.map((x) => `${x.forma_pagamento} R$ ${x.valor.toFixed(2)}`).join(', ') : null;
+  const fmtPagamento = (lista: { valor: number; forma_pagamento: string; nome_quem_pagou?: string | null }[]) =>
+    lista.length ? lista.map((x) => `${x.forma_pagamento} R$ ${x.valor.toFixed(2)}${x.nome_quem_pagou ? ` (${x.nome_quem_pagou})` : ''}`).join(', ') : null;
   for (const row of resultado) {
     if (row.comanda_id && pagamentosByComanda[row.comanda_id]?.length) {
       row.forma_pagamento = fmtPagamento(pagamentosByComanda[row.comanda_id]) ?? row.forma_pagamento;

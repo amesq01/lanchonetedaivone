@@ -126,7 +126,7 @@ function addTotaisSection(
   return y + 12;
 }
 
-/** Conta da mesa (presencial). */
+/** Conta da mesa (presencial). Inclui pagamentos parciais se informados. */
 export async function printContaMesa(opts: {
   titulo: string;
   clienteNome?: string;
@@ -137,6 +137,8 @@ export async function printContaMesa(opts: {
   valorManual: number;
   total: number;
   cupomCodigo?: string;
+  pagamentosParciais?: { valor: number; forma_pagamento: string; nome_quem_pagou: string | null; descricaoTipo?: string }[];
+  restanteAPagar?: number;
 }) {
   const doc = createDoc();
   let y = 10;
@@ -180,10 +182,58 @@ export async function printContaMesa(opts: {
   });
   y = (doc as any).lastAutoTable.finalY + 6;
 
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(...BLACK);
+  doc.text('Subtotal:', MARGIN_MM, y);
+  doc.text(`R$ ${opts.subtotal.toFixed(2)}`, VALORES_RIGHT_MM, y, { align: 'right' });
+  y += 5;
+
+  if (opts.pagamentosParciais?.length) {
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Pagamentos já realizados', MARGIN_MM, y);
+    doc.setFont('helvetica', 'normal');
+    y += 6;
+    for (const p of opts.pagamentosParciais) {
+      const linha = `${p.forma_pagamento}: R$ ${p.valor.toFixed(2)}${p.nome_quem_pagou ? ` (${p.nome_quem_pagou})` : ''}${p.descricaoTipo ? ` – ${p.descricaoTipo}` : ''}`;
+      doc.text(linha, MARGIN_MM, y);
+      y += 5;
+    }
+    const totalJaPago = opts.pagamentosParciais.reduce((s, p) => s + p.valor, 0);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Total já pago:', MARGIN_MM, y);
+    doc.text(`R$ ${totalJaPago.toFixed(2)}`, VALORES_RIGHT_MM, y, { align: 'right' });
+    y += 5;
+    if (opts.restanteAPagar != null) {
+      doc.text('Restante a pagar:', MARGIN_MM, y);
+      doc.text(`R$ ${opts.restanteAPagar.toFixed(2)}`, VALORES_RIGHT_MM, y, { align: 'right' });
+      y += 5;
+    }
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    y += 4;
+  }
+
   const linhasMesa: LinhaTotal[] = [];
   if (opts.valorCupom > 0 && opts.cupomCodigo) linhasMesa.push({ label: `Desconto cupom (${opts.cupomCodigo}):`, valor: `- R$ ${opts.valorCupom.toFixed(2)}` });
   if (opts.valorManual > 0) linhasMesa.push({ label: 'Desconto:', valor: `- R$ ${opts.valorManual.toFixed(2)}` });
-  y = addTotaisSection(doc, y, opts.subtotal, opts.total, linhasMesa);
+  for (const linha of linhasMesa) {
+    doc.text(linha.label, MARGIN_MM, y);
+    doc.text(linha.valor, VALORES_RIGHT_MM, y, { align: 'right' });
+    y += 5;
+  }
+  y += 2;
+  doc.setDrawColor(0, 0, 0);
+  doc.line(MARGIN_MM, y, PAPER_WIDTH_MM - MARGIN_MM, y);
+  y += 5;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(12);
+  const totalNaLinhaFinal = opts.restanteAPagar != null ? opts.restanteAPagar : opts.total;
+  doc.text('TOTAL:', MARGIN_MM, y);
+  doc.text(`R$ ${totalNaLinhaFinal.toFixed(2)}`, VALORES_RIGHT_MM, y, { align: 'right' });
+  y += 12;
+
   y = await addPixQrCode(doc, y);
   addFooter(doc, y);
   openAndPrint(doc);

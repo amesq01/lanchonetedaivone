@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getComandaByMesa, getComandaWithPedidos, getTotalComanda, closeComanda, getMesas, updatePedidoStatus, updatePedidoItens, getProdutos, getCuponsAtivos, applyDescontoComanda, clearDescontoComanda, getMesasFechadasParaTransferencia, openComanda, movePedidosParaOutraComanda } from '../../lib/api';
+import { getComandaByMesa, getComandaWithPedidos, getTotalComanda, getPagamentosComanda, addPagamentoParcial, deletePagamentoParcial, closeComanda, getMesas, updatePedidoStatus, updatePedidoItens, getProdutos, getCuponsAtivos, applyDescontoComanda, clearDescontoComanda, getMesasFechadasParaTransferencia, openComanda, movePedidosParaOutraComanda } from '../../lib/api';
 import type { FraçãoPagamento } from '../../lib/api';
 import { printContaMesa, printPedido, printPedidosUnificados } from '../../lib/printPdf';
 import { useAuth } from '../../contexts/AuthContext';
@@ -22,6 +22,7 @@ export default function AdminMesaDetail() {
   const [fracoesPagamento, setFracoesPagamento] = useState<FraçãoPagamento[]>([]);
   const [novaFraçãoValor, setNovaFraçãoValor] = useState('');
   const [novaFraçãoForma, setNovaFraçãoForma] = useState('');
+  const [novaFraçãoNome, setNovaFraçãoNome] = useState('');
   const [contaItens, setContaItens] = useState<{ itens: { codigo: string; descricao: string; quantidade: number; valor: number }[]; total: number } | null>(null);
   const [popupImprimir, setPopupImprimir] = useState(false);
   const [cupons, setCupons] = useState<Cupom[]>([]);
@@ -45,6 +46,16 @@ export default function AdminMesaDetail() {
   const [mesaIdDestino, setMesaIdDestino] = useState('');
   const [novoNomeClienteDestino, setNovoNomeClienteDestino] = useState('');
   const [enviandoTransferencia, setEnviandoTransferencia] = useState(false);
+  const [pagamentosComanda, setPagamentosComanda] = useState<{ id: string; valor: number; forma_pagamento: string; nome_quem_pagou: string | null; tipo: string | null; pedido_ids: string[] | null; created_at: string }[]>([]);
+  const [popupParcialPedidos, setPopupParcialPedidos] = useState(false);
+  const [popupParcialAvulso, setPopupParcialAvulso] = useState(false);
+  const [parcialNomeQuemPagou, setParcialNomeQuemPagou] = useState('');
+  const [parcialForma, setParcialForma] = useState('');
+  const [parcialValorAvulso, setParcialValorAvulso] = useState('');
+  const [enviandoParcial, setEnviandoParcial] = useState(false);
+  const [pedidosSelecionadosParcial, setPedidosSelecionadosParcial] = useState<Set<string>>(new Set());
+  const [confirmarExcluirPagamento, setConfirmarExcluirPagamento] = useState<{ id: string; valor: number; descricao: string } | null>(null);
+  const [excluindoPagamento, setExcluindoPagamento] = useState(false);
 
   useEffect(() => {
     if (!mesaId) return;
@@ -64,6 +75,7 @@ export default function AdminMesaDetail() {
             setPedidos([]);
           }
           getTotalComanda(c.id).then(setContaItens);
+          getPagamentosComanda(c.id).then(setPagamentosComanda);
         });
       }
       setLoading(false);
@@ -130,6 +142,14 @@ export default function AdminMesaDetail() {
       valorManual: vManual,
       total: totalFinal,
       cupomCodigo: cupomSelecionado?.codigo,
+      pagamentosParciais: pagamentosComanda.length > 0 ? pagamentosComanda.map((p) => {
+        const nums = p.tipo === 'parcial_pedidos' && (p.pedido_ids?.length ?? 0) > 0
+          ? (p.pedido_ids ?? []).map((id) => pedidosNaMesa.find((ped) => ped.id === id)?.numero).filter((n): n is number => n != null).sort((a, b) => a - b)
+          : [];
+        const descricaoTipo = p.tipo === 'parcial_pedidos' ? (nums.length > 0 ? `Pedidos #${nums.join(', #')}` : 'Pedidos selecionados') : p.tipo === 'parcial_avulso' ? 'Avulso' : undefined;
+        return { valor: p.valor, forma_pagamento: p.forma_pagamento, nome_quem_pagou: p.nome_quem_pagou, descricaoTipo };
+      }) : undefined,
+      restanteAPagar: pagamentosComanda.length > 0 ? Math.max(0, totalFinal - pagamentosComanda.reduce((s, p) => s + p.valor, 0)) : undefined,
     });
   };
 
@@ -162,15 +182,17 @@ export default function AdminMesaDetail() {
     let vCupom = cupomSel ? (sub * Number(cupomSel.porcentagem)) / 100 : 0;
     if (cupomSel?.valor_maximo != null) vCupom = Math.min(vCupom, Number(cupomSel.valor_maximo));
     const vManual = Math.max(0, Number(descontoManual) || 0);
-    const totalInicial = Math.max(0, sub - Math.min(sub, vCupom + vManual));
-    setNovaFraçãoValor(totalInicial.toFixed(2));
+    const totalComDesc = Math.max(0, sub - Math.min(sub, vCupom + vManual));
+    const jaPago = pagamentosComanda.reduce((s, p) => s + p.valor, 0);
+    const restante = Math.max(0, totalComDesc - jaPago);
+    setNovaFraçãoValor(restante.toFixed(2));
     setNovaFraçãoForma('');
     setPopupPagamento(true);
   };
 
   const confirmarEncerramento = async () => {
     if (!comanda) return;
-    const totalConta = totalComDesconto;
+    const totalConta = totalRestante;
     if (totalConta < 0.01) {
       try {
         await closeComanda(comanda.id, 'Sem consumo');
@@ -206,15 +228,86 @@ export default function AdminMesaDetail() {
     const v = Math.max(0, Number(novaFraçãoValor.replace(',', '.')));
     const forma = novaFraçãoForma || formas[0];
     if (v <= 0) return;
-    setFracoesPagamento((prev) => [...prev, { valor: v, forma_pagamento: forma }]);
+    setFracoesPagamento((prev) => [...prev, { valor: v, forma_pagamento: forma, nome_quem_pagou: novaFraçãoNome.trim() || undefined }]);
     const novoTotalPago = totalPago + v;
-    const restante = Math.max(0, totalComDesconto - novoTotalPago);
+    const restante = Math.max(0, totalRestante - novoTotalPago);
     setNovaFraçãoValor(restante.toFixed(2));
     setNovaFraçãoForma('');
+    setNovaFraçãoNome('');
   };
 
   const removerFraçãoPagamento = (index: number) => {
     setFracoesPagamento((prev) => prev.filter((_, i) => i !== index));
+  };
+
+
+  const confirmarParcialPedidos = async () => {
+    if (!comanda || !parcialNomeQuemPagou.trim() || pedidosSelecionadosParcial.size === 0) {
+      alert('Selecione ao menos um pedido e informe o nome de quem pagou.');
+      return;
+    }
+    const jaPagos = new Set<string>();
+    for (const p of pagamentosComanda) {
+      if (p.tipo === 'parcial_pedidos' && p.pedido_ids?.length) {
+        for (const id of p.pedido_ids) jaPagos.add(id);
+      }
+    }
+    const idsParaPagar = Array.from(pedidosSelecionadosParcial).filter((id) => !jaPagos.has(id));
+    if (idsParaPagar.length === 0) {
+      alert('Nenhum pedido elegível: todos já foram pagos em pagamento parcial.');
+      return;
+    }
+    const selecionados = pedidosNaMesa.filter((p) => idsParaPagar.includes(p.id));
+    const valor = selecionados.reduce((s, p) => s + totalPedido(p), 0);
+    if (valor <= 0) return;
+    setEnviandoParcial(true);
+    try {
+      await addPagamentoParcial(comanda.id, {
+        valor,
+        forma_pagamento: parcialForma,
+        nome_quem_pagou: parcialNomeQuemPagou.trim(),
+        tipo: 'parcial_pedidos',
+        pedido_ids: idsParaPagar,
+      });
+      const lista = await getPagamentosComanda(comanda.id);
+      setPagamentosComanda(lista);
+      setPopupParcialPedidos(false);
+      setPedidosSelecionadosParcial(new Set());
+      setPedidosSelecionados(new Set());
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Erro ao registrar pagamento.');
+    } finally {
+      setEnviandoParcial(false);
+    }
+  };
+
+  const confirmarParcialAvulso = async () => {
+    if (!comanda || !parcialNomeQuemPagou.trim()) {
+      alert('Informe o valor e o nome de quem pagou.');
+      return;
+    }
+    const valor = Math.max(0, Number(parcialValorAvulso.replace(',', '.')));
+    if (valor <= 0) {
+      alert('Informe um valor maior que zero.');
+      return;
+    }
+    setEnviandoParcial(true);
+    try {
+      await addPagamentoParcial(comanda.id, {
+        valor,
+        forma_pagamento: parcialForma,
+        nome_quem_pagou: parcialNomeQuemPagou.trim(),
+        tipo: 'parcial_avulso',
+      });
+      const lista = await getPagamentosComanda(comanda.id);
+      setPagamentosComanda(lista);
+      setPopupParcialAvulso(false);
+      setParcialValorAvulso('');
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Erro ao registrar pagamento.');
+    } finally {
+      setEnviandoParcial(false);
+    }
   };
 
   const abrirModalMoverTodos = () => {
@@ -369,9 +462,21 @@ export default function AdminMesaDetail() {
   const totalComDesconto = subtotal - valorDesconto;
 
   const formas = ['dinheiro', 'pix', 'cartão crédito', 'cartão débito'];
+  const totalJaPagoParciais = pagamentosComanda.reduce((s, p) => s + p.valor, 0);
+  const totalRestante = Math.max(0, totalComDesconto - totalJaPagoParciais);
+  /** IDs de pedidos já pagos totalmente em algum pagamento parcial "pedidos selecionados". */
+  const pedidoIdsJaPagosParcial = (() => {
+    const set = new Set<string>();
+    for (const p of pagamentosComanda) {
+      if (p.tipo === 'parcial_pedidos' && p.pedido_ids?.length) {
+        for (const id of p.pedido_ids) set.add(id);
+      }
+    }
+    return set;
+  })();
   const totalPago = fracoesPagamento.reduce((s, f) => s + f.valor, 0);
-  const contaZerada = totalComDesconto < 0.01;
-  const podeConfirmarPagamento = contaZerada || (fracoesPagamento.length > 0 && totalPago >= totalComDesconto - 0.01);
+  const contaZerada = totalRestante < 0.01;
+  const podeConfirmarPagamento = contaZerada || (fracoesPagamento.length > 0 && totalPago >= totalRestante - 0.01);
 
   function totalPedido(p: any) {
     const sub = (p.pedido_itens ?? []).reduce((s: number, i: any) => s + (i.quantidade || 0) * Number(i.valor_unitario || 0), 0);
@@ -434,6 +539,67 @@ export default function AdminMesaDetail() {
           )}
         </div>
       </div>
+
+      <div className="rounded-xl bg-white p-4 shadow-sm mb-6">
+        <h3 className="font-semibold text-stone-800 mb-2">Pagamentos parciais</h3>
+        <p className="text-sm text-stone-500 mb-2">Registre pagamentos antes do encerramento. Eles reduzem o valor restante e constam na impressão da conta e no relatório financeiro.</p>
+        {pagamentosComanda.length > 0 && (
+          <ul className="mb-3 rounded-lg border border-stone-200 divide-y divide-stone-100">
+            {pagamentosComanda.map((p) => {
+              const pedidosIncluidos = p.tipo === 'parcial_pedidos' && (p.pedido_ids?.length ?? 0) > 0
+                ? (p.pedido_ids ?? []).map((id) => pedidosNaMesa.find((ped) => ped.id === id)?.numero).filter((n): n is number => n != null).sort((a, b) => a - b)
+                : [];
+              const textoPedidos = pedidosIncluidos.length > 0 ? `Pedidos #${pedidosIncluidos.join(', #')}` : 'Pedidos selecionados';
+              return (
+              <li key={p.id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm">
+                <span className="text-stone-700">
+                  R$ {p.valor.toFixed(2)} – {p.forma_pagamento}
+                  {p.nome_quem_pagou ? ` (${p.nome_quem_pagou})` : ''}
+                  {p.tipo === 'parcial_pedidos' ? ` – ${textoPedidos}` : p.tipo === 'parcial_avulso' ? ' – Avulso' : ''}
+                </span>
+                {(p.tipo === 'parcial_pedidos' || p.tipo === 'parcial_avulso') && (
+                  <button type="button" onClick={() => setConfirmarExcluirPagamento({ id: p.id, valor: p.valor, descricao: `R$ ${p.valor.toFixed(2)} – ${p.forma_pagamento}${p.nome_quem_pagou ? ` (${p.nome_quem_pagou})` : ''}${p.tipo === 'parcial_pedidos' ? ` – ${textoPedidos}` : ''}` })} className="text-red-600 hover:underline text-xs">
+                    Excluir
+                  </button>
+                )}
+              </li>
+            );
+            })}
+          </ul>
+        )}
+        <div className="flex flex-wrap gap-2 items-center">
+          <span className="text-sm font-medium text-stone-600">Já pago: R$ {totalJaPagoParciais.toFixed(2)}</span>
+          <span className="text-sm font-medium text-amber-700">Restante: R$ {totalRestante.toFixed(2)}</span>
+          {pedidosNaMesa.length > 0 && pedidosSelecionados.size > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                const disponiveis = Array.from(pedidosSelecionados).filter((id) => !pedidoIdsJaPagosParcial.has(id));
+                if (disponiveis.length === 0) {
+                  alert('Todos os pedidos selecionados já foram pagos em pagamento parcial.');
+                  return;
+                }
+                setPedidosSelecionadosParcial(new Set(disponiveis));
+                setParcialNomeQuemPagou('');
+                setParcialForma(formas[0]);
+                setPopupParcialPedidos(true);
+                if (disponiveis.length < pedidosSelecionados.size) {
+                  const jaPagos = Array.from(pedidosSelecionados).filter((id) => pedidoIdsJaPagosParcial.has(id));
+                  const numeros = jaPagos.map((id) => pedidosNaMesa.find((p) => p.id === id)?.numero).filter((n): n is number => n != null).sort((a, b) => a - b);
+                  alert(`Pedidos #${numeros.join(', #')} já foram pagos em pagamento parcial e foram desmarcados.`);
+                }
+              }}
+              className="rounded-lg border border-stone-400 px-3 py-2 text-sm text-stone-700 hover:bg-stone-50"
+            >
+              Incluir pagamento (pedidos selecionados) ({pedidosSelecionados.size})
+            </button>
+          )}
+          <button type="button" onClick={() => { setParcialValorAvulso(''); setParcialNomeQuemPagou(''); setParcialForma(formas[0]); setPopupParcialAvulso(true); }} className="rounded-lg border border-stone-400 px-3 py-2 text-sm text-stone-700 hover:bg-stone-50">
+            Incluir pagamento avulso
+          </button>
+        </div>
+      </div>
+
       <div className="rounded-xl bg-white p-4 shadow-sm mb-6">
         <div className="flex items-center justify-between mb-2">
           <h3 className="font-semibold text-stone-800">Pedidos</h3>
@@ -666,12 +832,103 @@ export default function AdminMesaDetail() {
         </div>
       )}
 
+      {popupParcialPedidos && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 overflow-y-auto">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl my-4">
+            <h3 className="font-semibold text-stone-800 mb-2">Pagamento dos pedidos selecionados</h3>
+            <p className="text-sm text-stone-500 mb-3">Informe quem pagou. O valor será a soma dos pedidos abaixo.</p>
+            <ul className="mb-3 max-h-48 overflow-y-auto rounded-lg border border-stone-200 divide-y divide-stone-100">
+              {pedidosNaMesa.filter((p) => pedidosSelecionadosParcial.has(p.id)).map((p) => (
+                <li key={p.id} className="px-3 py-2">
+                  <span className="text-sm">Pedido #{p.numero} – R$ {totalPedido(p).toFixed(2)}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="text-sm font-medium text-amber-700 mb-2">
+              Total selecionado: R$ {pedidosNaMesa.filter((p) => pedidosSelecionadosParcial.has(p.id)).reduce((s, p) => s + totalPedido(p), 0).toFixed(2)}
+            </p>
+            <label className="block text-sm font-medium text-stone-600 mb-1">Nome de quem pagou</label>
+            <input type="text" value={parcialNomeQuemPagou} onChange={(e) => setParcialNomeQuemPagou(e.target.value)} placeholder="Ex: João" className="w-full rounded-lg border border-stone-300 px-3 py-2 mb-2" />
+            <label className="block text-sm font-medium text-stone-600 mb-1">Forma de pagamento</label>
+            <select value={parcialForma} onChange={(e) => setParcialForma(e.target.value)} className="w-full rounded-lg border border-stone-300 px-3 py-2 mb-4">
+              {formas.map((f) => (
+                <option key={f} value={f}>{f}</option>
+              ))}
+            </select>
+            <div className="flex gap-2">
+              <button onClick={confirmarParcialPedidos} disabled={enviandoParcial || pedidosSelecionadosParcial.size === 0 || !parcialNomeQuemPagou.trim()} className="flex-1 rounded-lg bg-amber-600 py-2 text-white hover:bg-amber-700 disabled:opacity-50">
+                {enviandoParcial ? 'Registrando...' : 'Registrar'}
+              </button>
+              <button onClick={() => setPopupParcialPedidos(false)} className="rounded-lg border border-stone-300 px-4 py-2 text-stone-600">Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {popupParcialAvulso && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
+            <h3 className="font-semibold text-stone-800 mb-2">Pagamento avulso</h3>
+            <p className="text-sm text-stone-500 mb-3">Valor que não está vinculado a pedidos específicos (ex.: entrada, gorjeta). Informe quem pagou.</p>
+            <label className="block text-sm font-medium text-stone-600 mb-1">Valor (R$)</label>
+            <input type="text" inputMode="decimal" value={parcialValorAvulso} onChange={(e) => setParcialValorAvulso(e.target.value)} placeholder="Ex: 20,00" className="w-full rounded-lg border border-stone-300 px-3 py-2 mb-2" />
+            <label className="block text-sm font-medium text-stone-600 mb-1">Nome de quem pagou</label>
+            <input type="text" value={parcialNomeQuemPagou} onChange={(e) => setParcialNomeQuemPagou(e.target.value)} placeholder="Ex: Maria" className="w-full rounded-lg border border-stone-300 px-3 py-2 mb-2" />
+            <label className="block text-sm font-medium text-stone-600 mb-1">Forma de pagamento</label>
+            <select value={parcialForma} onChange={(e) => setParcialForma(e.target.value)} className="w-full rounded-lg border border-stone-300 px-3 py-2 mb-4">
+              {formas.map((f) => (
+                <option key={f} value={f}>{f}</option>
+              ))}
+            </select>
+            <div className="flex gap-2">
+              <button onClick={confirmarParcialAvulso} disabled={enviandoParcial || !parcialNomeQuemPagou.trim() || Number(parcialValorAvulso.replace(',', '.')) <= 0} className="flex-1 rounded-lg bg-amber-600 py-2 text-white hover:bg-amber-700 disabled:opacity-50">
+                {enviandoParcial ? 'Registrando...' : 'Registrar'}
+              </button>
+              <button onClick={() => setPopupParcialAvulso(false)} className="rounded-lg border border-stone-300 px-4 py-2 text-stone-600">Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmarExcluirPagamento && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
+            <h3 className="font-semibold text-stone-800 mb-2">Excluir pagamento parcial?</h3>
+            <p className="text-sm text-stone-600 mb-3">Este pagamento será removido da comanda. O valor voltará a ser considerado no restante a pagar.</p>
+            <p className="text-sm font-medium text-stone-700 mb-4">{confirmarExcluirPagamento.descricao}</p>
+            <div className="flex gap-2">
+              <button
+                onClick={async () => {
+                  if (!comanda || !confirmarExcluirPagamento) return;
+                  setExcluindoPagamento(true);
+                  try {
+                    await deletePagamentoParcial(confirmarExcluirPagamento.id);
+                    const lista = await getPagamentosComanda(comanda.id);
+                    setPagamentosComanda(lista);
+                    setConfirmarExcluirPagamento(null);
+                  } catch (e) {
+                    alert((e as Error).message);
+                  } finally {
+                    setExcluindoPagamento(false);
+                  }
+                }}
+                disabled={excluindoPagamento}
+                className="flex-1 rounded-lg bg-red-600 py-2 text-white hover:bg-red-700 disabled:opacity-50"
+              >
+                {excluindoPagamento ? 'Excluindo...' : 'Excluir'}
+              </button>
+              <button onClick={() => setConfirmarExcluirPagamento(null)} disabled={excluindoPagamento} className="rounded-lg border border-stone-300 px-4 py-2 text-stone-600">Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {popupPagamento && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
             <h3 className="font-semibold text-stone-800 mb-2">Pagamento da conta</h3>
-            <p className="text-sm text-stone-500 mb-3">{totalComDesconto < 0.01 ? 'Mesa sem pedidos. Confirme para encerrar (sem consumo).' : 'Adicione as frações de pagamento até completar o total. Cada fração pode ter uma forma de pagamento diferente.'}</p>
-            <p className="text-sm font-medium text-amber-700 mb-3">Total da conta: R$ {totalComDesconto.toFixed(2)}</p>
+            <p className="text-sm text-stone-500 mb-3">{totalRestante < 0.01 ? 'Mesa sem pedidos ou conta já quitada. Confirme para encerrar.' : 'Adicione as frações de pagamento até completar o valor restante. Cada fração pode ter uma forma de pagamento e nome de quem pagou.'}</p>
+            <p className="text-sm font-medium text-amber-700 mb-3">{totalJaPagoParciais > 0 ? `Restante a pagar: R$ ${totalRestante.toFixed(2)} (já pago: R$ ${totalJaPagoParciais.toFixed(2)})` : `Total da conta: R$ ${totalRestante.toFixed(2)}`}</p>
             <div className="flex gap-2 mb-2">
               <input
                 type="text"
@@ -700,12 +957,12 @@ export default function AdminMesaDetail() {
                 ))}
               </ul>
             )}
-            <p className="text-sm font-medium text-stone-700 mb-3">Total pago: R$ {totalPago.toFixed(2)} {totalPago >= totalComDesconto - 0.01 ? '✓' : `(falta R$ ${(totalComDesconto - totalPago).toFixed(2)})`}</p>
+            <p className="text-sm font-medium text-stone-700 mb-3">Total pago (nesta tela): R$ {totalPago.toFixed(2)} {totalPago >= totalRestante - 0.01 ? '✓' : `(falta R$ ${(totalRestante - totalPago).toFixed(2)})`}</p>
             <div className="flex gap-2">
               <button onClick={confirmarEncerramento} disabled={!podeConfirmarPagamento} className="flex-1 rounded-lg bg-amber-600 py-2 text-white hover:bg-amber-700 disabled:opacity-50">
                 Confirmar encerramento
               </button>
-              <button onClick={() => { setPopupPagamento(false); setFracoesPagamento([]); setNovaFraçãoValor(''); setNovaFraçãoForma(''); }} className="rounded-lg border border-stone-300 px-4 py-2 text-stone-600">Cancelar</button>
+              <button onClick={() => { setPopupPagamento(false); setFracoesPagamento([]); setNovaFraçãoValor(''); setNovaFraçãoForma(''); setNovaFraçãoNome(''); }} className="rounded-lg border border-stone-300 px-4 py-2 text-stone-600">Cancelar</button>
             </div>
           </div>
         </div>
