@@ -265,6 +265,20 @@ export async function openComanda(mesaId: string, atendenteId: string, nomeClien
   return data as Database['public']['Tables']['comandas']['Row'];
 }
 
+/** Lista atendentes (id, nome) para dropdown de atribuição de mesa. */
+export async function getAtendentes(): Promise<{ id: string; nome: string }[]> {
+  const { data, error } = await supabase.from('profiles').select('id, nome').eq('role', 'atendente').order('nome');
+  if (error) throw error;
+  return (data ?? []) as { id: string; nome: string }[];
+}
+
+/** Admin: atribui a comanda (mesa aberta) a outro atendente. */
+export async function atribuirComandaParaAtendente(comandaId: string, novoAtendenteId: string): Promise<void> {
+  await exigirAdminTransferencia();
+  const { error } = await (supabase as any).from('comandas').update({ atendente_id: novoAtendenteId, updated_at: new Date().toISOString() }).eq('id', comandaId);
+  if (error) throw error;
+}
+
 /** Lista de pagamentos já registrados na comanda (parciais e os que forem inseridos no encerramento). */
 export async function getPagamentosComanda(comandaId: string): Promise<{ id: string; valor: number; forma_pagamento: string; nome_quem_pagou: string | null; tipo: string | null; pedido_ids: string[] | null; created_at: string }[]> {
   const { data } = await supabase.from('pagamentos').select('id, valor, forma_pagamento, nome_quem_pagou, tipo, pedido_ids, created_at').eq('comanda_id', comandaId).order('created_at', { ascending: true });

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getComandaByMesa, getComandaWithPedidos, getTotalComanda, getPagamentosComanda, addPagamentoParcial, deletePagamentoParcial, closeComanda, getMesas, updatePedidoStatus, updatePedidoItens, getProdutos, getCuponsAtivos, applyDescontoComanda, clearDescontoComanda, getMesasFechadasParaTransferencia, openComanda, movePedidosParaOutraComanda, createPedidoPresencial } from '../../lib/api';
+import { getComandaByMesa, getComandaWithPedidos, getTotalComanda, getPagamentosComanda, addPagamentoParcial, deletePagamentoParcial, closeComanda, getMesas, updatePedidoStatus, updatePedidoItens, getProdutos, getCuponsAtivos, applyDescontoComanda, clearDescontoComanda, getMesasFechadasParaTransferencia, openComanda, movePedidosParaOutraComanda, createPedidoPresencial, getAtendentes, atribuirComandaParaAtendente } from '../../lib/api';
 import type { FraçãoPagamento } from '../../lib/api';
 import { printContaMesa, printPedido, printPedidosUnificados } from '../../lib/printPdf';
 import { useAuth } from '../../contexts/AuthContext';
@@ -66,6 +66,11 @@ export default function AdminMesaDetail() {
   const [searchNovo, setSearchNovo] = useState('');
   const [carrinhoNovo, setCarrinhoNovo] = useState<ItemCarrinho[]>([]);
   const [enviandoNovo, setEnviandoNovo] = useState(false);
+  /** Atribuir mesa a outro atendente (admin) */
+  const [popupAtribuirAtendente, setPopupAtribuirAtendente] = useState(false);
+  const [atendentes, setAtendentes] = useState<{ id: string; nome: string }[]>([]);
+  const [atendenteIdAtribuir, setAtendenteIdAtribuir] = useState('');
+  const [enviandoAtribuir, setEnviandoAtribuir] = useState(false);
 
   const loadComanda = (mesa: string) => {
     getComandaByMesa(mesa).then((c) => {
@@ -540,6 +545,29 @@ export default function AdminMesaDetail() {
   const sNovo = (searchNovo || '').trim().toLowerCase();
   const filtradosNovo = sNovo ? produtos.filter((p) => (p.nome?.toLowerCase().includes(sNovo)) || (p.codigo === searchNovo.trim())) : [];
 
+  const abrirPopupAtribuirAtendente = () => {
+    setAtendenteIdAtribuir('');
+    getAtendentes().then(setAtendentes);
+    setPopupAtribuirAtendente(true);
+  };
+
+  const confirmarAtribuirAtendente = async () => {
+    if (!comanda || !atendenteIdAtribuir.trim()) {
+      alert('Selecione um atendente.');
+      return;
+    }
+    setEnviandoAtribuir(true);
+    try {
+      await atribuirComandaParaAtendente(comanda.id, atendenteIdAtribuir.trim());
+      setPopupAtribuirAtendente(false);
+      loadComanda(mesaId!);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Erro ao atribuir.');
+    } finally {
+      setEnviandoAtribuir(false);
+    }
+  };
+
   if (loading) return <p className="text-stone-500">Carregando...</p>;
   if (!comanda) {
     return (
@@ -645,6 +673,10 @@ export default function AdminMesaDetail() {
         <div className="min-w-0">
           <h1 className="text-xl sm:text-2xl font-bold text-stone-800 truncate">{mesaNome}</h1>
           <p className="text-stone-600 text-sm sm:text-base truncate">Cliente: {comanda.nome_cliente}</p>
+          <p className="text-stone-500 text-sm truncate">Aberta por: {(comanda as any).profiles?.nome ?? '—'}</p>
+          <button type="button" onClick={abrirPopupAtribuirAtendente} className="mt-1 text-sm text-amber-600 hover:underline">
+            Atribuir a outro atendente
+          </button>
         </div>
         <div className="flex flex-wrap gap-2">
           <button onClick={handleAbrirImprimir} className="rounded-lg border border-stone-300 px-4 py-2 text-stone-700 hover:bg-stone-50">
@@ -1001,6 +1033,31 @@ export default function AdminMesaDetail() {
             <div className="flex gap-2">
               <button onClick={() => { abrirEdicao(confirmarEdicaoAvancada); setConfirmarEdicaoAvancada(null); }} className="flex-1 rounded-lg bg-amber-600 py-2 text-white hover:bg-amber-700">Sim, editar</button>
               <button onClick={() => setConfirmarEdicaoAvancada(null)} className="rounded-lg border border-stone-300 px-4 py-2 text-stone-600">Não</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {popupAtribuirAtendente && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
+            <h3 className="font-semibold text-stone-800 mb-2">Atribuir mesa a outro atendente</h3>
+            <p className="text-sm text-stone-600 mb-3">A mesa continuará aberta; apenas o responsável (atendente) será alterado. O novo atendente poderá lançar pedidos e encerrar a mesa no PDV.</p>
+            <label className="block text-sm font-medium text-stone-600 mb-1">Atendente</label>
+            <select value={atendenteIdAtribuir} onChange={(e) => setAtendenteIdAtribuir(e.target.value)} className="w-full rounded-lg border border-stone-300 px-3 py-2 mb-4">
+              <option value="">Selecione...</option>
+              {atendentes.filter((a) => a.id !== comanda?.atendente_id).map((a) => (
+                <option key={a.id} value={a.id}>{a.nome}</option>
+              ))}
+            </select>
+            {atendentes.filter((a) => a.id !== comanda?.atendente_id).length === 0 && atendentes.length > 0 && (
+              <p className="text-sm text-stone-500 mb-2">Esta mesa já está atribuída ao único atendente cadastrado.</p>
+            )}
+            <div className="flex gap-2">
+              <button onClick={confirmarAtribuirAtendente} disabled={!atendenteIdAtribuir.trim() || enviandoAtribuir} className="flex-1 rounded-lg bg-amber-600 py-2 text-white hover:bg-amber-700 disabled:opacity-50">
+                {enviandoAtribuir ? 'Atribuindo...' : 'Atribuir'}
+              </button>
+              <button onClick={() => setPopupAtribuirAtendente(false)} disabled={enviandoAtribuir} className="rounded-lg border border-stone-300 px-4 py-2 text-stone-600">Cancelar</button>
             </div>
           </div>
         </div>
