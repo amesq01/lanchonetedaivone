@@ -156,7 +156,11 @@ export default function AtendenteViagem() {
                       onClick={() => setAcordaoAberto(expandido ? null : p.id)}
                       className="flex w-full items-center justify-between p-3 text-left text-sm hover:bg-stone-50"
                     >
-                      <span className="font-medium text-stone-800">{(p.comandas as any)?.profiles?.nome ? `Pedido #${p.numero} – ${(p.comandas as any).profiles.nome}` : `Pedido #${p.numero}`}</span>
+                      <span className="font-medium text-stone-800">
+                      {(p.comandas as any)?.profiles?.nome
+                        ? `Pedido #${p.numero} – ${(p.comandas as any).profiles.nome}${(p as any).lancado_pelo_admin ? ' (lançada pelo admin)' : ''}`
+                        : `Pedido #${p.numero}${(p as any).lancado_pelo_admin ? ' (lançada pelo admin)' : ''}`}
+                    </span>
                       <span className="text-stone-500 text-xs mr-2">{p.cliente_nome ?? '-'}</span>
                       <span className="text-xs px-2 py-0.5 rounded bg-stone-100 text-stone-600">{statusLabel[p.status] ?? p.status}</span>
                       {expandido ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
@@ -185,7 +189,11 @@ export default function AtendenteViagem() {
         {pedidos.map((p) => (
           <div key={p.id} className="rounded-xl bg-white p-4 shadow-sm border border-stone-200 flex flex-wrap items-start justify-between gap-2">
             <div className="min-w-0 flex-1">
-              <div className="font-semibold text-stone-800">{(p.comandas as any)?.profiles?.nome ? `Pedido #${p.numero} – ${(p.comandas as any).profiles.nome}` : `Pedido #${p.numero}`}</div>
+              <div className="font-semibold text-stone-800">
+              {(p.comandas as any)?.profiles?.nome
+                ? `Pedido #${p.numero} – ${(p.comandas as any).profiles.nome}${(p as any).lancado_pelo_admin ? ' (lançada pelo admin)' : ''}`
+                : `Pedido #${p.numero}${(p as any).lancado_pelo_admin ? ' (lançada pelo admin)' : ''}`}
+            </div>
               <div className="text-sm text-stone-600">{p.cliente_nome}</div>
               <ul className="text-sm text-stone-500 mt-1">
                 {(p.pedido_itens ?? []).map((i: any) => (

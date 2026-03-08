@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getComandaByMesa, getComandaWithPedidos, getTotalComanda, getPagamentosComanda, addPagamentoParcial, deletePagamentoParcial, closeComanda, getMesas, updatePedidoStatus, updatePedidoItens, getProdutos, getCuponsAtivos, applyDescontoComanda, clearDescontoComanda, getMesasFechadasParaTransferencia, openComanda, movePedidosParaOutraComanda } from '../../lib/api';
+import { getComandaByMesa, getComandaWithPedidos, getTotalComanda, getPagamentosComanda, addPagamentoParcial, deletePagamentoParcial, closeComanda, getMesas, updatePedidoStatus, updatePedidoItens, getProdutos, getCuponsAtivos, applyDescontoComanda, clearDescontoComanda, getMesasFechadasParaTransferencia, openComanda, movePedidosParaOutraComanda, createPedidoPresencial } from '../../lib/api';
 import type { FraçãoPagamento } from '../../lib/api';
 import { printContaMesa, printPedido, printPedidosUnificados } from '../../lib/printPdf';
 import { useAuth } from '../../contexts/AuthContext';
@@ -56,6 +56,33 @@ export default function AdminMesaDetail() {
   const [pedidosSelecionadosParcial, setPedidosSelecionadosParcial] = useState<Set<string>>(new Set());
   const [confirmarExcluirPagamento, setConfirmarExcluirPagamento] = useState<{ id: string; valor: number; descricao: string } | null>(null);
   const [excluindoPagamento, setExcluindoPagamento] = useState(false);
+  /** Mesa fechada: abrir comanda */
+  const [nomeClienteAbrir, setNomeClienteAbrir] = useState('');
+  const [abrindoComanda, setAbrindoComanda] = useState(false);
+  /** Lançar novo pedido (quando comanda aberta) */
+  type ItemCarrinho = { produto: Produto; quantidade: number; observacao: string };
+  const [searchNovo, setSearchNovo] = useState('');
+  const [carrinhoNovo, setCarrinhoNovo] = useState<ItemCarrinho[]>([]);
+  const [enviandoNovo, setEnviandoNovo] = useState(false);
+
+  const loadComanda = (mesa: string) => {
+    getComandaByMesa(mesa).then((c) => {
+      setComanda(c);
+      if (c) {
+        getComandaWithPedidos(c.id).then((r) => {
+          if (r) {
+            setComanda(r.comanda as Comanda);
+            setPedidos(r.pedidos);
+          } else {
+            setPedidos([]);
+          }
+          getTotalComanda(c.id).then(setContaItens);
+          getPagamentosComanda(c.id).then(setPagamentosComanda);
+        });
+      }
+      setLoading(false);
+    });
+  };
 
   useEffect(() => {
     if (!mesaId) return;
@@ -449,8 +476,100 @@ export default function AdminMesaDetail() {
   const sEdicao = (searchEdicao || '').trim().toLowerCase();
   const filtradosEdicao = sEdicao ? produtos.filter((p) => (p.codigo?.toLowerCase().includes(sEdicao) || (p.nome ?? '').toLowerCase().includes(sEdicao) || (p.descricao ?? '').toLowerCase().includes(sEdicao))) : [];
 
+  const handleAbrirComanda = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!mesaId || !profile?.id || !nomeClienteAbrir.trim()) {
+      alert('Informe o nome do cliente.');
+      return;
+    }
+    setAbrindoComanda(true);
+    try {
+      await openComanda(mesaId, profile.id, nomeClienteAbrir.trim());
+      setNomeClienteAbrir('');
+      loadComanda(mesaId);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Erro ao abrir comanda.');
+    } finally {
+      setAbrindoComanda(false);
+    }
+  };
+
+  const addItemNovo = (produto: Produto, qtd = 1, obs = '') => {
+    const exist = carrinhoNovo.find((i) => i.produto.id === produto.id && i.observacao === obs);
+    if (exist) setCarrinhoNovo((c) => c.map((i) => i.produto.id === produto.id && i.observacao === obs ? { ...i, quantidade: i.quantidade + qtd } : i));
+    else setCarrinhoNovo((c) => [...c, { produto, quantidade: qtd, observacao: obs }]);
+    setSearchNovo('');
+  };
+  const updateQtdNovo = (index: number, delta: number) => {
+    setCarrinhoNovo((c) => {
+      const novo = c.map((item, i) => (i === index ? { ...item, quantidade: Math.max(0, item.quantidade + delta) } : item));
+      return novo.filter((i) => i.quantidade > 0);
+    });
+  };
+  const setObsNovo = (index: number, value: string) => {
+    setCarrinhoNovo((c) => c.map((item, i) => (i === index ? { ...item, observacao: value } : item)));
+  };
+  const finalizarNovoPedido = async () => {
+    if (!comanda || carrinhoNovo.length === 0) return;
+    setEnviandoNovo(true);
+    try {
+      const itens = carrinhoNovo.map((i) => ({
+        produto_id: i.produto.id,
+        quantidade: i.quantidade,
+        valor_unitario: precoVenda(i.produto),
+        observacao: i.observacao || undefined,
+      }));
+      await createPedidoPresencial(comanda.id, itens, { lancadoPeloAdmin: true });
+      setCarrinhoNovo([]);
+      const r = await getComandaWithPedidos(comanda.id);
+      if (r) {
+        setPedidos(r.pedidos);
+        setComanda(r.comanda as Comanda);
+      }
+      getTotalComanda(comanda.id).then(setContaItens);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Erro ao lançar pedido.');
+    } finally {
+      setEnviandoNovo(false);
+    }
+  };
+
+  const sNovo = (searchNovo || '').trim().toLowerCase();
+  const filtradosNovo = sNovo ? produtos.filter((p) => (p.nome?.toLowerCase().includes(sNovo)) || (p.codigo === searchNovo.trim())) : [];
+
   if (loading) return <p className="text-stone-500">Carregando...</p>;
-  if (!comanda) return <p className="text-stone-500">Mesa não está aberta.</p>;
+  if (!comanda) {
+    return (
+      <div className="no-print">
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold text-stone-800">{mesaNome || 'Mesa'}</h1>
+          <p className="text-stone-500 mt-1">Mesa fechada. Abra a comanda para lançar pedidos.</p>
+        </div>
+        <div className="rounded-xl bg-white p-6 shadow-sm max-w-md">
+          <h3 className="font-semibold text-stone-800 mb-3">Abrir comanda</h3>
+          <form onSubmit={handleAbrirComanda} className="flex flex-wrap items-end gap-3">
+            <div className="flex-1 min-w-[200px]">
+              <label className="block text-sm font-medium text-stone-600 mb-1">Nome do cliente</label>
+              <input
+                type="text"
+                value={nomeClienteAbrir}
+                onChange={(e) => setNomeClienteAbrir(e.target.value)}
+                placeholder="Ex: João"
+                className="w-full rounded-lg border border-stone-300 px-3 py-2"
+                disabled={abrindoComanda}
+              />
+            </div>
+            <button type="submit" disabled={abrindoComanda || !nomeClienteAbrir.trim()} className="rounded-lg bg-amber-600 px-4 py-2 text-white hover:bg-amber-700 disabled:opacity-50">
+              {abrindoComanda ? 'Abrindo...' : 'Abrir comanda'}
+            </button>
+          </form>
+        </div>
+        <div className="mt-4">
+          <button type="button" onClick={() => navigate('/admin/mesas')} className="text-stone-600 hover:underline">Voltar às mesas</button>
+        </div>
+      </div>
+    );
+  }
 
   const pedidosNaMesa = pedidos.filter((p) => p.status !== 'cancelado');
   const cupomSelecionado = cupomDesconto ? cupons.find((c) => c.id === cupomDesconto) : null;
@@ -541,6 +660,70 @@ export default function AdminMesaDetail() {
       </div>
 
       <div className="rounded-xl bg-white p-4 shadow-sm mb-6">
+        <h3 className="font-semibold text-stone-800 mb-3">Lançar pedido</h3>
+        <p className="text-sm text-stone-500 mb-3">Busque o produto e adicione ao carrinho. Em seguida finalize o pedido.</p>
+        <div className="relative mb-3">
+          <input
+            type="text"
+            value={searchNovo}
+            onChange={(e) => setSearchNovo(e.target.value)}
+            placeholder="Buscar por nome ou código..."
+            className="w-full rounded-lg border border-stone-300 px-3 py-2"
+          />
+          {sNovo && filtradosNovo.length > 0 && (
+            <ul className="absolute z-10 mt-1 w-full max-h-[50vh] overflow-y-auto rounded-lg border border-stone-200 bg-white shadow-lg divide-y divide-stone-100">
+              {filtradosNovo.slice(0, 30).map((p) => (
+                <li key={p.id}>
+                  <button
+                    type="button"
+                    onClick={() => addItemNovo(p)}
+                    className="flex w-full min-h-[3.25rem] items-center gap-2 px-3 py-2.5 text-left hover:bg-stone-50"
+                  >
+                    <div className="w-10 h-10 flex-shrink-0 rounded-lg bg-stone-100 overflow-hidden flex items-center justify-center">
+                      {imagensProduto(p)[0] ? <img src={imagensProduto(p)[0]} alt="" className="w-full h-full object-cover" /> : <span className="text-stone-400 text-xs">IMG</span>}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <span className="text-sm font-medium text-stone-500">#{p.codigo}</span>
+                      <span className="ml-2 text-stone-800 truncate text-sm">{p.nome || p.descricao}</span>
+                    </div>
+                    <div className="flex-shrink-0 text-amber-600 font-medium text-sm">R$ {precoVenda(p).toFixed(2)}</div>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+        {carrinhoNovo.length > 0 && (
+          <div className="rounded-lg border border-stone-200 overflow-hidden mb-3">
+            <div className="p-2 border-b border-stone-100 font-medium text-stone-700 text-sm">Itens do pedido</div>
+            <ul className="divide-y divide-stone-100">
+              {carrinhoNovo.map((item, i) => (
+                <li key={i} className="flex flex-wrap items-center gap-2 p-2">
+                  <div className="w-10 h-10 rounded bg-stone-100 flex-shrink-0 overflow-hidden flex items-center justify-center">
+                    {imagensProduto(item.produto)[0] ? <img src={imagensProduto(item.produto)[0]} alt="" className="w-full h-full object-cover" /> : <span className="text-stone-400 text-xs">IMG</span>}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-stone-800 text-sm">{item.produto.codigo} – {item.produto.nome || item.produto.descricao}</div>
+                    <input type="text" value={item.observacao} onChange={(e) => setObsNovo(i, e.target.value)} placeholder="Observação" className="mt-0.5 w-full text-sm rounded border border-stone-200 px-2 py-1" />
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button type="button" onClick={() => updateQtdNovo(i, -1)} className="w-8 h-8 rounded border border-stone-300 text-stone-600">−</button>
+                    <span className="w-8 text-center font-medium text-sm">{item.quantidade}</span>
+                    <button type="button" onClick={() => updateQtdNovo(i, 1)} className="w-8 h-8 rounded border border-stone-300 text-stone-600">+</button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+            <div className="p-2 border-t border-stone-100">
+              <button type="button" onClick={finalizarNovoPedido} disabled={enviandoNovo} className="w-full rounded-lg bg-amber-600 py-2 font-medium text-white hover:bg-amber-700 disabled:opacity-50">
+                {enviandoNovo ? 'Enviando...' : 'Finalizar pedido'}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="rounded-xl bg-white p-4 shadow-sm mb-6">
         <h3 className="font-semibold text-stone-800 mb-2">Pagamentos parciais</h3>
         <p className="text-sm text-stone-500 mb-2">Registre pagamentos antes do encerramento. Eles reduzem o valor restante e constam na impressão da conta e no relatório financeiro.</p>
         {pagamentosComanda.length > 0 && (
@@ -621,7 +804,11 @@ export default function AdminMesaDetail() {
                     className="mt-1 rounded border-stone-300"
                   />
                   <div className="flex-1 min-w-0">
-                  <div className="font-semibold text-stone-800">{(comanda as any)?.profiles?.nome ? `Pedido #${p.numero} – ${(comanda as any).profiles.nome}` : `Pedido #${p.numero}`}</div>
+                  <div className="font-semibold text-stone-800">
+                    {(comanda as any)?.profiles?.nome
+                      ? `Pedido #${p.numero} – ${(comanda as any).profiles.nome}${(p as any).lancado_pelo_admin ? ' (lançada pelo admin)' : ''}`
+                      : `Pedido #${p.numero}${(p as any).lancado_pelo_admin ? ' (lançada pelo admin)' : ''}`}
+                  </div>
                   <p className="text-sm font-medium text-amber-700 mt-0.5">Total: R$ {totalPedido(p).toFixed(2)}</p>
                   <ul className="mt-2 text-sm text-stone-600">
                     {(p.pedido_itens ?? []).map((i: any) => (

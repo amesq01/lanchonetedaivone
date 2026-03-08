@@ -155,7 +155,11 @@ export default function AtendenteMesas() {
                       onClick={() => setAcordaoAberto(expandido ? null : p.id)}
                       className="flex w-full items-center justify-between p-3 text-left text-sm hover:bg-stone-50"
                     >
-                      <span className="font-medium text-stone-800">{(p.comandas as any)?.profiles?.nome ? `Pedido #${p.numero} – ${(p.comandas as any).profiles.nome}` : `Pedido #${p.numero}`}</span>
+                      <span className="font-medium text-stone-800">
+                      {(p.comandas as any)?.profiles?.nome
+                        ? `Pedido #${p.numero} – ${(p.comandas as any).profiles.nome}${(p as any).lancado_pelo_admin ? ' (lançada pelo admin)' : ''}`
+                        : `Pedido #${p.numero}${(p as any).lancado_pelo_admin ? ' (lançada pelo admin)' : ''}`}
+                    </span>
                       <span className="text-stone-500 text-xs mr-2">{mesaNome} · {cliente}</span>
                       <span className="text-xs px-2 py-0.5 rounded bg-stone-100 text-stone-600">{statusLabel[p.status] ?? p.status}</span>
                       {expandido ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}

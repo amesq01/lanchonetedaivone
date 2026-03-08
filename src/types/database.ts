@@ -127,6 +127,7 @@ export interface Database {
           comanda_id: string | null;
           origem: 'presencial' | 'viagem' | 'online';
           status: 'aguardando_aceite' | 'novo_pedido' | 'em_preparacao' | 'finalizado' | 'cancelado';
+          lancado_pelo_admin: boolean;
           cliente_nome: string | null;
           cliente_whatsapp: string | null;
           cliente_endereco: string | null;

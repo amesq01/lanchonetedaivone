@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { getPedidosViagemAbertos, getTotalComanda, getTotalAPagarComanda, closeComanda, getCuponsAtivos, applyDescontoComanda, clearDescontoComanda, getProdutos, updatePedidoItens, updatePedidoStatus, getMesasFechadasParaTransferencia, getComandaByMesa, openComanda, movePedidosParaOutraComanda } from '../../lib/api';
+import { getPedidosViagemAbertos, getTotalComanda, getTotalAPagarComanda, closeComanda, getCuponsAtivos, applyDescontoComanda, clearDescontoComanda, getProdutos, updatePedidoItens, updatePedidoStatus, getMesasFechadasParaTransferencia, getComandaByMesa, openComanda, movePedidosParaOutraComanda, createPedidoViagem } from '../../lib/api';
 import type { FraçãoPagamento } from '../../lib/api';
 import { printContaViagem, printPedido, printPedidosUnificados } from '../../lib/printPdf';
 import { supabase } from '../../lib/supabase';
@@ -36,6 +36,12 @@ export default function AdminViagem() {
   const [mesaIdDestinoViagem, setMesaIdDestinoViagem] = useState('');
   const [novoNomeClienteDestinoViagem, setNovoNomeClienteDestinoViagem] = useState('');
   const [enviandoTransferenciaViagem, setEnviandoTransferenciaViagem] = useState(false);
+  /** Novo pedido viagem (admin) */
+  type ItemCarrinho = { produto: Produto; quantidade: number; observacao: string };
+  const [nomeClienteNovo, setNomeClienteNovo] = useState('');
+  const [searchNovo, setSearchNovo] = useState('');
+  const [carrinhoNovo, setCarrinhoNovo] = useState<ItemCarrinho[]>([]);
+  const [enviandoNovo, setEnviandoNovo] = useState(false);
 
   const { profile } = useAuth();
   const STATUS_EDITAVEL = ['novo_pedido', 'aguardando_aceite'];
@@ -142,6 +148,47 @@ export default function AdminViagem() {
       alert(e instanceof Error ? e.message : 'Erro ao encerrar.');
     }
   };
+
+  const addItemNovo = (produto: Produto, qtd = 1, obs = '') => {
+    const exist = carrinhoNovo.find((i) => i.produto.id === produto.id && i.observacao === obs);
+    if (exist) setCarrinhoNovo((c) => c.map((i) => i.produto.id === produto.id && i.observacao === obs ? { ...i, quantidade: i.quantidade + qtd } : i));
+    else setCarrinhoNovo((c) => [...c, { produto, quantidade: qtd, observacao: obs }]);
+    setSearchNovo('');
+  };
+  const updateQtdNovo = (index: number, delta: number) => {
+    setCarrinhoNovo((c) => {
+      const novo = c.map((item, i) => (i === index ? { ...item, quantidade: Math.max(0, item.quantidade + delta) } : item));
+      return novo.filter((i) => i.quantidade > 0);
+    });
+  };
+  const setObsNovo = (index: number, value: string) => {
+    setCarrinhoNovo((c) => c.map((item, i) => (i === index ? { ...item, observacao: value } : item)));
+  };
+  const finalizarNovoPedidoViagem = async () => {
+    if (!nomeClienteNovo.trim() || carrinhoNovo.length === 0 || !profile?.id) {
+      alert('Informe o nome do cliente e adicione ao menos um item.');
+      return;
+    }
+    setEnviandoNovo(true);
+    try {
+      const itens = carrinhoNovo.map((i) => ({
+        produto_id: i.produto.id,
+        quantidade: i.quantidade,
+        valor_unitario: precoVenda(i.produto),
+        observacao: i.observacao || undefined,
+      }));
+      await createPedidoViagem(nomeClienteNovo.trim(), profile.id, itens, { lancadoPeloAdmin: true });
+      setNomeClienteNovo('');
+      setCarrinhoNovo([]);
+      load();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Erro ao lançar pedido.');
+    } finally {
+      setEnviandoNovo(false);
+    }
+  };
+  const sNovo = (searchNovo || '').trim().toLowerCase();
+  const filtradosNovo = sNovo ? produtos.filter((p) => (p.nome?.toLowerCase().includes(sNovo)) || (p.codigo === searchNovo.trim())) : [];
 
   const addItemEdicao = (produto: Produto, qtd = 1, obs = '') => {
     setCarrinhoEdicao((c) => {
@@ -297,13 +344,78 @@ export default function AdminViagem() {
         )}
       </div>
 
+      <div className="rounded-xl bg-white p-4 shadow-sm mb-6">
+        <h3 className="font-semibold text-stone-800 mb-3">Novo pedido viagem</h3>
+        <p className="text-sm text-stone-500 mb-3">Informe o cliente, busque os produtos e finalize. O pedido será exibido como &quot;lançada pelo admin&quot;.</p>
+        <div className="flex flex-wrap gap-4 items-end mb-3">
+          <div className="min-w-[180px]">
+            <label className="block text-sm font-medium text-stone-600 mb-1">Nome do cliente</label>
+            <input type="text" value={nomeClienteNovo} onChange={(e) => setNomeClienteNovo(e.target.value)} placeholder="Ex: Maria" className="w-full rounded-lg border border-stone-300 px-3 py-2" />
+          </div>
+          <div className="flex-1 min-w-[200px] relative">
+            <label className="block text-sm font-medium text-stone-600 mb-1">Buscar produto</label>
+            <input type="text" value={searchNovo} onChange={(e) => setSearchNovo(e.target.value)} placeholder="Nome ou código..." className="w-full rounded-lg border border-stone-300 px-3 py-2" />
+            {sNovo && filtradosNovo.length > 0 && (
+              <ul className="absolute z-10 mt-1 w-full max-h-[50vh] overflow-y-auto rounded-lg border border-stone-200 bg-white shadow-lg divide-y divide-stone-100">
+                {filtradosNovo.slice(0, 30).map((p) => (
+                  <li key={p.id}>
+                    <button type="button" onClick={() => addItemNovo(p)} className="flex w-full min-h-[3.25rem] items-center gap-2 px-3 py-2.5 text-left hover:bg-stone-50">
+                      <div className="w-10 h-10 flex-shrink-0 rounded-lg bg-stone-100 overflow-hidden flex items-center justify-center">
+                        {imagensProduto(p)[0] ? <img src={imagensProduto(p)[0]} alt="" className="w-full h-full object-cover" /> : <span className="text-stone-400 text-xs">IMG</span>}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <span className="text-sm font-medium text-stone-500">#{p.codigo}</span>
+                        <span className="ml-2 text-stone-800 truncate text-sm">{p.nome || p.descricao}</span>
+                      </div>
+                      <div className="flex-shrink-0 text-amber-600 font-medium text-sm">R$ {precoVenda(p).toFixed(2)}</div>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+        {carrinhoNovo.length > 0 && (
+          <div className="rounded-lg border border-stone-200 overflow-hidden mb-3">
+            <div className="p-2 border-b border-stone-100 font-medium text-stone-700 text-sm">Itens do pedido</div>
+            <ul className="divide-y divide-stone-100">
+              {carrinhoNovo.map((item, i) => (
+                <li key={i} className="flex flex-wrap items-center gap-2 p-2">
+                  <div className="w-10 h-10 rounded bg-stone-100 flex-shrink-0 overflow-hidden flex items-center justify-center">
+                    {imagensProduto(item.produto)[0] ? <img src={imagensProduto(item.produto)[0]} alt="" className="w-full h-full object-cover" /> : <span className="text-stone-400 text-xs">IMG</span>}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-stone-800 text-sm">{item.produto.codigo} – {item.produto.nome || item.produto.descricao}</div>
+                    <input type="text" value={item.observacao} onChange={(e) => setObsNovo(i, e.target.value)} placeholder="Observação" className="mt-0.5 w-full text-sm rounded border border-stone-200 px-2 py-1" />
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button type="button" onClick={() => updateQtdNovo(i, -1)} className="w-8 h-8 rounded border border-stone-300 text-stone-600">−</button>
+                    <span className="w-8 text-center font-medium text-sm">{item.quantidade}</span>
+                    <button type="button" onClick={() => updateQtdNovo(i, 1)} className="w-8 h-8 rounded border border-stone-300 text-stone-600">+</button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+            <div className="p-2 border-t border-stone-100">
+              <button type="button" onClick={finalizarNovoPedidoViagem} disabled={enviandoNovo} className="w-full rounded-lg bg-amber-600 py-2 font-medium text-white hover:bg-amber-700 disabled:opacity-50">
+                {enviandoNovo ? 'Enviando...' : 'Finalizar pedido viagem'}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
       <div className="space-y-4">
         {emPreparacao.map((p) => (
           <div key={p.id} className="rounded-xl bg-white p-4 shadow-sm flex flex-wrap items-stretch justify-between gap-4">
             <div className="flex items-start gap-2 flex-1 min-w-0">
               <input type="checkbox" checked={pedidosSelecionadosViagem.has(p.id)} onChange={() => togglePedidoSelecionadoViagem(p.id)} className="mt-1 rounded border-stone-300" />
               <div className="flex-1 min-w-0">
-              <div className="font-semibold text-stone-800">{(p.comandas as any)?.profiles?.nome ? `Pedido #${p.numero} – ${(p.comandas as any).profiles.nome}` : `Pedido #${p.numero}`}</div>
+              <div className="font-semibold text-stone-800">
+              {(p.comandas as any)?.profiles?.nome
+                ? `Pedido #${p.numero} – ${(p.comandas as any).profiles.nome}${(p as any).lancado_pelo_admin ? ' (lançada pelo admin)' : ''}`
+                : `Pedido #${p.numero}${(p as any).lancado_pelo_admin ? ' (lançada pelo admin)' : ''}`}
+            </div>
               <p className="text-sm font-medium text-amber-700 mt-0.5">Total: R$ {totalPedido(p).toFixed(2)}</p>
               <span className="text-stone-600">- {p.cliente_nome || (p.comandas as any)?.nome_cliente}</span>
               <ul className="mt-2 text-sm text-stone-600">
@@ -334,7 +446,11 @@ export default function AdminViagem() {
             <div className="flex items-start gap-2 flex-1 min-w-0">
               <input type="checkbox" checked={pedidosSelecionadosViagem.has(p.id)} onChange={() => togglePedidoSelecionadoViagem(p.id)} className="mt-1 rounded border-stone-300" />
               <div className="flex-1 min-w-0">
-              <div className="font-semibold text-stone-800">{(p.comandas as any)?.profiles?.nome ? `Pedido #${p.numero} – ${(p.comandas as any).profiles.nome}` : `Pedido #${p.numero}`}</div>
+              <div className="font-semibold text-stone-800">
+              {(p.comandas as any)?.profiles?.nome
+                ? `Pedido #${p.numero} – ${(p.comandas as any).profiles.nome}${(p as any).lancado_pelo_admin ? ' (lançada pelo admin)' : ''}`
+                : `Pedido #${p.numero}${(p as any).lancado_pelo_admin ? ' (lançada pelo admin)' : ''}`}
+            </div>
               <p className="text-sm font-medium text-amber-700 mt-0.5">Total: R$ {totalPedido(p).toFixed(2)}</p>
               <span className="text-stone-600">- {p.cliente_nome || (p.comandas as any)?.nome_cliente}</span>
               <ul className="mt-2 text-sm text-stone-600">
@@ -466,7 +582,7 @@ export default function AdminViagem() {
           <div className="mt-2 space-y-2">
             {finalizadosEncerrados.map((p) => (
               <div key={p.id} className="rounded-lg border border-stone-200 bg-white px-4 py-2 text-sm flex flex-wrap justify-between items-center gap-2">
-                <span>#{p.numero}{(p.comandas as any)?.profiles?.nome ? ` – ${(p.comandas as any).profiles.nome}` : ''} - {(p.comandas as any)?.nome_cliente ?? p.cliente_nome} - {p.forma_pagamento ?? '-'}</span>
+                <span>#{p.numero}{(p.comandas as any)?.profiles?.nome ? ` – ${(p.comandas as any).profiles.nome}${(p as any).lancado_pelo_admin ? ' (lançada pelo admin)' : ''}` : (p as any).lancado_pelo_admin ? ' (lançada pelo admin)' : ''} - {(p.comandas as any)?.nome_cliente ?? p.cliente_nome} - {p.forma_pagamento ?? '-'}</span>
                 <span className="font-medium text-amber-700">R$ {totalPedido(p).toFixed(2)}</span>
               </div>
             ))}
@@ -477,7 +593,7 @@ export default function AdminViagem() {
       {popupImprimir && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl border border-stone-200">
-            <h3 className="font-semibold text-stone-800 mb-4">Imprimir conta - Pedido #{popupImprimir.numero}{(popupImprimir.comandas as any)?.profiles?.nome ? ` – ${(popupImprimir.comandas as any).profiles.nome}` : ''}</h3>
+            <h3 className="font-semibold text-stone-800 mb-4">Imprimir conta - Pedido #{popupImprimir.numero}{(popupImprimir.comandas as any)?.profiles?.nome ? ` – ${(popupImprimir.comandas as any).profiles.nome}${(popupImprimir as any).lancado_pelo_admin ? ' (lançada pelo admin)' : ''}` : (popupImprimir as any).lancado_pelo_admin ? ' (lançada pelo admin)' : ''}</h3>
             <label className="block text-sm font-medium text-stone-600 mb-1">Cupom</label>
             <select
               value={cupomDesconto}

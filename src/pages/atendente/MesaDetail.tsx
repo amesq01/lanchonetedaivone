@@ -372,7 +372,7 @@ export default function AtendenteMesaDetail() {
         {pedidos.filter((p) => p.status !== 'cancelado').map((p) => (
           <div key={p.id} className="rounded-xl bg-white border border-stone-200 overflow-hidden">
             <button type="button" onClick={() => setPedidoExpandido(pedidoExpandido === p.id ? null : p.id)} className="flex w-full items-center justify-between p-3 text-left font-medium text-stone-800">
-              <span>Pedido #{p.numero}{(atendenteQueAbriu || (p.comandas as any)?.profiles?.nome) ? ` – ${atendenteQueAbriu || (p.comandas as any)?.profiles?.nome}` : ''}</span>
+              <span>Pedido #{p.numero}{(atendenteQueAbriu || (p.comandas as any)?.profiles?.nome) ? ` – ${atendenteQueAbriu || (p.comandas as any)?.profiles?.nome}${(p as any).lancado_pelo_admin ? ' (lançada pelo admin)' : ''}` : (p as any).lancado_pelo_admin ? ' (lançada pelo admin)' : ''}</span>
               {pedidoExpandido === p.id ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
             </button>
             {pedidoExpandido === p.id && (

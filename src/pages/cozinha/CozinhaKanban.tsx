@@ -72,7 +72,8 @@ function dataRefPedido(p: any): string | null {
 function nomeAtendente(p: any): string {
   const comandas = p.comandas as any;
   if (p.origem === 'online') return 'Online';
-  return comandas?.profiles?.nome ?? '-';
+  const nome = comandas?.profiles?.nome ?? '-';
+  return p.lancado_pelo_admin ? `${nome} (lançada pelo admin)` : nome;
 }
 
 function nomeClienteEMesa(p: any) {

@@ -503,18 +503,33 @@ export async function restaurarEstoque(pedidoId: string) {
   }
 }
 
-export async function createPedidoPresencial(comandaId: string, itens: { produto_id: string; quantidade: number; valor_unitario: number; observacao?: string }[]) {
+export async function createPedidoPresencial(
+  comandaId: string,
+  itens: { produto_id: string; quantidade: number; valor_unitario: number; observacao?: string }[],
+  opts?: { lancadoPeloAdmin?: boolean }
+) {
   await getComandaAbertaOuErro(comandaId);
   await decrementarEstoque(itens);
   const numero = await nextPedidoNumero();
-  const { data: pedido, error: e1 } = await (supabase as any).from('pedidos').insert({ numero, comanda_id: comandaId, origem: 'presencial', status: 'novo_pedido' }).select().single();
+  const { data: pedido, error: e1 } = await (supabase as any).from('pedidos').insert({
+    numero,
+    comanda_id: comandaId,
+    origem: 'presencial',
+    status: 'novo_pedido',
+    lancado_pelo_admin: opts?.lancadoPeloAdmin ?? false,
+  }).select().single();
   if (e1) throw e1;
   const ped = pedido as { id: string };
   await (supabase as any).from('pedido_itens').insert(itens.map((i) => ({ pedido_id: ped.id, produto_id: i.produto_id, quantidade: i.quantidade, valor_unitario: i.valor_unitario, observacao: i.observacao ?? null })));
   return pedido;
 }
 
-export async function createPedidoViagem(nomeCliente: string, atendenteId: string, itens: { produto_id: string; quantidade: number; valor_unitario: number; observacao?: string }[]) {
+export async function createPedidoViagem(
+  nomeCliente: string,
+  atendenteId: string,
+  itens: { produto_id: string; quantidade: number; valor_unitario: number; observacao?: string }[],
+  opts?: { lancadoPeloAdmin?: boolean }
+) {
   await decrementarEstoque(itens);
   const numero = await nextPedidoNumero();
   const { data: mesaViagem } = await supabase.from('mesas').select('id').eq('is_viagem', true).single();
@@ -530,7 +545,7 @@ export async function createPedidoViagem(nomeCliente: string, atendenteId: strin
   const temItemParaCozinha = itens.some((i) => Boolean(byId[i.produto_id]?.vai_para_cozinha));
   const status = temItemParaCozinha ? 'novo_pedido' : 'finalizado';
   const now = new Date().toISOString();
-  const payload: Record<string, unknown> = { numero, comanda_id: com.id, origem: 'viagem', status, cliente_nome: nomeCliente };
+  const payload: Record<string, unknown> = { numero, comanda_id: com.id, origem: 'viagem', status, cliente_nome: nomeCliente, lancado_pelo_admin: opts?.lancadoPeloAdmin ?? false };
   if (status === 'finalizado') payload.encerrado_em = now;
   const { data: pedido, error: e1 } = await (supabase as any).from('pedidos').insert(payload).select().single();
   if (e1) throw e1;
@@ -632,7 +647,7 @@ export async function updatePedidoItens(
 export async function getPedidosCozinha() {
   const { data } = await supabase
     .from('pedidos')
-    .select('id, numero, status, origem, cliente_nome, encerrado_em, updated_at, aceito_em, created_at, comanda_id, pedido_itens(id, quantidade, observacao, produtos(id, nome, descricao, vai_para_cozinha)), comandas(nome_cliente, mesa_id, mesas(numero, nome), profiles(nome))')
+    .select('id, numero, status, origem, cliente_nome, encerrado_em, updated_at, aceito_em, created_at, comanda_id, lancado_pelo_admin, pedido_itens(id, quantidade, observacao, produtos(id, nome, descricao, vai_para_cozinha)), comandas(nome_cliente, mesa_id, mesas(numero, nome), profiles(nome))')
     .in('status', ['novo_pedido', 'em_preparacao', 'finalizado'])
     .order('created_at');
   const list = (data ?? []) as any[];
