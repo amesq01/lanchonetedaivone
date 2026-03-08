@@ -24,8 +24,11 @@ export default function AdminMesaDetail() {
   const [cupons, setCupons] = useState<Cupom[]>([]);
   const [cupomDesconto, setCupomDesconto] = useState<string>('');
   const [descontoManual, setDescontoManual] = useState('');
-  const [popupCancelar, setPopupCancelar] = useState<{ pedidoId: string } | null>(null);
+  const [popupCancelar, setPopupCancelar] = useState<{ pedidoId: string; adminOverride?: boolean } | null>(null);
   const [motivoCancelamento, setMotivoCancelamento] = useState('');
+  const [confirmarEdicaoAvancada, setConfirmarEdicaoAvancada] = useState<any | null>(null);
+
+  const STATUS_EDITAVEL = ['novo_pedido', 'aguardando_aceite'];
   const [popupPedidosNaoFinalizados, setPopupPedidosNaoFinalizados] = useState(false);
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [popupEditar, setPopupEditar] = useState<any | null>(null);
@@ -156,15 +159,21 @@ export default function AdminMesaDetail() {
 
   const confirmarCancelarPedido = async () => {
     if (!popupCancelar || !motivoCancelamento.trim()) return;
-    await updatePedidoStatus(popupCancelar.pedidoId, 'cancelado', {
-      motivo_cancelamento: motivoCancelamento.trim(),
-      cancelado_por: profile?.id,
-    });
-    setPopupCancelar(null);
-    setMotivoCancelamento('');
-    if (comanda) {
-      getComandaWithPedidos(comanda.id).then((r) => setPedidos(r?.pedidos ?? []));
-      getTotalComanda(comanda.id).then(setContaItens);
+    try {
+      await updatePedidoStatus(popupCancelar.pedidoId, 'cancelado', {
+        motivo_cancelamento: motivoCancelamento.trim(),
+        cancelado_por: profile?.id,
+        adminOverride: popupCancelar.adminOverride,
+      });
+      setPopupCancelar(null);
+      setMotivoCancelamento('');
+      if (comanda) {
+        getComandaWithPedidos(comanda.id).then((r) => setPedidos(r?.pedidos ?? []));
+        getTotalComanda(comanda.id).then(setContaItens);
+      }
+    } catch (e) {
+      setMotivoCancelamento('');
+      alert(e instanceof Error ? e.message : 'Erro ao cancelar.');
     }
   };
 
@@ -194,14 +203,24 @@ export default function AdminMesaDetail() {
         valor_unitario: precoVenda(i.produto),
         observacao: i.observacao || undefined,
       }));
-      await updatePedidoItens(popupEditar.id, itens);
+      await updatePedidoItens(popupEditar.id, itens, { adminOverride: true });
       setPopupEditar(null);
       getComandaWithPedidos(comanda.id).then((r) => { if (r) { setComanda(r.comanda as Comanda); setPedidos(r.pedidos); } });
       getTotalComanda(comanda.id).then(setContaItens);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Erro ao atualizar pedido.');
     } finally {
       setEnviandoEdicao(false);
     }
   };
+
+  const abrirEdicao = (p: any) => {
+    const itens = (p.pedido_itens ?? []).filter((i: any) => i.produtos).map((i: any) => ({ produto: i.produtos, quantidade: i.quantidade, observacao: i.observacao ?? '' }));
+    setCarrinhoEdicao(itens);
+    setSearchEdicao('');
+    setPopupEditar(p);
+  };
+  const pedidoPodeEditarSemConfirmacao = (p: any) => STATUS_EDITAVEL.includes(p.status);
   const sEdicao = (searchEdicao || '').trim().toLowerCase();
   const filtradosEdicao = sEdicao ? produtos.filter((p) => (p.codigo?.toLowerCase().includes(sEdicao) || (p.nome ?? '').toLowerCase().includes(sEdicao) || (p.descricao ?? '').toLowerCase().includes(sEdicao))) : [];
 
@@ -278,12 +297,18 @@ export default function AdminMesaDetail() {
                       <li key={i.id}>{i.quantidade}x {i.produtos?.nome || i.produtos?.descricao} - R$ {(i.quantidade * i.valor_unitario).toFixed(2)}</li>
                     ))}
                   </ul>
-                  {p.status === 'novo_pedido' && (
-                    <div className="mt-2 flex gap-2">
-                      <button onClick={() => { setPopupEditar(p); setCarrinhoEdicao((p.pedido_itens ?? []).filter((i: any) => i.produtos).map((i: any) => ({ produto: i.produtos, quantidade: i.quantidade, observacao: i.observacao ?? '' }))); setSearchEdicao(''); }} className="text-sm text-amber-600 hover:underline">Editar pedido</button>
-                      <button onClick={() => setPopupCancelar({ pedidoId: p.id })} className="text-sm text-red-600 hover:underline">Cancelar pedido</button>
-                    </div>
-                  )}
+                  <div className="mt-2 flex gap-2">
+                    <button
+                      onClick={() => {
+                        if (pedidoPodeEditarSemConfirmacao(p)) abrirEdicao(p);
+                        else setConfirmarEdicaoAvancada(p);
+                      }}
+                      className="text-sm text-amber-600 hover:underline"
+                    >
+                      Editar pedido
+                    </button>
+                    <button onClick={() => setPopupCancelar({ pedidoId: p.id, adminOverride: !pedidoPodeEditarSemConfirmacao(p) })} className="text-sm text-red-600 hover:underline">Cancelar pedido</button>
+                  </div>
                 </div>
                 {p.status === 'finalizado' && (
                   <div className="min-w-[200px] w-[200px] flex flex-col items-center justify-center gap-2 shrink-0">
@@ -374,7 +399,7 @@ export default function AdminMesaDetail() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 overflow-y-auto">
           <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl my-4 max-h-[90vh] overflow-y-auto">
             <h3 className="font-semibold text-stone-800 mb-3">Editar pedido #{popupEditar.numero}</h3>
-            <p className="text-sm text-stone-500 mb-3">Altere os itens e salve. Só é possível editar antes do preparo.</p>
+            <p className="text-sm text-stone-500 mb-3">Altere os itens e salve. Como admin, você pode editar em qualquer status.</p>
             <input type="text" value={searchEdicao} onChange={(e) => setSearchEdicao(e.target.value)} placeholder="Buscar por nome ou código..." className="w-full rounded-lg border border-stone-300 px-3 py-2 mb-2" />
             {sEdicao && filtradosEdicao.length > 0 && (
               <ul className="mb-3 max-h-[50vh] overflow-y-auto rounded-lg border border-stone-200 divide-y divide-stone-100 shadow-sm">
@@ -432,10 +457,26 @@ export default function AdminMesaDetail() {
         </div>
       )}
 
+      {confirmarEdicaoAvancada && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
+            <h3 className="font-semibold text-stone-800 mb-2">Editar pedido já em andamento</h3>
+            <p className="text-sm text-stone-600 mb-4">Este pedido já foi iniciado ou finalizado na cozinha. Deseja mesmo editar? As alterações podem impactar o fluxo da cozinha.</p>
+            <div className="flex gap-2">
+              <button onClick={() => { abrirEdicao(confirmarEdicaoAvancada); setConfirmarEdicaoAvancada(null); }} className="flex-1 rounded-lg bg-amber-600 py-2 text-white hover:bg-amber-700">Sim, editar</button>
+              <button onClick={() => setConfirmarEdicaoAvancada(null)} className="rounded-lg border border-stone-300 px-4 py-2 text-stone-600">Não</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {popupCancelar && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
             <h3 className="font-semibold text-stone-800 mb-2">Cancelar pedido</h3>
+            {popupCancelar.adminOverride && (
+              <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2 mb-2">Este pedido já foi iniciado ou finalizado na cozinha. Ao cancelar, o estoque será devolvido.</p>
+            )}
             <p className="text-sm text-stone-600 mb-2">Informe o motivo do cancelamento (obrigatório para relatório):</p>
             <textarea value={motivoCancelamento} onChange={(e) => setMotivoCancelamento(e.target.value)} className="w-full rounded-lg border border-stone-300 px-3 py-2 mb-4 min-h-[80px]" placeholder="Ex: Cliente desistiu" required />
             <div className="flex gap-2">

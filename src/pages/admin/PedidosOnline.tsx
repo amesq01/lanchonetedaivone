@@ -12,13 +12,22 @@ export default function AdminPedidosOnline() {
   const [encerradosHoje, setEncerradosHoje] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [accordionEncerrados, setAccordionEncerrados] = useState(false);
-  const [popupCancelar, setPopupCancelar] = useState<{ pedidoId: string } | null>(null);
+  const [popupCancelar, setPopupCancelar] = useState<{ pedidoId: string; adminOverride?: boolean } | null>(null);
   const [motivoCancelamento, setMotivoCancelamento] = useState('');
+  const [confirmarEdicaoAvancada, setConfirmarEdicaoAvancada] = useState<any | null>(null);
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [popupEditar, setPopupEditar] = useState<any | null>(null);
   const [carrinhoEdicao, setCarrinhoEdicao] = useState<{ produto: Produto; quantidade: number; observacao: string }[]>([]);
   const [searchEdicao, setSearchEdicao] = useState('');
   const [enviandoEdicao, setEnviandoEdicao] = useState(false);
+
+  const STATUS_EDITAVEL = ['novo_pedido', 'aguardando_aceite'];
+  const pedidoPodeEditarSemConfirmacao = (p: any) => STATUS_EDITAVEL.includes(p.status);
+  const abrirEdicao = (p: any) => {
+    setCarrinhoEdicao((p.pedido_itens ?? []).filter((i: any) => i.produtos).map((i: any) => ({ produto: i.produtos, quantidade: i.quantidade, observacao: i.observacao ?? '' })));
+    setSearchEdicao('');
+    setPopupEditar(p);
+  };
 
   async function load() {
     const [pend, all, encerrados] = await Promise.all([
@@ -54,13 +63,18 @@ export default function AdminPedidosOnline() {
 
   async function confirmarCancelarPedido() {
     if (!popupCancelar || !motivoCancelamento.trim()) return;
-    await updatePedidoStatus(popupCancelar.pedidoId, 'cancelado', {
-      motivo_cancelamento: motivoCancelamento.trim(),
-      cancelado_por: profile?.id,
-    });
-    setPopupCancelar(null);
-    setMotivoCancelamento('');
-    load();
+    try {
+      await updatePedidoStatus(popupCancelar.pedidoId, 'cancelado', {
+        motivo_cancelamento: motivoCancelamento.trim(),
+        cancelado_por: profile?.id,
+        adminOverride: popupCancelar.adminOverride,
+      });
+      setPopupCancelar(null);
+      setMotivoCancelamento('');
+      load();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Erro ao cancelar.');
+    }
   }
 
   const addItemEdicao = (produto: Produto, qtd = 1, obs = '') => {
@@ -89,9 +103,11 @@ export default function AdminPedidosOnline() {
         valor_unitario: precoVenda(i.produto),
         observacao: i.observacao || undefined,
       }));
-      await updatePedidoItens(popupEditar.id, itens);
+      await updatePedidoItens(popupEditar.id, itens, { adminOverride: true });
       setPopupEditar(null);
       load();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Erro ao atualizar pedido.');
     } finally {
       setEnviandoEdicao(false);
     }
@@ -143,13 +159,13 @@ export default function AdminPedidosOnline() {
                   </ul>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
-                  <button type="button" onClick={() => { setPopupEditar(p); setCarrinhoEdicao((p.pedido_itens ?? []).filter((i: any) => i.produtos).map((i: any) => ({ produto: i.produtos, quantidade: i.quantidade, observacao: i.observacao ?? '' }))); setSearchEdicao(''); }} className="rounded-lg border border-amber-300 px-4 py-2 text-amber-700 hover:bg-amber-50">
+                  <button type="button" onClick={() => (pedidoPodeEditarSemConfirmacao(p) ? abrirEdicao(p) : setConfirmarEdicaoAvancada(p))} className="rounded-lg border border-amber-300 px-4 py-2 text-amber-700 hover:bg-amber-50">
                     Editar pedido
                   </button>
                   <button onClick={() => handleAceitar(p.id)} className="rounded-lg bg-green-600 px-4 py-2 text-white hover:bg-green-700">
                     Aceitar pedido
                   </button>
-                  <button onClick={() => setPopupCancelar({ pedidoId: p.id })} className="rounded-lg border border-red-300 px-4 py-2 text-red-700 hover:bg-red-50">
+                  <button onClick={() => setPopupCancelar({ pedidoId: p.id, adminOverride: false })} className="rounded-lg border border-red-300 px-4 py-2 text-red-700 hover:bg-red-50">
                     Cancelar pedido
                   </button>
                 </div>
@@ -182,6 +198,9 @@ export default function AdminPedidosOnline() {
                   </ul>
                 </div>
                 <div className="min-w-[200px] w-[200px] flex flex-col items-center justify-center gap-2 shrink-0">
+                  <button type="button" onClick={() => (pedidoPodeEditarSemConfirmacao(p) ? abrirEdicao(p) : setConfirmarEdicaoAvancada(p))} className="rounded-lg border border-amber-300 px-4 py-2 text-sm text-amber-700 hover:bg-amber-50">
+                    Editar pedido
+                  </button>
                   {p.status === 'finalizado' && (
                     <>
                       {!p.imprimido_entrega_em ? (
@@ -205,7 +224,7 @@ export default function AdminPedidosOnline() {
                       Aguardando finalização na cozinha
                     </span>
                   )}
-                  <button onClick={() => setPopupCancelar({ pedidoId: p.id })} className="rounded-lg border border-red-300 px-4 py-2 text-sm text-red-700 hover:bg-red-50">
+                  <button onClick={() => setPopupCancelar({ pedidoId: p.id, adminOverride: !pedidoPodeEditarSemConfirmacao(p) })} className="rounded-lg border border-red-300 px-4 py-2 text-sm text-red-700 hover:bg-red-50">
                     Cancelar pedido
                   </button>
                 </div>
@@ -219,7 +238,7 @@ export default function AdminPedidosOnline() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 overflow-y-auto">
           <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl my-4 max-h-[90vh] overflow-y-auto">
             <h3 className="font-semibold text-stone-800 mb-3">Editar pedido #{popupEditar.numero} (online)</h3>
-            <p className="text-sm text-stone-500 mb-3">Altere os itens e salve. Só é possível editar antes de aceitar o pedido.</p>
+            <p className="text-sm text-stone-500 mb-3">Altere os itens e salve. Como admin, você pode editar em qualquer status.</p>
             <input type="text" value={searchEdicao} onChange={(e) => setSearchEdicao(e.target.value)} placeholder="Buscar por nome ou código..." className="w-full rounded-lg border border-stone-300 px-3 py-2 mb-2" />
             {sEdicao && filtradosEdicao.length > 0 && (
               <ul className="mb-3 max-h-[50vh] overflow-y-auto rounded-lg border border-stone-200 divide-y divide-stone-100 shadow-sm">
@@ -277,10 +296,26 @@ export default function AdminPedidosOnline() {
         </div>
       )}
 
+      {confirmarEdicaoAvancada && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
+            <h3 className="font-semibold text-stone-800 mb-2">Editar pedido já em andamento</h3>
+            <p className="text-sm text-stone-600 mb-4">Este pedido já foi iniciado ou finalizado na cozinha. Deseja mesmo editar? As alterações podem impactar o fluxo da cozinha.</p>
+            <div className="flex gap-2">
+              <button onClick={() => { abrirEdicao(confirmarEdicaoAvancada); setConfirmarEdicaoAvancada(null); }} className="flex-1 rounded-lg bg-amber-600 py-2 text-white hover:bg-amber-700">Sim, editar</button>
+              <button onClick={() => setConfirmarEdicaoAvancada(null)} className="rounded-lg border border-stone-300 px-4 py-2 text-stone-600">Não</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {popupCancelar && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
             <h3 className="font-semibold text-stone-800 mb-2">Cancelar pedido</h3>
+            {popupCancelar.adminOverride && (
+              <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2 mb-2">Este pedido já foi iniciado ou finalizado na cozinha. Ao cancelar, o estoque será devolvido.</p>
+            )}
             <p className="text-sm text-stone-600 mb-2">Informe o motivo do cancelamento (obrigatório para relatório):</p>
             <textarea value={motivoCancelamento} onChange={(e) => setMotivoCancelamento(e.target.value)} className="w-full rounded-lg border border-stone-300 px-3 py-2 mb-4 min-h-[80px]" placeholder="Ex: Cliente desistiu" required />
             <div className="flex gap-2">

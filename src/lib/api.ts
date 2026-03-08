@@ -348,11 +348,15 @@ export async function createPedidoViagem(nomeCliente: string, atendenteId: strin
 export async function updatePedidoStatus(
   pedidoId: string,
   status: 'novo_pedido' | 'em_preparacao' | 'finalizado' | 'cancelado',
-  opts?: { motivo_cancelamento?: string; cancelado_por?: string }
+  opts?: { motivo_cancelamento?: string; cancelado_por?: string; adminOverride?: boolean }
 ) {
   if (status === 'cancelado') {
     const { data: atual } = await supabase.from('pedidos').select('status').eq('id', pedidoId).single();
-    if ((atual as { status: string } | null)?.status !== 'cancelado') {
+    const statusAtual = (atual as { status: string } | null)?.status;
+    if (statusAtual !== 'cancelado') {
+      if (!opts?.adminOverride && statusAtual && !STATUS_EDITAVEL.includes(statusAtual)) {
+        throw new Error(`Pedido não pode ser cancelado. Status atual: ${statusAtual}. Apenas admin pode cancelar após início do preparo.`);
+      }
       await restaurarEstoque(pedidoId);
     }
   }
@@ -390,12 +394,13 @@ const STATUS_EDITAVEL = ['novo_pedido', 'aguardando_aceite'];
  */
 export async function updatePedidoItens(
   pedidoId: string,
-  itens: { produto_id: string; quantidade: number; valor_unitario: number; observacao?: string }[]
+  itens: { produto_id: string; quantidade: number; valor_unitario: number; observacao?: string }[],
+  opts?: { adminOverride?: boolean }
 ) {
   const { data: ped, error: ePed } = await supabase.from('pedidos').select('status').eq('id', pedidoId).single();
   if (ePed || !ped) throw new Error('Pedido não encontrado.');
   const status = (ped as { status: string }).status;
-  if (!STATUS_EDITAVEL.includes(status)) throw new Error(`Pedido não pode ser editado. Status atual: ${status}.`);
+  if (!opts?.adminOverride && !STATUS_EDITAVEL.includes(status)) throw new Error(`Pedido não pode ser editado. Status atual: ${status}.`);
 
   const { data: atuais, error: eItens } = await supabase.from('pedido_itens').select('produto_id, quantidade').eq('pedido_id', pedidoId);
   if (eItens) throw eItens;

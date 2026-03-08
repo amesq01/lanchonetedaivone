@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { getPedidosViagemAbertos, getTotalComanda, getCuponsAtivos, applyDescontoComanda, clearDescontoComanda, getProdutos, updatePedidoItens } from '../../lib/api';
+import { getPedidosViagemAbertos, getTotalComanda, getCuponsAtivos, applyDescontoComanda, clearDescontoComanda, getProdutos, updatePedidoItens, updatePedidoStatus } from '../../lib/api';
 import { printContaViagem } from '../../lib/printPdf';
 import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../contexts/AuthContext';
 import type { Cupom } from '../../types/database';
 import type { Produto } from '../../types/database';
 import { precoVenda, imagensProduto } from '../../types/database';
@@ -22,6 +23,12 @@ export default function AdminViagem() {
   const [carrinhoEdicao, setCarrinhoEdicao] = useState<{ produto: Produto; quantidade: number; observacao: string }[]>([]);
   const [searchEdicao, setSearchEdicao] = useState('');
   const [enviandoEdicao, setEnviandoEdicao] = useState(false);
+  const [popupCancelar, setPopupCancelar] = useState<{ pedidoId: string; adminOverride?: boolean } | null>(null);
+  const [motivoCancelamento, setMotivoCancelamento] = useState('');
+  const [confirmarEdicaoAvancada, setConfirmarEdicaoAvancada] = useState<any | null>(null);
+
+  const { profile } = useAuth();
+  const STATUS_EDITAVEL = ['novo_pedido', 'aguardando_aceite'];
 
   useEffect(() => {
     load();
@@ -123,13 +130,38 @@ export default function AdminViagem() {
         valor_unitario: precoVenda(i.produto),
         observacao: i.observacao || undefined,
       }));
-      await updatePedidoItens(popupEditar.id, itens);
+      await updatePedidoItens(popupEditar.id, itens, { adminOverride: true });
       setPopupEditar(null);
       load();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Erro ao atualizar pedido.');
     } finally {
       setEnviandoEdicao(false);
     }
   };
+
+  const abrirEdicao = (p: any) => {
+    setCarrinhoEdicao((p.pedido_itens ?? []).filter((i: any) => i.produtos).map((i: any) => ({ produto: i.produtos, quantidade: i.quantidade, observacao: i.observacao ?? '' })));
+    setSearchEdicao('');
+    setPopupEditar(p);
+  };
+  const pedidoPodeEditarSemConfirmacao = (p: any) => STATUS_EDITAVEL.includes(p.status);
+
+  async function confirmarCancelarPedido() {
+    if (!popupCancelar || !motivoCancelamento.trim()) return;
+    try {
+      await updatePedidoStatus(popupCancelar.pedidoId, 'cancelado', {
+        motivo_cancelamento: motivoCancelamento.trim(),
+        cancelado_por: profile?.id,
+        adminOverride: popupCancelar.adminOverride,
+      });
+      setPopupCancelar(null);
+      setMotivoCancelamento('');
+      load();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Erro ao cancelar.');
+    }
+  }
   const sEdicao = (searchEdicao || '').trim().toLowerCase();
   const filtradosEdicao = sEdicao ? produtos.filter((p) => (p.codigo?.toLowerCase().includes(sEdicao) || (p.nome ?? '').toLowerCase().includes(sEdicao) || (p.descricao ?? '').toLowerCase().includes(sEdicao))) : [];
 
@@ -173,11 +205,12 @@ export default function AdminViagem() {
               </ul>
             </div>
             <div className="min-w-[200px] w-[200px] flex flex-col items-center justify-center gap-2 shrink-0">
-              {p.status === 'novo_pedido' && (
-                <button type="button" onClick={() => { setPopupEditar(p); setCarrinhoEdicao((p.pedido_itens ?? []).filter((i: any) => i.produtos).map((i: any) => ({ produto: i.produtos, quantidade: i.quantidade, observacao: i.observacao ?? '' }))); setSearchEdicao(''); }} className="rounded-lg border border-amber-300 px-4 py-2 text-sm text-amber-700 hover:bg-amber-50 mb-2">
-                  Editar pedido
-                </button>
-              )}
+              <button type="button" onClick={() => pedidoPodeEditarSemConfirmacao(p) ? abrirEdicao(p) : setConfirmarEdicaoAvancada(p)} className="rounded-lg border border-amber-300 px-4 py-2 text-sm text-amber-700 hover:bg-amber-50 mb-2">
+                Editar pedido
+              </button>
+              <button type="button" onClick={() => setPopupCancelar({ pedidoId: p.id, adminOverride: !pedidoPodeEditarSemConfirmacao(p) })} className="rounded-lg border border-red-300 px-4 py-2 text-sm text-red-700 hover:bg-red-50 mb-2">
+                Cancelar pedido
+              </button>
               <span className="rounded-lg border border-stone-200 bg-stone-50 px-4 py-2 text-sm text-stone-500">
                 Aguardando finalização na cozinha
               </span>
@@ -197,11 +230,12 @@ export default function AdminViagem() {
               </ul>
             </div>
             <div className="min-w-[200px] w-[200px] flex flex-col items-center justify-center gap-2 shrink-0">
-              {p.status === 'novo_pedido' && (
-                <button type="button" onClick={() => { setPopupEditar(p); setCarrinhoEdicao((p.pedido_itens ?? []).filter((i: any) => i.produtos).map((i: any) => ({ produto: i.produtos, quantidade: i.quantidade, observacao: i.observacao ?? '' }))); setSearchEdicao(''); }} className="rounded-lg border border-amber-300 px-4 py-2 text-sm text-amber-700 hover:bg-amber-50">
-                  Editar pedido
-                </button>
-              )}
+              <button type="button" onClick={() => pedidoPodeEditarSemConfirmacao(p) ? abrirEdicao(p) : setConfirmarEdicaoAvancada(p)} className="rounded-lg border border-amber-300 px-4 py-2 text-sm text-amber-700 hover:bg-amber-50">
+                Editar pedido
+              </button>
+              <button type="button" onClick={() => setPopupCancelar({ pedidoId: p.id, adminOverride: !pedidoPodeEditarSemConfirmacao(p) })} className="rounded-lg border border-red-300 px-4 py-2 text-sm text-red-700 hover:bg-red-50">
+                Cancelar pedido
+              </button>
               <button onClick={() => handleAbrirImprimir(p)} className="rounded-lg border border-stone-300 px-4 py-2 text-sm text-stone-700 hover:bg-stone-50">
                 Imprimir conta
               </button>
@@ -217,7 +251,7 @@ export default function AdminViagem() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 overflow-y-auto">
           <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl my-4 max-h-[90vh] overflow-y-auto">
             <h3 className="font-semibold text-stone-800 mb-3">Editar pedido #{popupEditar.numero}</h3>
-            <p className="text-sm text-stone-500 mb-3">Altere os itens e salve. Só é possível editar antes do preparo.</p>
+            <p className="text-sm text-stone-500 mb-3">Altere os itens e salve. Como admin, você pode editar em qualquer status.</p>
             <input type="text" value={searchEdicao} onChange={(e) => setSearchEdicao(e.target.value)} placeholder="Buscar por nome ou código..." className="w-full rounded-lg border border-stone-300 px-3 py-2 mb-2" />
             {sEdicao && filtradosEdicao.length > 0 && (
               <ul className="mb-3 max-h-[50vh] overflow-y-auto rounded-lg border border-stone-200 divide-y divide-stone-100 shadow-sm">
@@ -270,6 +304,36 @@ export default function AdminViagem() {
             <div className="flex gap-2">
               <button onClick={salvarEdicao} disabled={enviandoEdicao || carrinhoEdicao.length === 0} className="flex-1 rounded-lg bg-amber-600 py-2 font-medium text-white hover:bg-amber-700 disabled:opacity-50">Salvar alterações</button>
               <button onClick={() => setPopupEditar(null)} className="rounded-lg border border-stone-300 px-4 py-2 text-stone-600">Fechar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmarEdicaoAvancada && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
+            <h3 className="font-semibold text-stone-800 mb-2">Editar pedido já em andamento</h3>
+            <p className="text-sm text-stone-600 mb-4">Este pedido já foi iniciado ou finalizado na cozinha. Deseja mesmo editar? As alterações podem impactar o fluxo da cozinha.</p>
+            <div className="flex gap-2">
+              <button onClick={() => { abrirEdicao(confirmarEdicaoAvancada); setConfirmarEdicaoAvancada(null); }} className="flex-1 rounded-lg bg-amber-600 py-2 text-white hover:bg-amber-700">Sim, editar</button>
+              <button onClick={() => setConfirmarEdicaoAvancada(null)} className="rounded-lg border border-stone-300 px-4 py-2 text-stone-600">Não</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {popupCancelar && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
+            <h3 className="font-semibold text-stone-800 mb-2">Cancelar pedido</h3>
+            {popupCancelar.adminOverride && (
+              <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2 mb-2">Este pedido já foi iniciado ou finalizado na cozinha. Ao cancelar, o estoque será devolvido.</p>
+            )}
+            <p className="text-sm text-stone-600 mb-2">Informe o motivo do cancelamento (obrigatório para relatório):</p>
+            <textarea value={motivoCancelamento} onChange={(e) => setMotivoCancelamento(e.target.value)} className="w-full rounded-lg border border-stone-300 px-3 py-2 mb-4 min-h-[80px]" placeholder="Ex: Cliente desistiu" required />
+            <div className="flex gap-2">
+              <button onClick={confirmarCancelarPedido} disabled={!motivoCancelamento.trim()} className="flex-1 rounded-lg bg-red-600 py-2 text-white hover:bg-red-700 disabled:opacity-50">Confirmar cancelamento</button>
+              <button onClick={() => { setPopupCancelar(null); setMotivoCancelamento(''); }} className="rounded-lg border border-stone-300 px-4 py-2 text-stone-600">Voltar</button>
             </div>
           </div>
         </div>
