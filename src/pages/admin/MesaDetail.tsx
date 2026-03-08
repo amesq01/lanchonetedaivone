@@ -36,8 +36,15 @@ export default function AdminMesaDetail() {
     getComandaByMesa(mesaId).then((c) => {
       setComanda(c);
       if (c) {
-        getComandaWithPedidos(c.id).then((r) => setPedidos(r?.pedidos ?? []));
-        getTotalComanda(c.id).then(setContaItens);
+        getComandaWithPedidos(c.id).then((r) => {
+          if (r) {
+            setComanda(r.comanda as Comanda); // r.comanda traz profiles(nome) para exibir atendente
+            setPedidos(r.pedidos);
+          } else {
+            setPedidos([]);
+          }
+          getTotalComanda(c.id).then(setContaItens);
+        });
       }
       setLoading(false);
     });
@@ -219,7 +226,7 @@ export default function AdminMesaDetail() {
             {pedidosNaMesa.map((p) => (
               <div key={p.id} className="rounded-lg border border-stone-200 bg-stone-50/50 p-4 flex flex-wrap items-stretch justify-between gap-4">
                 <div className="flex-1 min-w-0">
-                  <div className="font-semibold text-stone-800">Pedido #{p.numero}</div>
+                  <div className="font-semibold text-stone-800">{(comanda as any)?.profiles?.nome ? `Pedido #${p.numero} – ${(comanda as any).profiles.nome}` : `Pedido #${p.numero}`}</div>
                   <p className="text-sm font-medium text-amber-700 mt-0.5">Total: R$ {totalPedido(p).toFixed(2)}</p>
                   <ul className="mt-2 text-sm text-stone-600">
                     {(p.pedido_itens ?? []).map((i: any) => (

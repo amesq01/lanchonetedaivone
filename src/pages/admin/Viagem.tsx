@@ -119,7 +119,7 @@ export default function AdminViagem() {
         {emPreparacao.map((p) => (
           <div key={p.id} className="rounded-xl bg-white p-4 shadow-sm flex flex-wrap items-stretch justify-between gap-4">
             <div className="flex-1 min-w-0">
-              <div className="font-semibold text-stone-800">Pedido #{p.numero}</div>
+              <div className="font-semibold text-stone-800">{(p.comandas as any)?.profiles?.nome ? `Pedido #${p.numero} – ${(p.comandas as any).profiles.nome}` : `Pedido #${p.numero}`}</div>
               <p className="text-sm font-medium text-amber-700 mt-0.5">Total: R$ {totalPedido(p).toFixed(2)}</p>
               <span className="text-stone-600">- {p.cliente_nome || (p.comandas as any)?.nome_cliente}</span>
               <ul className="mt-2 text-sm text-stone-600">
@@ -138,7 +138,7 @@ export default function AdminViagem() {
         {prontosEncerrar.map((p) => (
           <div key={p.id} className="rounded-xl bg-white p-4 shadow-sm border-l-4 border-amber-500 flex flex-wrap items-stretch justify-between gap-4">
             <div className="flex-1 min-w-0">
-              <div className="font-semibold text-stone-800">Pedido #{p.numero}</div>
+              <div className="font-semibold text-stone-800">{(p.comandas as any)?.profiles?.nome ? `Pedido #${p.numero} – ${(p.comandas as any).profiles.nome}` : `Pedido #${p.numero}`}</div>
               <p className="text-sm font-medium text-amber-700 mt-0.5">Total: R$ {totalPedido(p).toFixed(2)}</p>
               <span className="text-stone-600">- {p.cliente_nome || (p.comandas as any)?.nome_cliente}</span>
               <ul className="mt-2 text-sm text-stone-600">
@@ -168,7 +168,7 @@ export default function AdminViagem() {
           <div className="mt-2 space-y-2">
             {finalizadosEncerrados.map((p) => (
               <div key={p.id} className="rounded-lg border border-stone-200 bg-white px-4 py-2 text-sm flex flex-wrap justify-between items-center gap-2">
-                <span>#{p.numero} - {(p.comandas as any)?.nome_cliente ?? p.cliente_nome} - {p.forma_pagamento ?? '-'}</span>
+                <span>#{p.numero}{(p.comandas as any)?.profiles?.nome ? ` – ${(p.comandas as any).profiles.nome}` : ''} - {(p.comandas as any)?.nome_cliente ?? p.cliente_nome} - {p.forma_pagamento ?? '-'}</span>
                 <span className="font-medium text-amber-700">R$ {totalPedido(p).toFixed(2)}</span>
               </div>
             ))}
@@ -179,7 +179,7 @@ export default function AdminViagem() {
       {popupImprimir && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl border border-stone-200">
-            <h3 className="font-semibold text-stone-800 mb-4">Imprimir conta - Pedido #{popupImprimir.numero}</h3>
+            <h3 className="font-semibold text-stone-800 mb-4">Imprimir conta - Pedido #{popupImprimir.numero}{(popupImprimir.comandas as any)?.profiles?.nome ? ` – ${(popupImprimir.comandas as any).profiles.nome}` : ''}</h3>
             <label className="block text-sm font-medium text-stone-600 mb-1">Cupom</label>
             <select
               value={cupomDesconto}

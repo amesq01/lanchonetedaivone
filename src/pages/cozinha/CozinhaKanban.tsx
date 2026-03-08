@@ -69,6 +69,12 @@ function dataRefPedido(p: any): string | null {
   return p.created_at ?? null;
 }
 
+function nomeAtendente(p: any): string {
+  const comandas = p.comandas as any;
+  if (p.origem === 'online') return 'Online';
+  return comandas?.profiles?.nome ?? '-';
+}
+
 function nomeClienteEMesa(p: any) {
   const nome = p.cliente_nome || (p.comandas as any)?.nome_cliente || '-';
   const comandas = p.comandas as any;
@@ -205,7 +211,7 @@ export default function CozinhaKanban() {
             {porColuna(col.key).map((p) => (
               <div key={p.id} className="rounded-lg bg-white p-3 shadow-sm border border-stone-200 flex-shrink-0">
                 <div className="flex items-center justify-between gap-2 mb-2">
-                  <span className="font-medium text-stone-800">#{p.numero}</span>
+                  <span className="font-medium text-stone-800">#{p.numero}{nomeAtendente(p) !== '-' ? ` – ${nomeAtendente(p)}` : ''}</span>
                   <div className="flex flex-col items-end">
                     <span className={`text-xs px-2 py-0.5 rounded ${p.origem === 'online' ? 'bg-blue-100 text-blue-800' : p.origem === 'viagem' ? 'bg-amber-100 text-amber-800' : 'bg-stone-100 text-stone-600'}`}>
                       {p.origem === 'online' ? 'ONLINE' : p.origem === 'viagem' ? 'VIAGEM' : 'Presencial'}
@@ -252,8 +258,8 @@ export default function CozinhaKanban() {
             </h3>
             <p className="text-sm text-stone-600 mb-4">
               {confirmacao.tipo === 'em_preparacao'
-                ? `Confirmar início da preparação do pedido #${confirmacao.pedido.numero}?`
-                : `Confirmar que o pedido #${confirmacao.pedido.numero} está pronto?`}
+                ? `Confirmar início da preparação do pedido #${confirmacao.pedido.numero}${nomeAtendente(confirmacao.pedido) !== '-' ? ` – ${nomeAtendente(confirmacao.pedido)}` : ''}?`
+                : `Confirmar que o pedido #${confirmacao.pedido.numero}${nomeAtendente(confirmacao.pedido) !== '-' ? ` – ${nomeAtendente(confirmacao.pedido)}` : ''} está pronto?`}
             </p>
             <div className="flex gap-2">
               <button

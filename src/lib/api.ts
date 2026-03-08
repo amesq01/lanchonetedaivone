@@ -170,7 +170,7 @@ export async function closeComanda(comandaId: string, formaPagamento: string) {
 }
 
 export async function getComandaWithPedidos(comandaId: string) {
-  const { data: comanda } = await supabase.from('comandas').select('*').eq('id', comandaId).maybeSingle();
+  const { data: comanda } = await supabase.from('comandas').select('*, profiles(nome)').eq('id', comandaId).maybeSingle();
   if (!comanda) return null;
   const { data: pedidos } = await supabase.from('pedidos').select('*, pedido_itens(*, produtos(*))').eq('comanda_id', comandaId).order('created_at', { ascending: false });
   return { comanda, pedidos: pedidos ?? [] };
@@ -372,7 +372,7 @@ export async function updatePedidoStatus(
 }
 
 export async function getPedidosByComanda(comandaId: string) {
-  const { data } = await supabase.from('pedidos').select('*, pedido_itens(*, produtos(*))').eq('comanda_id', comandaId).order('created_at', { ascending: false });
+  const { data } = await supabase.from('pedidos').select('*, pedido_itens(*, produtos(*)), comandas(profiles(nome))').eq('comanda_id', comandaId).order('created_at', { ascending: false });
   return (data ?? []) as any[];
 }
 
@@ -385,7 +385,7 @@ export async function getPedidoStatus(pedidoId: string): Promise<{ status: strin
 export async function getPedidosCozinha() {
   const { data } = await supabase
     .from('pedidos')
-    .select('id, numero, status, origem, cliente_nome, encerrado_em, updated_at, aceito_em, created_at, comanda_id, pedido_itens(id, quantidade, observacao, produtos(id, nome, descricao, vai_para_cozinha)), comandas(nome_cliente, mesa_id, mesas(numero, nome))')
+    .select('id, numero, status, origem, cliente_nome, encerrado_em, updated_at, aceito_em, created_at, comanda_id, pedido_itens(id, quantidade, observacao, produtos(id, nome, descricao, vai_para_cozinha)), comandas(nome_cliente, mesa_id, mesas(numero, nome), profiles(nome))')
     .in('status', ['novo_pedido', 'em_preparacao', 'finalizado'])
     .order('created_at');
   const list = (data ?? []) as any[];
@@ -397,7 +397,7 @@ export async function getPedidosCozinha() {
 }
 
 export async function getPedidosViagemAbertos() {
-  const { data } = await supabase.from('pedidos').select('*, pedido_itens(*, produtos(*)), comandas(nome_cliente, aberta)').eq('origem', 'viagem').neq('status', 'cancelado').order('created_at', { ascending: false });
+  const { data } = await supabase.from('pedidos').select('*, pedido_itens(*, produtos(*)), comandas(nome_cliente, aberta, profiles(nome))').eq('origem', 'viagem').neq('status', 'cancelado').order('created_at', { ascending: false });
   return (data ?? []) as any[];
 }
 
@@ -406,7 +406,7 @@ export async function getPedidosPresencialHoje() {
   const { desde, ate } = hojeBrasiliaUTC();
   const { data } = await supabase
     .from('pedidos')
-    .select('*, pedido_itens(*, produtos(*)), comandas(nome_cliente, mesa_id, atendente_id, mesas(numero, nome))')
+    .select('*, pedido_itens(*, produtos(*)), comandas(nome_cliente, mesa_id, atendente_id, mesas(numero, nome), profiles(nome))')
     .eq('origem', 'presencial')
     .neq('status', 'cancelado')
     .gte('created_at', desde)
@@ -420,7 +420,7 @@ export async function getPedidosViagemHoje() {
   const { desde, ate } = hojeBrasiliaUTC();
   const { data } = await supabase
     .from('pedidos')
-    .select('*, pedido_itens(*, produtos(*)), comandas(nome_cliente, aberta, atendente_id)')
+    .select('*, pedido_itens(*, produtos(*)), comandas(nome_cliente, aberta, atendente_id, profiles(nome))')
     .eq('origem', 'viagem')
     .neq('status', 'cancelado')
     .gte('created_at', desde)
