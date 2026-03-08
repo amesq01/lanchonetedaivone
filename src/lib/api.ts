@@ -608,7 +608,7 @@ export async function getPedidosCozinha() {
 /** Pedidos que estão na mesa Viagem (comanda da mesa viagem aberta). Não usa origem do pedido, para que pedidos movidos para outra mesa deixem de aparecer aqui. */
 export async function getPedidosViagemAbertos() {
   const { data: mesas } = await supabase.from('mesas').select('id').eq('is_viagem', true).limit(1);
-  const viagemMesaId = (mesas ?? [])[0]?.id;
+  const viagemMesaId = ((mesas ?? []) as { id: string }[])[0]?.id;
   if (!viagemMesaId) return [];
   const { data: comandas } = await supabase.from('comandas').select('id').eq('mesa_id', viagemMesaId).eq('aberta', true);
   const comandaIds = (comandas ?? []).map((c: { id: string }) => c.id);
@@ -1049,20 +1049,22 @@ export async function getNotificacoesNaoVistas(atendenteId: string) {
   return (data ?? []) as { id: string; mensagem: string; pedido_numero: number }[];
 }
 
-/** Inscreve nas notificações do atendente (Realtime + polling). Retorna função para cancelar. */
+/** Inscreve nas notificações do atendente (Realtime + polling). Retorna função para cancelar. O primeiro poll só preenche ids já existentes (não dispara onNotificacao). */
 export function subscribeToNotificacoesAtendente(
   atendenteId: string,
   onNotificacao: (notificacao: { id: string; mensagem: string; pedido_numero: number }) => void
 ) {
   const idsVistos = new Set<string>();
+  let primeiroPoll = true;
   const poll = async () => {
     const list = await getNotificacoesNaoVistas(atendenteId);
     for (const n of list) {
       if (!idsVistos.has(n.id)) {
         idsVistos.add(n.id);
-        onNotificacao(n);
+        if (!primeiroPoll) onNotificacao(n);
       }
     }
+    primeiroPoll = false;
   };
   poll();
   const interval = setInterval(poll, 3000);

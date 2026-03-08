@@ -1,8 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { UtensilsCrossed, Truck, LogOut, CheckCircle2 } from 'lucide-react';
-import { subscribeToNotificacoesAtendente, marcarNotificacaoComoVista } from '../lib/api';
+import { subscribeToNotificacoesAtendente, marcarNotificacaoComoVista, getNotificacoesNaoVistas } from '../lib/api';
+
+type Notificacao = { id: string; mensagem: string; pedido_numero: number };
 
 const nav = [
   { to: '/pdv/mesas', label: 'Mesas', icon: UtensilsCrossed },
@@ -31,25 +33,31 @@ function tocarBip() {
 export default function AtendenteLayout() {
   const { user, profile, signOut } = useAuth();
   const navigate = useNavigate();
-  const [toast, setToast] = useState<{ id: string; mensagem: string } | null>(null);
+  const [notificacoes, setNotificacoes] = useState<Notificacao[]>([]);
 
-  useEffect(() => {
+  const carregarNotificacoes = useCallback(async () => {
     if (!user?.id || profile?.role !== 'atendente') return;
-    const unsub = subscribeToNotificacoesAtendente(user.id, (n) => {
-      tocarBip();
-      setToast({ id: n.id, mensagem: n.mensagem });
-    });
-    return unsub;
+    const list = await getNotificacoesNaoVistas(user.id);
+    setNotificacoes(list.sort((a, b) => b.pedido_numero - a.pedido_numero));
   }, [user?.id, profile?.role]);
 
   useEffect(() => {
-    if (!toast) return;
-    const t = setTimeout(() => {
-      marcarNotificacaoComoVista(toast.id);
-      setToast(null);
-    }, 5000);
-    return () => clearTimeout(t);
-  }, [toast]);
+    if (!user?.id || profile?.role !== 'atendente') return;
+    carregarNotificacoes();
+    const unsub = subscribeToNotificacoesAtendente(user.id, (n) => {
+      tocarBip();
+      setNotificacoes((prev) => {
+        if (prev.some((x) => x.id === n.id)) return prev;
+        return [{ id: n.id, mensagem: n.mensagem, pedido_numero: n.pedido_numero }, ...prev];
+      });
+    });
+    return unsub;
+  }, [user?.id, profile?.role, carregarNotificacoes]);
+
+  const marcarCiente = async (id: string) => {
+    await marcarNotificacaoComoVista(id);
+    setNotificacoes((prev) => prev.filter((n) => n.id !== id));
+  };
 
   const handleSignOut = async () => {
     try {
@@ -61,14 +69,24 @@ export default function AtendenteLayout() {
 
   return (
     <div className="min-h-screen bg-stone-100 md:flex">
-      {toast && (
-        <div className="fixed top-4 right-4 z-50 flex max-w-sm flex-col gap-3 rounded-xl border border-green-200 bg-white p-4 shadow-lg">
-          <div className="flex items-start gap-3">
-            <CheckCircle2 className="h-6 w-6 flex-shrink-0 text-green-600" />
-            <div className="flex-1 min-w-0">
-              <p className="font-medium text-stone-800">{toast.mensagem}</p>
+      {notificacoes.length > 0 && (
+        <div className="fixed top-4 right-4 z-50 flex max-w-sm flex-col gap-3 rounded-xl border border-green-200 bg-white p-4 shadow-lg max-h-[70vh] overflow-y-auto">
+          <p className="text-sm font-semibold text-stone-700 mb-1">Pedidos finalizados pela cozinha</p>
+          {notificacoes.map((n) => (
+            <div key={n.id} className="flex items-start gap-3 rounded-lg border border-stone-100 bg-stone-50/50 p-3">
+              <CheckCircle2 className="h-5 w-5 flex-shrink-0 text-green-600 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="font-medium text-stone-800">{n.mensagem}</p>
+                <button
+                  type="button"
+                  onClick={() => marcarCiente(n.id)}
+                  className="mt-2 text-sm font-medium text-amber-700 hover:underline"
+                >
+                  Ciente
+                </button>
+              </div>
             </div>
-          </div>
+          ))}
         </div>
       )}
       <header className="border-b border-stone-200 bg-white px-4 py-3 md:w-20 md:flex-col md:border-b-0 md:border-r md:py-6">
