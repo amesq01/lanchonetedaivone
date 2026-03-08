@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ChevronDown, ChevronUp } from 'lucide-react';
-import { getMesas, getComandaByMesaComAtendente, getProdutos, createPedidoPresencial, getPedidosByComanda, getPedidoStatus, updatePedidoStatus, closeComanda } from '../../lib/api';
+import { getMesas, getComandaByMesaComAtendente, getProdutos, createPedidoPresencial, getPedidosByComanda, getPedidoStatus, updatePedidoStatus, updatePedidoItens, closeComanda } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
 import type { Produto } from '../../types/database';
 import { imagensProduto, precoVenda } from '../../types/database';
@@ -27,6 +27,10 @@ export default function AtendenteMesaDetail() {
   const [popupCancelar, setPopupCancelar] = useState<{ pedidoId: string } | null>(null);
   const [motivoCancelamento, setMotivoCancelamento] = useState('');
   const [fechando, setFechando] = useState(false);
+  const [popupEditar, setPopupEditar] = useState<any | null>(null);
+  const [carrinhoEdicao, setCarrinhoEdicao] = useState<ItemCarrinho[]>([]);
+  const [searchEdicao, setSearchEdicao] = useState('');
+  const [enviandoEdicao, setEnviandoEdicao] = useState(false);
   /** Mesa foi encerrada ou reaberta por outro atendente; não permite lançar pedido. */
   const [comandaInvalidada, setComandaInvalidada] = useState(false);
   /** Mesa foi aberta por outro atendente; só quem abriu pode lançar pedidos. */
@@ -214,6 +218,49 @@ export default function AtendenteMesaDetail() {
     if (comandaId) getPedidosByComanda(comandaId).then(setPedidos);
   };
 
+  const addItemEdicao = (produto: Produto, qtd = 1, obs = '') => {
+    setCarrinhoEdicao((c) => {
+      const exist = c.find((i) => i.produto.id === produto.id && i.observacao === obs);
+      if (exist) return c.map((i) => i.produto.id === produto.id && i.observacao === obs ? { ...i, quantidade: i.quantidade + qtd } : i);
+      return [...c, { produto, quantidade: qtd, observacao: obs }];
+    });
+  };
+  const updateQtdEdicao = (index: number, delta: number) => {
+    setCarrinhoEdicao((c) => {
+      const novo = c.map((item, i) => (i === index ? { ...item, quantidade: Math.max(0, item.quantidade + delta) } : item));
+      return novo.filter((i) => i.quantidade > 0);
+    });
+  };
+  const setObsEdicao = (index: number, value: string) => {
+    setCarrinhoEdicao((c) => c.map((item, i) => (i === index ? { ...item, observacao: value } : item)));
+  };
+  const salvarEdicao = async () => {
+    if (!popupEditar || carrinhoEdicao.length === 0) {
+      setToast('Adicione pelo menos um item.');
+      return;
+    }
+    setEnviandoEdicao(true);
+    try {
+      const itens = carrinhoEdicao.map((i) => ({
+        produto_id: i.produto.id,
+        quantidade: i.quantidade,
+        valor_unitario: precoVenda(i.produto),
+        observacao: i.observacao || undefined,
+      }));
+      await updatePedidoItens(popupEditar.id, itens);
+      setPopupEditar(null);
+      if (comandaId) getPedidosByComanda(comandaId).then(setPedidos);
+      setToast('Pedido atualizado.');
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : 'Erro ao atualizar pedido.');
+    } finally {
+      setEnviandoEdicao(false);
+    }
+  };
+
+  const sEdicao = (searchEdicao || '').trim().toLowerCase();
+  const filtradosEdicao = sEdicao ? produtos.filter((p) => (p.codigo?.toLowerCase().includes(sEdicao) || (p.nome ?? '').toLowerCase().includes(sEdicao) || (p.descricao ?? '').toLowerCase().includes(sEdicao))) : [];
+
   if (loading) return <p className="text-stone-500">Carregando...</p>;
   if (!comandaId) return <p className="text-stone-500">Mesa não encontrada ou não está aberta.</p>;
 
@@ -267,7 +314,7 @@ export default function AtendenteMesaDetail() {
                 style={{ top: dropdownRect.top, left: dropdownRect.left, width: dropdownRect.width }}
               >
                 {filtrados.map((p) => (
-                  <button key={p.id} type="button" onClick={() => addItem(p)} className="flex w-full min-h-[3.25rem] items-center gap-2 px-3 py-2.5 text-left hover:bg-stone-50 border-b border-stone-100 last:border-0">
+                  <button key={p.id} type="button" onClick={() => { addItem(p); setSearch(''); }} className="flex w-full min-h-[3.25rem] items-center gap-2 px-3 py-2.5 text-left hover:bg-stone-50 border-b border-stone-100 last:border-0">
                     <div className="w-10 h-10 flex-shrink-0 rounded-lg bg-stone-100 overflow-hidden flex items-center justify-center">
                       {imagensProduto(p)[0] ? <img src={imagensProduto(p)[0]} alt="" className="w-full h-full object-cover" /> : <span className="text-stone-400 text-xs">IMG</span>}
                     </div>
@@ -325,7 +372,7 @@ export default function AtendenteMesaDetail() {
         {pedidos.filter((p) => p.status !== 'cancelado').map((p) => (
           <div key={p.id} className="rounded-xl bg-white border border-stone-200 overflow-hidden">
             <button type="button" onClick={() => setPedidoExpandido(pedidoExpandido === p.id ? null : p.id)} className="flex w-full items-center justify-between p-3 text-left font-medium text-stone-800">
-              <span>Pedido #${p.numero}${(atendenteQueAbriu || (p.comandas as any)?.profiles?.nome) ? ` – ${atendenteQueAbriu || (p.comandas as any)?.profiles?.nome}` : ''}</span>
+              <span>Pedido #{p.numero}{(atendenteQueAbriu || (p.comandas as any)?.profiles?.nome) ? ` – ${atendenteQueAbriu || (p.comandas as any)?.profiles?.nome}` : ''}</span>
               {pedidoExpandido === p.id ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
             </button>
             {pedidoExpandido === p.id && (
@@ -335,9 +382,14 @@ export default function AtendenteMesaDetail() {
                     <li key={i.id}>{i.quantidade}x {i.produtos?.nome || i.produtos?.descricao} {i.observacao ? `(${i.observacao})` : ''}</li>
                   ))}
                 </ul>
-                {p.status === 'novo_pedido' && !mesaAbertaPorOutro && (
-                  <button onClick={() => setPopupCancelar({ pedidoId: p.id })} className="text-sm text-red-600 hover:underline">Cancelar pedido</button>
-                )}
+                <div className="flex gap-2">
+                  {p.status === 'novo_pedido' && !mesaAbertaPorOutro && (
+                    <>
+                      <button onClick={() => { setPopupEditar(p); setCarrinhoEdicao((p.pedido_itens ?? []).filter((i: any) => i.produtos).map((i: any) => ({ produto: i.produtos, quantidade: i.quantidade, observacao: i.observacao ?? '' }))); setSearchEdicao(''); }} className="text-sm text-amber-600 hover:underline">Editar pedido</button>
+                      <button onClick={() => setPopupCancelar({ pedidoId: p.id })} className="text-sm text-red-600 hover:underline">Cancelar pedido</button>
+                    </>
+                  )}
+                </div>
               </div>
             )}
           </div>
@@ -366,6 +418,68 @@ export default function AtendenteMesaDetail() {
             <div className="flex gap-2">
               <button onClick={confirmarCancelarPedido} disabled={!motivoCancelamento.trim()} className="flex-1 rounded-lg bg-red-600 py-2 text-white hover:bg-red-700 disabled:opacity-50">Confirmar cancelamento</button>
               <button onClick={() => { setPopupCancelar(null); setMotivoCancelamento(''); }} className="rounded-lg border border-stone-300 px-4 py-2 text-stone-600">Voltar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {popupEditar && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 overflow-y-auto">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl my-4 max-h-[90vh] overflow-y-auto">
+            <h3 className="font-semibold text-stone-800 mb-3">Editar pedido #{popupEditar.numero}</h3>
+            <p className="text-sm text-stone-500 mb-3">Altere os itens e salve. Só é possível editar antes do preparo.</p>
+            <input type="text" value={searchEdicao} onChange={(e) => setSearchEdicao(e.target.value)} placeholder="Buscar por nome ou código..." className="w-full rounded-lg border border-stone-300 px-3 py-2 mb-2" />
+            {sEdicao && filtradosEdicao.length > 0 && (
+              <ul className="mb-3 max-h-[50vh] overflow-y-auto rounded-lg border border-stone-200 divide-y divide-stone-100 shadow-sm">
+                {filtradosEdicao.slice(0, 30).map((p) => (
+                  <li key={p.id}>
+                    <button type="button" onClick={() => { addItemEdicao(p); setSearchEdicao(''); }} className="flex w-full min-h-[3.25rem] items-center gap-2 px-3 py-2.5 text-left hover:bg-stone-50">
+                      <div className="w-10 h-10 flex-shrink-0 rounded-lg bg-stone-100 overflow-hidden flex items-center justify-center">
+                        {imagensProduto(p)[0] ? <img src={imagensProduto(p)[0]} alt="" className="w-full h-full object-cover" /> : <span className="text-stone-400 text-xs">IMG</span>}
+                      </div>
+                      <div className="flex-1 min-w-0 flex flex-col sm:flex-row sm:items-center sm:gap-2">
+                        <span className="text-sm font-medium text-stone-500">#{p.codigo}</span>
+                        <span className="text-stone-800 truncate text-sm">{p.nome || p.descricao}</span>
+                      </div>
+                      <div className="flex-shrink-0 text-right text-[10px]">
+                        {p.em_promocao && p.valor_promocional != null && Number(p.valor_promocional) > 0 ? (
+                          <>
+                            <span className="text-stone-500 block">De: <span className="line-through text-stone-400">R$ {Number(p.valor).toFixed(2)}</span></span>
+                            <span className="text-amber-600 font-medium">Por: R$ {Number(p.valor_promocional).toFixed(2)}</span>
+                          </>
+                        ) : (
+                          <span className="text-amber-600 font-medium text-sm">R$ {precoVenda(p).toFixed(2)}</span>
+                        )}
+                      </div>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="rounded-xl border border-stone-200 overflow-hidden mb-4">
+              <div className="p-3 border-b border-stone-100 font-medium text-stone-700">Itens do pedido</div>
+              <ul className="divide-y divide-stone-100">
+                {carrinhoEdicao.map((item, i) => (
+                  <li key={i} className="flex flex-wrap items-center gap-2 p-3">
+                    <div className="w-12 h-12 rounded-lg bg-stone-100 flex-shrink-0 overflow-hidden flex items-center justify-center">
+                      {imagensProduto(item.produto)[0] ? <img src={imagensProduto(item.produto)[0]} alt="" className="w-full h-full object-cover" /> : <span className="text-stone-400 text-xs">IMG</span>}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-stone-800">{item.produto.codigo} – {item.produto.nome || item.produto.descricao}</div>
+                      <input type="text" value={item.observacao} onChange={(e) => setObsEdicao(i, e.target.value)} placeholder="Observação (ex: sem cebola)" className="mt-1 w-full text-sm rounded border border-stone-200 px-2 py-1" />
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button type="button" onClick={() => updateQtdEdicao(i, -1)} className="w-8 h-8 rounded border border-stone-300 text-stone-600">−</button>
+                      <span className="w-8 text-center font-medium">{item.quantidade}</span>
+                      <button type="button" onClick={() => updateQtdEdicao(i, 1)} className="w-8 h-8 rounded border border-stone-300 text-stone-600">+</button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={salvarEdicao} disabled={enviandoEdicao || carrinhoEdicao.length === 0} className="flex-1 rounded-lg bg-amber-600 py-2 font-medium text-white hover:bg-amber-700 disabled:opacity-50">Salvar alterações</button>
+              <button onClick={() => setPopupEditar(null)} className="rounded-lg border border-stone-300 px-4 py-2 text-stone-600">Fechar</button>
             </div>
           </div>
         </div>

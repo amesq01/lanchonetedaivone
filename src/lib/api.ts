@@ -382,6 +382,54 @@ export async function getPedidoStatus(pedidoId: string): Promise<{ status: strin
   return data as { status: string } | null;
 }
 
+const STATUS_EDITAVEL = ['novo_pedido', 'aguardando_aceite'];
+
+/**
+ * Atualiza os itens de um pedido. Só permite se o status for novo_pedido ou aguardando_aceite.
+ * Ajusta estoque: restaura o que foi removido, decrementa o que foi adicionado.
+ */
+export async function updatePedidoItens(
+  pedidoId: string,
+  itens: { produto_id: string; quantidade: number; valor_unitario: number; observacao?: string }[]
+) {
+  const { data: ped, error: ePed } = await supabase.from('pedidos').select('status').eq('id', pedidoId).single();
+  if (ePed || !ped) throw new Error('Pedido não encontrado.');
+  const status = (ped as { status: string }).status;
+  if (!STATUS_EDITAVEL.includes(status)) throw new Error(`Pedido não pode ser editado. Status atual: ${status}.`);
+
+  const { data: atuais, error: eItens } = await supabase.from('pedido_itens').select('produto_id, quantidade').eq('pedido_id', pedidoId);
+  if (eItens) throw eItens;
+  const antigoPorProduto = agruparItensPorProduto((atuais ?? []) as { produto_id: string; quantidade: number }[]);
+  const novoPorProduto = agruparItensPorProduto(itens);
+
+  const todosProdutos = [...new Set([...Object.keys(antigoPorProduto), ...Object.keys(novoPorProduto)])];
+  const now = new Date().toISOString();
+  for (const produtoId of todosProdutos) {
+    const antigo = antigoPorProduto[produtoId] ?? 0;
+    const novo = novoPorProduto[produtoId] ?? 0;
+    const delta = novo - antigo;
+    if (delta > 0) {
+      const { data: row } = await supabase.from('produtos').select('id, nome, quantidade').eq('id', produtoId).single();
+      const atual = (row as { quantidade: number } | null) ? Number((row as any).quantidade) : 0;
+      if (atual < delta) {
+        const nome = (row as { nome?: string } | null)?.nome ?? 'Produto';
+        throw new Error(`${nome} sem estoque suficiente. Disponível: ${atual}.`);
+      }
+      const novaQtd = Math.max(0, atual - delta);
+      await (supabase as any).from('produtos').update({ quantidade: novaQtd, ativo: novaQtd > 0, updated_at: now }).eq('id', produtoId);
+    } else if (delta < 0) {
+      const { data: row } = await supabase.from('produtos').select('quantidade').eq('id', produtoId).single();
+      const atual = (row as { quantidade: number } | null) ? Number((row as any).quantidade) : 0;
+      await (supabase as any).from('produtos').update({ quantidade: atual + Math.abs(delta), ativo: true, updated_at: now }).eq('id', produtoId);
+    }
+  }
+
+  await (supabase as any).from('pedido_itens').delete().eq('pedido_id', pedidoId);
+  if (itens.length > 0) {
+    await (supabase as any).from('pedido_itens').insert(itens.map((i) => ({ pedido_id: pedidoId, produto_id: i.produto_id, quantidade: i.quantidade, valor_unitario: i.valor_unitario, observacao: i.observacao ?? null })));
+  }
+}
+
 export async function getPedidosCozinha() {
   const { data } = await supabase
     .from('pedidos')

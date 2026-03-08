@@ -109,7 +109,7 @@ export default function AtendenteViagemNovo() {
             style={{ top: dropdownRect.top, left: dropdownRect.left, width: dropdownRect.width }}
           >
             {filtrados.map((p) => (
-              <button key={p.id} type="button" onClick={() => addItem(p)} className="flex w-full min-h-[3.25rem] items-center gap-2 px-3 py-2.5 text-left hover:bg-stone-50 border-b border-stone-100 last:border-0">
+              <button key={p.id} type="button" onClick={() => { addItem(p); setSearch(''); }} className="flex w-full min-h-[3.25rem] items-center gap-2 px-3 py-2.5 text-left hover:bg-stone-50 border-b border-stone-100 last:border-0">
                 <div className="w-10 h-10 flex-shrink-0 rounded-lg bg-stone-100 overflow-hidden flex items-center justify-center">
                   {imagensProduto(p)[0] ? <img src={imagensProduto(p)[0]} alt="" className="w-full h-full object-cover" /> : <span className="text-stone-400 text-xs">IMG</span>}
                 </div>

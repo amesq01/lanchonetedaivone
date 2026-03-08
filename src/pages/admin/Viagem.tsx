@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
-import { getPedidosViagemAbertos, getTotalComanda, getCuponsAtivos, applyDescontoComanda, clearDescontoComanda } from '../../lib/api';
+import { getPedidosViagemAbertos, getTotalComanda, getCuponsAtivos, applyDescontoComanda, clearDescontoComanda, getProdutos, updatePedidoItens } from '../../lib/api';
 import { printContaViagem } from '../../lib/printPdf';
 import { supabase } from '../../lib/supabase';
 import type { Cupom } from '../../types/database';
+import type { Produto } from '../../types/database';
+import { precoVenda, imagensProduto } from '../../types/database';
 
 export default function AdminViagem() {
   const [pedidos, setPedidos] = useState<any[]>([]);
@@ -15,9 +17,15 @@ export default function AdminViagem() {
   const [cupomDesconto, setCupomDesconto] = useState('');
   const [descontoManual, setDescontoManual] = useState('');
   const [cupons, setCupons] = useState<Cupom[]>([]);
+  const [produtos, setProdutos] = useState<Produto[]>([]);
+  const [popupEditar, setPopupEditar] = useState<any | null>(null);
+  const [carrinhoEdicao, setCarrinhoEdicao] = useState<{ produto: Produto; quantidade: number; observacao: string }[]>([]);
+  const [searchEdicao, setSearchEdicao] = useState('');
+  const [enviandoEdicao, setEnviandoEdicao] = useState(false);
 
   useEffect(() => {
     load();
+    getProdutos(true).then(setProdutos);
   }, []);
 
   async function load() {
@@ -89,6 +97,42 @@ export default function AdminViagem() {
 
   const formas = ['dinheiro', 'pix', 'cartão de crédito', 'cartão de débito'];
 
+  const addItemEdicao = (produto: Produto, qtd = 1, obs = '') => {
+    setCarrinhoEdicao((c) => {
+      const exist = c.find((i) => i.produto.id === produto.id && i.observacao === obs);
+      if (exist) return c.map((i) => i.produto.id === produto.id && i.observacao === obs ? { ...i, quantidade: i.quantidade + qtd } : i);
+      return [...c, { produto, quantidade: qtd, observacao: obs }];
+    });
+  };
+  const updateQtdEdicao = (index: number, delta: number) => {
+    setCarrinhoEdicao((c) => {
+      const novo = c.map((item, i) => (i === index ? { ...item, quantidade: Math.max(0, item.quantidade + delta) } : item));
+      return novo.filter((i) => i.quantidade > 0);
+    });
+  };
+  const setObsEdicao = (index: number, value: string) => {
+    setCarrinhoEdicao((c) => c.map((item, i) => (i === index ? { ...item, observacao: value } : item)));
+  };
+  const salvarEdicao = async () => {
+    if (!popupEditar || carrinhoEdicao.length === 0) return;
+    setEnviandoEdicao(true);
+    try {
+      const itens = carrinhoEdicao.map((i) => ({
+        produto_id: i.produto.id,
+        quantidade: i.quantidade,
+        valor_unitario: precoVenda(i.produto),
+        observacao: i.observacao || undefined,
+      }));
+      await updatePedidoItens(popupEditar.id, itens);
+      setPopupEditar(null);
+      load();
+    } finally {
+      setEnviandoEdicao(false);
+    }
+  };
+  const sEdicao = (searchEdicao || '').trim().toLowerCase();
+  const filtradosEdicao = sEdicao ? produtos.filter((p) => (p.codigo?.toLowerCase().includes(sEdicao) || (p.nome ?? '').toLowerCase().includes(sEdicao) || (p.descricao ?? '').toLowerCase().includes(sEdicao))) : [];
+
   const comandaAberta = (p: any) => (Array.isArray(p.comandas) ? p.comandas[0]?.aberta : p.comandas?.aberta) !== false;
   const emPreparacao = pedidos.filter((p) => p.status !== 'finalizado');
   const prontosEncerrar = pedidos.filter((p) => p.status === 'finalizado' && comandaAberta(p));
@@ -129,6 +173,11 @@ export default function AdminViagem() {
               </ul>
             </div>
             <div className="min-w-[200px] w-[200px] flex flex-col items-center justify-center gap-2 shrink-0">
+              {p.status === 'novo_pedido' && (
+                <button type="button" onClick={() => { setPopupEditar(p); setCarrinhoEdicao((p.pedido_itens ?? []).filter((i: any) => i.produtos).map((i: any) => ({ produto: i.produtos, quantidade: i.quantidade, observacao: i.observacao ?? '' }))); setSearchEdicao(''); }} className="rounded-lg border border-amber-300 px-4 py-2 text-sm text-amber-700 hover:bg-amber-50 mb-2">
+                  Editar pedido
+                </button>
+              )}
               <span className="rounded-lg border border-stone-200 bg-stone-50 px-4 py-2 text-sm text-stone-500">
                 Aguardando finalização na cozinha
               </span>
@@ -148,6 +197,11 @@ export default function AdminViagem() {
               </ul>
             </div>
             <div className="min-w-[200px] w-[200px] flex flex-col items-center justify-center gap-2 shrink-0">
+              {p.status === 'novo_pedido' && (
+                <button type="button" onClick={() => { setPopupEditar(p); setCarrinhoEdicao((p.pedido_itens ?? []).filter((i: any) => i.produtos).map((i: any) => ({ produto: i.produtos, quantidade: i.quantidade, observacao: i.observacao ?? '' }))); setSearchEdicao(''); }} className="rounded-lg border border-amber-300 px-4 py-2 text-sm text-amber-700 hover:bg-amber-50">
+                  Editar pedido
+                </button>
+              )}
               <button onClick={() => handleAbrirImprimir(p)} className="rounded-lg border border-stone-300 px-4 py-2 text-sm text-stone-700 hover:bg-stone-50">
                 Imprimir conta
               </button>
@@ -158,6 +212,68 @@ export default function AdminViagem() {
           </div>
         ))}
       </div>
+
+      {popupEditar && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 overflow-y-auto">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl my-4 max-h-[90vh] overflow-y-auto">
+            <h3 className="font-semibold text-stone-800 mb-3">Editar pedido #{popupEditar.numero}</h3>
+            <p className="text-sm text-stone-500 mb-3">Altere os itens e salve. Só é possível editar antes do preparo.</p>
+            <input type="text" value={searchEdicao} onChange={(e) => setSearchEdicao(e.target.value)} placeholder="Buscar por nome ou código..." className="w-full rounded-lg border border-stone-300 px-3 py-2 mb-2" />
+            {sEdicao && filtradosEdicao.length > 0 && (
+              <ul className="mb-3 max-h-[50vh] overflow-y-auto rounded-lg border border-stone-200 divide-y divide-stone-100 shadow-sm">
+                {filtradosEdicao.slice(0, 30).map((p) => (
+                  <li key={p.id}>
+                    <button type="button" onClick={() => { addItemEdicao(p); setSearchEdicao(''); }} className="flex w-full min-h-[3.25rem] items-center gap-2 px-3 py-2.5 text-left hover:bg-stone-50">
+                      <div className="w-10 h-10 flex-shrink-0 rounded-lg bg-stone-100 overflow-hidden flex items-center justify-center">
+                        {imagensProduto(p)[0] ? <img src={imagensProduto(p)[0]} alt="" className="w-full h-full object-cover" /> : <span className="text-stone-400 text-xs">IMG</span>}
+                      </div>
+                      <div className="flex-1 min-w-0 flex flex-col sm:flex-row sm:items-center sm:gap-2">
+                        <span className="text-sm font-medium text-stone-500">#{p.codigo}</span>
+                        <span className="text-stone-800 truncate text-sm">{p.nome || p.descricao}</span>
+                      </div>
+                      <div className="flex-shrink-0 text-right text-[10px]">
+                        {p.em_promocao && p.valor_promocional != null && Number(p.valor_promocional) > 0 ? (
+                          <>
+                            <span className="text-stone-500 block">De: <span className="line-through text-stone-400">R$ {Number(p.valor).toFixed(2)}</span></span>
+                            <span className="text-amber-600 font-medium">Por: R$ {Number(p.valor_promocional).toFixed(2)}</span>
+                          </>
+                        ) : (
+                          <span className="text-amber-600 font-medium text-sm">R$ {precoVenda(p).toFixed(2)}</span>
+                        )}
+                      </div>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="rounded-xl border border-stone-200 overflow-hidden mb-4">
+              <div className="p-3 border-b border-stone-100 font-medium text-stone-700">Itens do pedido</div>
+              <ul className="divide-y divide-stone-100">
+                {carrinhoEdicao.map((item, i) => (
+                  <li key={i} className="flex flex-wrap items-center gap-2 p-3">
+                    <div className="w-12 h-12 rounded-lg bg-stone-100 flex-shrink-0 overflow-hidden flex items-center justify-center">
+                      {imagensProduto(item.produto)[0] ? <img src={imagensProduto(item.produto)[0]} alt="" className="w-full h-full object-cover" /> : <span className="text-stone-400 text-xs">IMG</span>}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-stone-800">{item.produto.codigo} – {item.produto.nome || item.produto.descricao}</div>
+                      <input type="text" value={item.observacao} onChange={(e) => setObsEdicao(i, e.target.value)} placeholder="Observação (ex: sem cebola)" className="mt-1 w-full text-sm rounded border border-stone-200 px-2 py-1" />
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button type="button" onClick={() => updateQtdEdicao(i, -1)} className="w-8 h-8 rounded border border-stone-300 text-stone-600">−</button>
+                      <span className="w-8 text-center font-medium">{item.quantidade}</span>
+                      <button type="button" onClick={() => updateQtdEdicao(i, 1)} className="w-8 h-8 rounded border border-stone-300 text-stone-600">+</button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={salvarEdicao} disabled={enviandoEdicao || carrinhoEdicao.length === 0} className="flex-1 rounded-lg bg-amber-600 py-2 font-medium text-white hover:bg-amber-700 disabled:opacity-50">Salvar alterações</button>
+              <button onClick={() => setPopupEditar(null)} className="rounded-lg border border-stone-300 px-4 py-2 text-stone-600">Fechar</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="mt-8">
         <button onClick={() => setAccordionFinalizados(!accordionFinalizados)} className="flex w-full items-center justify-between rounded-lg bg-stone-100 px-4 py-2 text-left font-medium text-stone-700">
