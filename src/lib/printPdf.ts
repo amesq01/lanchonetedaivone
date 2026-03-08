@@ -250,7 +250,7 @@ export async function printContaViagem(opts: {
 }
 
 /** Imprime um pedido (comanda) em qualquer contexto: mesa, viagem ou online. tituloSuffix ex.: "Mesa 2", "Viagem", "Entrega", "Retirada". */
-export function printPedido(
+export async function printPedido(
   pedido: {
     numero: number;
     cliente_nome?: string;
@@ -352,12 +352,109 @@ export function printPedido(
   if (desconto > 0) linhasExtra.push({ label: 'Desconto:', valor: `- R$ ${desconto.toFixed(2)}` });
   if (taxa > 0) linhasExtra.push({ label: 'Taxa entrega:', valor: `R$ ${taxa.toFixed(2)}` });
   y = addTotaisSection(doc, y, subtotal, total, linhasExtra);
+  y = await addPixQrCode(doc, y);
+  addFooter(doc, y);
+  openAndPrint(doc);
+}
+
+type PedidoParaImpressao = {
+  numero: number;
+  cliente_nome?: string;
+  comandas?: { nome_cliente?: string };
+  desconto?: number;
+  taxa_entrega?: number;
+  pedido_itens?: Array<{
+    quantidade: number;
+    valor_unitario: number;
+    observacao?: string;
+    produtos?: { codigo?: string; nome?: string; descricao?: string };
+  }>;
+};
+
+/** Imprime vários pedidos em um único comprovante, unificados. tituloContexto ex.: "Mesa 2", "Viagem". */
+export async function printPedidosUnificados(pedidos: PedidoParaImpressao[], tituloContexto: string) {
+  if (pedidos.length === 0) return;
+  const ordenados = [...pedidos].sort((a, b) => a.numero - b.numero);
+  const numeros = ordenados.map((p) => p.numero).join(', #');
+  const doc = createDoc();
+  let y = 10;
+  doc.setTextColor(...BLACK);
+  doc.setFontSize(14);
+  doc.text('Lanchonete Terra e Mar', PAPER_WIDTH_MM / 2, y, { align: 'center' });
+  y += 8;
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'bold');
+  doc.text(`Pedidos unificados #${numeros}`, PAPER_WIDTH_MM / 2, y, { align: 'center' });
+  y += 6;
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.text(tituloContexto, PAPER_WIDTH_MM / 2, y, { align: 'center' });
+  y += 6;
+  const primeiro = ordenados[0];
+  const nomeCliente = primeiro.cliente_nome || (primeiro.comandas as { nome_cliente?: string } | undefined)?.nome_cliente;
+  if (nomeCliente) {
+    doc.setFont('helvetica', 'bold');
+    doc.text((nomeCliente || '').toUpperCase(), MARGIN_MM, y);
+    doc.setFont('helvetica', 'normal');
+    y += 5;
+  }
+  y += 4;
+
+  let subtotalGeral = 0;
+  let totalGeral = 0;
+
+  for (const pedido of ordenados) {
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`--- Pedido #${pedido.numero} ---`, MARGIN_MM, y);
+    doc.setFont('helvetica', 'normal');
+    y += 6;
+
+    const itens = pedido.pedido_itens ?? [];
+    const subtotal = itens.reduce((s, i) => s + (i.quantidade || 0) * Number(i.valor_unitario || 0), 0);
+    const desconto = Number(pedido.desconto ?? 0);
+    const taxa = Number(pedido.taxa_entrega ?? 0);
+    const total = Math.max(0, subtotal - desconto + taxa);
+    subtotalGeral += subtotal;
+    totalGeral += total;
+
+    autoTable(doc, {
+      startY: y,
+      head: [['Cod', 'Produto', 'Qtd', 'Valor unit.', 'Valor']],
+      body: itens.map((i) => {
+        const qtd = i.quantidade || 0;
+        const unit = Number(i.valor_unitario || 0);
+        const valor = qtd * unit;
+        return [
+          (i.produtos?.codigo ?? '-'),
+          `${(i.produtos?.nome || i.produtos?.descricao) ?? '-'}${i.observacao ? ` (${i.observacao})` : ''}`,
+          String(qtd),
+          (qtd > 0 ? valor / qtd : 0).toFixed(2),
+          valor.toFixed(2),
+        ];
+      }),
+      margin: { left: MARGIN_MM, right: MARGIN_MM },
+      tableWidth: CONTENT_WIDTH,
+      ...TABLE_STYLES,
+    });
+    y = (doc as any).lastAutoTable.finalY + 4;
+  }
+
+  doc.setDrawColor(0, 0, 0);
+  doc.line(MARGIN_MM, y, PAPER_WIDTH_MM - MARGIN_MM, y);
+  y += 6;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(12);
+  doc.text('TOTAL GERAL:', MARGIN_MM, y);
+  doc.text(`R$ ${totalGeral.toFixed(2)}`, VALORES_RIGHT_MM, y, { align: 'right' });
+  y += 12;
+  y = await addPixQrCode(doc, y);
   addFooter(doc, y);
   openAndPrint(doc);
 }
 
 /** Pedido para entrega/retirada (online). Mesmo esquema visual das impressões de mesa e viagem. */
-export function printPedidoEntrega(pedido: {
+export async function printPedidoEntrega(pedido: {
   numero: number;
   tipo_entrega?: 'entrega' | 'retirada';
   cliente_nome?: string;
@@ -454,6 +551,7 @@ export function printPedidoEntrega(pedido: {
   if (desconto > 0) linhasEntrega.push({ label: 'Desconto:', valor: `- R$ ${desconto.toFixed(2)}` });
   if (taxa > 0) linhasEntrega.push({ label: 'Taxa entrega:', valor: `R$ ${taxa.toFixed(2)}` });
   y = addTotaisSection(doc, y, subtotal, total, linhasEntrega);
+  y = await addPixQrCode(doc, y);
   addFooter(doc, y);
   openAndPrint(doc);
 }

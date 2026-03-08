@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { getPedidosViagemAbertos, getTotalComanda, getTotalAPagarComanda, closeComanda, getCuponsAtivos, applyDescontoComanda, clearDescontoComanda, getProdutos, updatePedidoItens, updatePedidoStatus, getMesasFechadasParaTransferencia, getComandaByMesa, openComanda, movePedidosParaOutraComanda } from '../../lib/api';
 import type { FraçãoPagamento } from '../../lib/api';
-import { printContaViagem, printPedido } from '../../lib/printPdf';
+import { printContaViagem, printPedido, printPedidosUnificados } from '../../lib/printPdf';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import type { Cupom } from '../../types/database';
@@ -286,9 +286,14 @@ export default function AdminViagem() {
           <p className="text-stone-600">Pedidos para viagem. Marque os pedidos e use &quot;Mover selecionados&quot; para enviar a uma mesa livre (sem comanda aberta).</p>
         </div>
         {pedidosSelecionadosViagem.size > 0 && (
-          <button onClick={abrirMoverSelecionadosViagem} className="rounded-lg border border-amber-400 px-4 py-2 text-amber-700 hover:bg-amber-50">
-            Mover selecionados para mesa local ({pedidosSelecionadosViagem.size})
-          </button>
+          <>
+            <button type="button" onClick={() => { const sel = pedidos.filter((p) => pedidosSelecionadosViagem.has(p.id)); printPedidosUnificados(sel, 'Viagem'); }} className="rounded-lg border border-stone-400 px-4 py-2 text-stone-700 hover:bg-stone-50">
+              Imprimir selecionados ({pedidosSelecionadosViagem.size})
+            </button>
+            <button onClick={abrirMoverSelecionadosViagem} className="rounded-lg border border-amber-400 px-4 py-2 text-amber-700 hover:bg-amber-50">
+              Mover selecionados para mesa local ({pedidosSelecionadosViagem.size})
+            </button>
+          </>
         )}
       </div>
 

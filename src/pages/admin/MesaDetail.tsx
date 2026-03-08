@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getComandaByMesa, getComandaWithPedidos, getTotalComanda, closeComanda, getMesas, updatePedidoStatus, updatePedidoItens, getProdutos, getCuponsAtivos, applyDescontoComanda, clearDescontoComanda, getMesasFechadasParaTransferencia, openComanda, movePedidosParaOutraComanda } from '../../lib/api';
 import type { FraçãoPagamento } from '../../lib/api';
-import { printContaMesa, printPedido } from '../../lib/printPdf';
+import { printContaMesa, printPedido, printPedidosUnificados } from '../../lib/printPdf';
 import { useAuth } from '../../contexts/AuthContext';
 import type { Comanda } from '../../types/database';
 import type { Cupom } from '../../types/database';
@@ -169,8 +169,22 @@ export default function AdminMesaDetail() {
   };
 
   const confirmarEncerramento = async () => {
-    if (!comanda || fracoesPagamento.length === 0) return;
+    if (!comanda) return;
     const totalConta = totalComDesconto;
+    if (totalConta < 0.01) {
+      try {
+        await closeComanda(comanda.id, 'Sem consumo');
+        setPopupPagamento(false);
+        setFracoesPagamento([]);
+        setNovaFraçãoValor('');
+        setNovaFraçãoForma('');
+        navigate('/admin/mesas');
+      } catch (e) {
+        alert(e instanceof Error ? e.message : 'Erro ao encerrar.');
+      }
+      return;
+    }
+    if (fracoesPagamento.length === 0) return;
     const totalPago = fracoesPagamento.reduce((s, f) => s + f.valor, 0);
     if (totalPago < totalConta - 0.01) {
       alert(`Valor pago (R$ ${totalPago.toFixed(2)}) é menor que o total da conta (R$ ${totalConta.toFixed(2)}).`);
@@ -356,7 +370,8 @@ export default function AdminMesaDetail() {
 
   const formas = ['dinheiro', 'pix', 'cartão crédito', 'cartão débito'];
   const totalPago = fracoesPagamento.reduce((s, f) => s + f.valor, 0);
-  const podeConfirmarPagamento = fracoesPagamento.length > 0 && totalPago >= totalComDesconto - 0.01;
+  const contaZerada = totalComDesconto < 0.01;
+  const podeConfirmarPagamento = contaZerada || (fracoesPagamento.length > 0 && totalPago >= totalComDesconto - 0.01);
 
   function totalPedido(p: any) {
     const sub = (p.pedido_itens ?? []).reduce((s: number, i: any) => s + (i.quantidade || 0) * Number(i.valor_unitario || 0), 0);
@@ -406,9 +421,14 @@ export default function AdminMesaDetail() {
                 Mover todos para outra mesa
               </button>
               {pedidosSelecionados.size > 0 && (
-                <button onClick={abrirModalMoverSelecionados} className="rounded-lg border border-stone-400 px-4 py-2 text-stone-700 hover:bg-stone-50">
-                  Mover selecionados ({pedidosSelecionados.size})
-                </button>
+                <>
+                  <button onClick={() => { const sel = pedidosNaMesa.filter((p) => pedidosSelecionados.has(p.id)); printPedidosUnificados(sel, mesaNome || 'Mesa'); }} className="rounded-lg border border-stone-400 px-4 py-2 text-stone-700 hover:bg-stone-50">
+                    Imprimir selecionados ({pedidosSelecionados.size})
+                  </button>
+                  <button onClick={abrirModalMoverSelecionados} className="rounded-lg border border-stone-400 px-4 py-2 text-stone-700 hover:bg-stone-50">
+                    Mover selecionados ({pedidosSelecionados.size})
+                  </button>
+                </>
               )}
             </>
           )}
@@ -650,7 +670,7 @@ export default function AdminMesaDetail() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
             <h3 className="font-semibold text-stone-800 mb-2">Pagamento da conta</h3>
-            <p className="text-sm text-stone-500 mb-3">Adicione as frações de pagamento até completar o total. Cada fração pode ter uma forma de pagamento diferente.</p>
+            <p className="text-sm text-stone-500 mb-3">{totalComDesconto < 0.01 ? 'Mesa sem pedidos. Confirme para encerrar (sem consumo).' : 'Adicione as frações de pagamento até completar o total. Cada fração pode ter uma forma de pagamento diferente.'}</p>
             <p className="text-sm font-medium text-amber-700 mb-3">Total da conta: R$ {totalComDesconto.toFixed(2)}</p>
             <div className="flex gap-2 mb-2">
               <input
