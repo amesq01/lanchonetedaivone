@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Trash2 } from 'lucide-react';
-import { getConfig, getProdutos, validarCupom, getLanchoneteAberta } from '../../lib/api';
+import { getConfig, getProdutos, validarCupom, getLanchoneteAberta, getLojaOnlineSoRetirada, getLojaOnlineHorarioAbertura } from '../../lib/api';
 import type { Produto } from '../../types/database';
 import { precoVenda, imagensProduto } from '../../types/database';
 
@@ -56,10 +56,14 @@ export default function LojaCarrinho() {
   const [cupomLoading, setCupomLoading] = useState(false);
   const [taxaEntrega, setTaxaEntrega] = useState<number | null>(null);
   const [lanchoneteAberta, setLanchoneteAberta] = useState<boolean | null>(null);
+  const [soRetirada, setSoRetirada] = useState(false);
+  const [horarioAbertura, setHorarioAbertura] = useState<string | null>(null);
 
   useEffect(() => {
     getConfig('taxa_entrega').then(setTaxaEntrega);
     getLanchoneteAberta().then(setLanchoneteAberta);
+    getLojaOnlineSoRetirada().then(setSoRetirada);
+    getLojaOnlineHorarioAbertura().then(setHorarioAbertura);
   }, []);
 
   useEffect(() => {
@@ -168,6 +172,13 @@ export default function LojaCarrinho() {
           <span className="w-12" />
         </div>
       </header>
+      {soRetirada && (
+        <div className="mx-auto max-w-2xl px-4 pt-2">
+          <p className="text-sm font-medium text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-1.5">
+            No momento, pedidos estão disponíveis apenas para retirada no local.
+          </p>
+        </div>
+      )}
       <main className="mx-auto max-w-2xl px-4 py-6">
         {itens.length === 0 ? (
           <p className="text-stone-500 text-center py-8">Carrinho vazio. <Link to="/" className="text-amber-600 hover:underline">Ver cardápio</Link></p>
@@ -248,6 +259,7 @@ export default function LojaCarrinho() {
               {lanchoneteAberta === false ? (
                 <div className="block w-full rounded-lg bg-stone-300 py-3 text-center font-medium text-stone-500 cursor-not-allowed">
                   Lanchonete fechada para pedidos
+                  {horarioAbertura && <span className="block text-sm mt-1">Abre às {horarioAbertura}</span>}
                 </div>
               ) : (
                 <Link to="/checkout" className="block w-full rounded-lg bg-amber-600 py-3 text-center font-medium text-white hover:bg-amber-700">

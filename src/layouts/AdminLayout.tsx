@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useNovoPedidoOnline } from '../hooks/useNovoPedidoOnline';
-import { getAdminSidebarCounts, getLanchoneteAberta, setLanchoneteAberta as setLanchoneteAbertaApi } from '../lib/api';
+import { getAdminSidebarCounts, getLanchoneteAberta, setLanchoneteAberta as setLanchoneteAbertaApi, getLojaOnlineSoRetirada, setLojaOnlineSoRetirada as setLojaOnlineSoRetiradaApi, getLojaOnlineHorarioAbertura, setLojaOnlineHorarioAbertura as setLojaOnlineHorarioAberturaApi } from '../lib/api';
 import {
   UtensilsCrossed,
   Truck,
@@ -36,8 +36,13 @@ export default function AdminLayout() {
   const { mostrar: novoPedidoOnline, count: pendentesOnline, fechar: fecharNovoPedido } = useNovoPedidoOnline();
   const [counts, setCounts] = useState({ mesas: 0, viagem: 0, online: 0, cozinha: 0 });
   const [lanchoneteAberta, setLanchoneteAberta] = useState<boolean | null>(null);
+  const [soRetirada, setSoRetirada] = useState<boolean | null>(null);
   const [confirmandoToggle, setConfirmandoToggle] = useState<'abrir' | 'fechar' | null>(null);
   const [toggleLoading, setToggleLoading] = useState(false);
+  const [soRetiradaLoading, setSoRetiradaLoading] = useState(false);
+  const [confirmandoSoRetirada, setConfirmandoSoRetirada] = useState<'ativar' | 'desativar' | null>(null);
+  const [horarioAbertura, setHorarioAbertura] = useState<string>('');
+  const [horarioAberturaSaving, setHorarioAberturaSaving] = useState(false);
 
   useEffect(() => {
     function load() {
@@ -50,6 +55,8 @@ export default function AdminLayout() {
 
   useEffect(() => {
     getLanchoneteAberta().then(setLanchoneteAberta);
+    getLojaOnlineSoRetirada().then(setSoRetirada);
+    getLojaOnlineHorarioAbertura().then((h) => setHorarioAbertura(h ?? ''));
   }, []);
 
   const handleToggleClick = () => {
@@ -64,9 +71,31 @@ export default function AdminLayout() {
     try {
       await setLanchoneteAbertaApi(novaAberta);
       setLanchoneteAberta(novaAberta);
+      if (!novaAberta) {
+        await setLojaOnlineSoRetiradaApi(false);
+        setSoRetirada(false);
+      }
       setConfirmandoToggle(null);
     } finally {
       setToggleLoading(false);
+    }
+  };
+
+  const handleSoRetiradaClick = () => {
+    if (soRetirada === null || soRetiradaLoading || !lanchoneteAberta) return;
+    setConfirmandoSoRetirada(soRetirada ? 'desativar' : 'ativar');
+  };
+
+  const confirmarSoRetirada = async () => {
+    if (confirmandoSoRetirada === null) return;
+    const novo = confirmandoSoRetirada === 'ativar';
+    setSoRetiradaLoading(true);
+    try {
+      await setLojaOnlineSoRetiradaApi(novo);
+      setSoRetirada(novo);
+      setConfirmandoSoRetirada(null);
+    } finally {
+      setSoRetiradaLoading(false);
     }
   };
 
@@ -139,6 +168,45 @@ export default function AdminLayout() {
               />
             </button>
           </div>
+          <div className="px-3 py-2 flex items-center justify-between gap-2">
+            <span className={`text-xs font-medium ${lanchoneteAberta ? 'text-stone-600' : 'text-stone-400'}`}>Só retirada</span>
+            <button
+              type="button"
+              onClick={handleSoRetiradaClick}
+              disabled={soRetirada === null || soRetiradaLoading || !lanchoneteAberta}
+              className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-1 disabled:opacity-50 ${
+                soRetirada ? 'bg-amber-500' : 'bg-stone-300'
+              }`}
+              role="switch"
+              aria-checked={soRetirada ?? false}
+              title={!lanchoneteAberta ? 'Ative a loja online para usar' : soRetirada ? 'Desativar só retirada' : 'Pedidos online apenas para retirada'}
+            >
+              <span
+                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                  soRetirada ? 'translate-x-5' : 'translate-x-0.5'
+                }`}
+              />
+            </button>
+          </div>
+          <div className="px-3 py-2">
+            <label className="block text-xs font-medium text-stone-600 mb-1">Abre às (loja online)</label>
+            <input
+              type="time"
+              value={horarioAbertura}
+              onChange={(e) => setHorarioAbertura(e.target.value)}
+              onBlur={async () => {
+                if (horarioAberturaSaving) return;
+                setHorarioAberturaSaving(true);
+                try {
+                  await setLojaOnlineHorarioAberturaApi(horarioAbertura);
+                } finally {
+                  setHorarioAberturaSaving(false);
+                }
+              }}
+              className="w-full rounded border border-stone-300 px-2 py-1.5 text-sm"
+            />
+            {horarioAberturaSaving && <span className="text-xs text-stone-400">Salvando...</span>}
+          </div>
           <p className="px-3 py-1 text-xs text-stone-500 truncate">{profile?.nome}</p>
           <button
             onClick={handleSignOut}
@@ -169,6 +237,32 @@ export default function AdminLayout() {
                 {toggleLoading ? 'Salvando...' : 'Sim, confirmar'}
               </button>
               <button onClick={() => setConfirmandoToggle(null)} disabled={toggleLoading} className="rounded-lg border border-stone-300 px-4 py-2 text-stone-600">
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {confirmandoSoRetirada !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
+            <h3 className="font-semibold text-stone-800 mb-2">Só retirada</h3>
+            <p className="text-sm text-stone-600 mb-4">
+              {confirmandoSoRetirada === 'ativar'
+                ? 'Ativar "Só retirada"? Os pedidos online ficarão disponíveis apenas para retirada no local.'
+                : 'Desativar "Só retirada"? Os pedidos online voltarão a aceitar entrega.'}
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={confirmarSoRetirada}
+                disabled={soRetiradaLoading}
+                className={`flex-1 rounded-lg py-2 font-medium text-white disabled:opacity-50 ${
+                  confirmandoSoRetirada === 'ativar' ? 'bg-amber-600 hover:bg-amber-700' : 'bg-stone-600 hover:bg-stone-700'
+                }`}
+              >
+                {soRetiradaLoading ? 'Salvando...' : 'Sim, confirmar'}
+              </button>
+              <button onClick={() => setConfirmandoSoRetirada(null)} disabled={soRetiradaLoading} className="rounded-lg border border-stone-300 px-4 py-2 text-stone-600">
                 Cancelar
               </button>
             </div>

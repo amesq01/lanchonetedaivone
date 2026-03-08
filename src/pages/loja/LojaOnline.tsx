@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, ShoppingCart, Trash2, X } from 'lucide-react';
-import { getProdutos, getCategorias, getLanchoneteAberta } from '../../lib/api';
+import { getProdutos, getCategorias, getLanchoneteAberta, getLojaOnlineSoRetirada, getLojaOnlineHorarioAbertura } from '../../lib/api';
 import type { ProdutoWithCategorias } from '../../types/database';
 import type { Categoria } from '../../types/database';
 import { precoVenda, imagensProduto } from '../../types/database';
@@ -78,6 +78,8 @@ export default function LojaOnline() {
   const [qtyByProd, setQtyByProd] = useState<Record<string, number>>({});
   const [categoriaSelecionada, setCategoriaSelecionada] = useState<string | null>(null);
   const [lanchoneteAberta, setLanchoneteAberta] = useState<boolean | null>(null);
+  const [soRetirada, setSoRetirada] = useState<boolean>(false);
+  const [horarioAbertura, setHorarioAbertura] = useState<string | null>(null);
   const [modalProduto, setModalProduto] = useState<ProdutoWithCategorias | null>(null);
 
   const refreshCartCount = useCallback(() => {
@@ -88,7 +90,11 @@ export default function LojaOnline() {
   const carregarCardapio = useCallback(() => {
     setErro(null);
     setLoading(true);
-    getLanchoneteAberta().then(setLanchoneteAberta);
+    Promise.all([getLanchoneteAberta(), getLojaOnlineSoRetirada(), getLojaOnlineHorarioAbertura()]).then(([aberta, soRet, horario]) => {
+      setLanchoneteAberta(aberta);
+      setSoRetirada(soRet);
+      setHorarioAbertura(horario);
+    });
     Promise.all([getCategorias(), getProdutos(true)])
       .then(([cats, list]) => {
         setCategorias(cats);
@@ -202,6 +208,11 @@ export default function LojaOnline() {
                 <span className={`inline-flex items-center gap-1.5 text-sm font-medium ${lanchoneteAberta ? 'text-green-600' : 'text-red-600'}`}>
                   <span className={`h-2 w-2 rounded-full flex-shrink-0 ${lanchoneteAberta ? 'bg-green-500' : 'bg-red-500'}`} />
                   {lanchoneteAberta ? 'Aberto' : 'Fechado'} para pedidos
+                  {horarioAbertura && (
+                    <span className="text-stone-500 font-normal">
+                      {lanchoneteAberta ? ` (abre às ${horarioAbertura})` : ` – Abre às ${horarioAbertura}`}
+                    </span>
+                  )}
                 </span>
               )}
             </div>
@@ -219,6 +230,11 @@ export default function LojaOnline() {
               <span className="hidden sm:inline">Finalizar carrinho</span>
             </Link>
           </div>
+          {soRetirada && (
+            <p className="mt-2 text-sm font-medium text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-1.5">
+              No momento, pedidos estão disponíveis apenas para retirada no local.
+            </p>
+          )}
           <nav className="mt-3 flex flex-wrap gap-2 border-t border-stone-100 pt-3">
             <button
               type="button"

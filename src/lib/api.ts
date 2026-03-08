@@ -49,11 +49,47 @@ export async function setLanchoneteAberta(aberta: boolean) {
   await setConfigValue('pedido_online_aberta', aberta ? 1 : 0);
 }
 
+/** Pedidos online disponíveis apenas para retirada? (toggle admin). Default false. */
+export async function getLojaOnlineSoRetirada(): Promise<boolean> {
+  const v = await getConfigValue('loja_online_so_retirada');
+  if (v === null || v === undefined) return false;
+  return Number(v) === 1;
+}
+
+export async function setLojaOnlineSoRetirada(soRetirada: boolean) {
+  await setConfigValue('loja_online_so_retirada', soRetirada ? 1 : 0);
+}
+
+/** Horário de abertura da loja online (ex.: "08:00"). null se não configurado. */
+export async function getLojaOnlineHorarioAbertura(): Promise<string | null> {
+  const v = await getConfigValue('loja_online_horario_abertura');
+  if (v === null || v === undefined) return null;
+  const s = String(v).trim();
+  return s || null;
+}
+
+export async function setLojaOnlineHorarioAbertura(horario: string) {
+  await setConfigValue('loja_online_horario_abertura', horario.trim() || '');
+}
+
 /** Retorna se o cliente pode fazer pedido online (lanchonete aberta). */
-export async function canPlaceOrderOnline(): Promise<{ allowed: boolean; message?: string }> {
-  const aberta = await getLanchoneteAberta();
-  if (aberta) return { allowed: true };
-  return { allowed: false, message: 'A lanchonete está fechada para pedidos online no momento. Tente novamente mais tarde.' };
+export async function canPlaceOrderOnline(): Promise<{ allowed: boolean; message?: string; horarioAbertura?: string | null }> {
+  const [aberta, horarioAbertura] = await Promise.all([getLanchoneteAberta(), getLojaOnlineHorarioAbertura()]);
+  if (aberta) return { allowed: true, horarioAbertura };
+  const msg = horarioAbertura
+    ? `A lanchonete está fechada para pedidos online. Abre às ${formatarHoraExibicao(horarioAbertura)}.`
+    : 'A lanchonete está fechada para pedidos online no momento. Tente novamente mais tarde.';
+  return { allowed: false, message: msg, horarioAbertura };
+}
+
+function formatarHoraExibicao(hhmm: string): string {
+  const [h, m] = hhmm.split(':');
+  const hour = parseInt(h ?? '0', 10);
+  const min = parseInt(m ?? '0', 10);
+  if (Number.isNaN(hour)) return hhmm;
+  if (hour === 0 && min === 0) return 'meia-noite';
+  if (hour === 12 && min === 0) return '12h';
+  return `${hour.toString().padStart(2, '0')}:${(min || 0).toString().padStart(2, '0')}`;
 }
 
 export async function getMesas() {

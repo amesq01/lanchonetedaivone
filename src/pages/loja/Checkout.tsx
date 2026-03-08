@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { createPedidoOnline, getConfig, getProdutos, validarCupom, canPlaceOrderOnline } from '../../lib/api';
+import { createPedidoOnline, getConfig, getProdutos, validarCupom, canPlaceOrderOnline, getLojaOnlineSoRetirada } from '../../lib/api';
 import { precoVenda } from '../../types/database';
 import type { SavedItem } from './Carrinho';
 import { getCupomAplicado } from './Carrinho';
@@ -37,6 +37,7 @@ export default function LojaCheckout() {
   const [taxaEntrega, setTaxaEntrega] = useState<number | null>(null);
   const [produtos, setProdutos] = useState<{ id: string; valor: number }[]>([]);
   const [bloqueado, setBloqueado] = useState<{ motivo: string } | null>(null);
+  const [soRetirada, setSoRetirada] = useState(false);
   const cupomDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const cart = getCart();
@@ -45,6 +46,10 @@ export default function LojaCheckout() {
     getProdutos(true).then((list) => setProdutos(list.map((p) => ({ id: p.id, valor: precoVenda(p) }))));
     canPlaceOrderOnline().then((r) => {
       if (!r.allowed && r.message) setBloqueado({ motivo: r.message });
+    });
+    getLojaOnlineSoRetirada().then((v) => {
+      setSoRetirada(v);
+      if (v) setTipoEntrega('retirada');
     });
   }, []);
 
@@ -163,6 +168,11 @@ export default function LojaCheckout() {
         <h1 className="text-xl font-bold text-stone-800 mt-2">Finalizar pedido</h1>
       </header>
       <main className="mx-auto max-w-lg px-4 py-6">
+        {soRetirada && (
+          <p className="mb-4 text-sm font-medium text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+            No momento, pedidos estão disponíveis apenas para retirada no local.
+          </p>
+        )}
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-stone-600">Nome *</label>
@@ -174,12 +184,14 @@ export default function LojaCheckout() {
           </div>
           <div>
             <label className="block text-sm font-medium text-stone-600">Como deseja receber? *</label>
-            <div className="mt-2 flex gap-4">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input type="radio" name="tipoEntrega" value="entrega" checked={tipoEntrega === 'entrega'} onChange={() => setTipoEntrega('entrega')} className="border-stone-300" />
-                <span>Entrega</span>
-                {taxaEntrega !== null && Number.isFinite(taxaEntrega) && taxaEntrega > 0 && <span className="text-stone-500 text-sm">(taxa R$ {taxaEntrega.toFixed(2)})</span>}
-              </label>
+            <div className="mt-2 flex gap-4 flex-wrap">
+              {!soRetirada && (
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="radio" name="tipoEntrega" value="entrega" checked={tipoEntrega === 'entrega'} onChange={() => setTipoEntrega('entrega')} className="border-stone-300" />
+                  <span>Entrega</span>
+                  {taxaEntrega !== null && Number.isFinite(taxaEntrega) && taxaEntrega > 0 && <span className="text-stone-500 text-sm">(taxa R$ {taxaEntrega.toFixed(2)})</span>}
+                </label>
+              )}
               <label className="flex items-center gap-2 cursor-pointer">
                 <input type="radio" name="tipoEntrega" value="retirada" checked={tipoEntrega === 'retirada'} onChange={() => setTipoEntrega('retirada')} className="border-stone-300" />
                 <span>Retirada no local (grátis)</span>
