@@ -257,8 +257,10 @@ export async function getAdminSidebarCounts(): Promise<{ mesas: number; viagem: 
   return { mesas: mesasSet.size, viagem, online, cozinha };
 }
 
-export async function openComanda(mesaId: string, atendenteId: string, nomeCliente: string) {
-  const { data, error } = await (supabase as any).from('comandas').insert({ mesa_id: mesaId, atendente_id: atendenteId, nome_cliente: nomeCliente }).select().single();
+export async function openComanda(mesaId: string, atendenteId: string, nomeCliente: string, telefone?: string) {
+  const payload: Record<string, unknown> = { mesa_id: mesaId, atendente_id: atendenteId, nome_cliente: nomeCliente };
+  if (telefone != null && String(telefone).trim()) payload.telefone = String(telefone).trim();
+  const { data, error } = await (supabase as any).from('comandas').insert(payload).select().single();
   if (error) throw error;
   return data as Database['public']['Tables']['comandas']['Row'];
 }
@@ -528,14 +530,16 @@ export async function createPedidoViagem(
   nomeCliente: string,
   atendenteId: string,
   itens: { produto_id: string; quantidade: number; valor_unitario: number; observacao?: string }[],
-  opts?: { lancadoPeloAdmin?: boolean }
+  opts?: { lancadoPeloAdmin?: boolean; telefone?: string }
 ) {
   await decrementarEstoque(itens);
   const numero = await nextPedidoNumero();
   const { data: mesaViagem } = await supabase.from('mesas').select('id').eq('is_viagem', true).single();
   if (!mesaViagem) throw new Error('Mesa VIAGEM não encontrada');
   const mesa = mesaViagem as { id: string };
-  const { data: comanda, error: ec } = await (supabase as any).from('comandas').insert({ mesa_id: mesa.id, atendente_id: atendenteId, nome_cliente: nomeCliente, aberta: true }).select().single();
+  const comandaPayload: Record<string, unknown> = { mesa_id: mesa.id, atendente_id: atendenteId, nome_cliente: nomeCliente, aberta: true };
+  if (opts?.telefone != null && String(opts.telefone).trim()) comandaPayload.telefone = String(opts.telefone).trim();
+  const { data: comanda, error: ec } = await (supabase as any).from('comandas').insert(comandaPayload).select().single();
   if (ec) throw ec;
   const com = comanda as { id: string };
   const ids = [...new Set(itens.map((i) => i.produto_id))];

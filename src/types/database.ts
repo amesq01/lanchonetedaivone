@@ -49,6 +49,7 @@ export interface Database {
           mesa_id: string;
           atendente_id: string;
           nome_cliente: string;
+          telefone: string | null;
           aberta: boolean;
           forma_pagamento: string | null;
           encerrada_em: string | null;

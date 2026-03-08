@@ -8,6 +8,7 @@ import type { Comanda } from '../../types/database';
 import type { Cupom } from '../../types/database';
 import type { Produto } from '../../types/database';
 import { precoVenda, imagensProduto } from '../../types/database';
+import { formatarTelefone } from '../../lib/mascaraTelefone';
 
 export default function AdminMesaDetail() {
   const { mesaId } = useParams();
@@ -58,6 +59,7 @@ export default function AdminMesaDetail() {
   const [excluindoPagamento, setExcluindoPagamento] = useState(false);
   /** Mesa fechada: abrir comanda */
   const [nomeClienteAbrir, setNomeClienteAbrir] = useState('');
+  const [telefoneAbrir, setTelefoneAbrir] = useState('');
   const [abrindoComanda, setAbrindoComanda] = useState(false);
   /** Lançar novo pedido (quando comanda aberta) */
   type ItemCarrinho = { produto: Produto; quantidade: number; observacao: string };
@@ -484,8 +486,9 @@ export default function AdminMesaDetail() {
     }
     setAbrindoComanda(true);
     try {
-      await openComanda(mesaId, profile.id, nomeClienteAbrir.trim());
+      await openComanda(mesaId, profile.id, nomeClienteAbrir.trim(), telefoneAbrir.trim() || undefined);
       setNomeClienteAbrir('');
+      setTelefoneAbrir('');
       loadComanda(mesaId);
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Erro ao abrir comanda.');
@@ -555,6 +558,17 @@ export default function AdminMesaDetail() {
                 value={nomeClienteAbrir}
                 onChange={(e) => setNomeClienteAbrir(e.target.value)}
                 placeholder="Ex: João"
+                className="w-full rounded-lg border border-stone-300 px-3 py-2"
+                disabled={abrindoComanda}
+              />
+            </div>
+            <div className="flex-1 min-w-[200px]">
+              <label className="block text-sm font-medium text-stone-600 mb-1">Telefone (opcional)</label>
+              <input
+                type="tel"
+                value={telefoneAbrir}
+                onChange={(e) => setTelefoneAbrir(formatarTelefone(e.target.value))}
+                placeholder="(11) 99999-9999"
                 className="w-full rounded-lg border border-stone-300 px-3 py-2"
                 disabled={abrindoComanda}
               />

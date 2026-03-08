@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { getMesas, getMesaIdsComComandaAberta, getMesasComComandaAberta, getComandaByMesaComAtendente, openComanda, getPedidosPresencialHoje } from '../../lib/api';
+import { formatarTelefone } from '../../lib/mascaraTelefone';
 import { useAuth } from '../../contexts/AuthContext';
 import type { Mesa } from '../../types/database';
 
@@ -22,6 +23,7 @@ export default function AtendenteMesas() {
   const [loading, setLoading] = useState(true);
   const [popup, setPopup] = useState<{ mesa: Mesa } | null>(null);
   const [nomeCliente, setNomeCliente] = useState('');
+  const [telefone, setTelefone] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [pedidosHoje, setPedidosHoje] = useState<any[]>([]);
   const [acordaoAberto, setAcordaoAberto] = useState<string | null>(null);
@@ -84,9 +86,10 @@ export default function AtendenteMesas() {
         setSubmitting(false);
         return;
       }
-      await openComanda(popup.mesa.id, profile.id, nomeCliente.trim());
+      await openComanda(popup.mesa.id, profile.id, nomeCliente.trim(), telefone.trim() || undefined);
       setPopup(null);
       setNomeCliente('');
+      setTelefone('');
       navigate(`/pdv/mesas/${popup.mesa.id}`);
     } finally {
       setSubmitting(false);
@@ -222,12 +225,14 @@ export default function AtendenteMesas() {
             {erroAbrir && <p className="text-sm text-red-600 mb-3">{erroAbrir}</p>}
             <form onSubmit={handleAbrir}>
               <label className="block text-sm font-medium text-stone-600 mb-1">Nome do cliente</label>
-              <input value={nomeCliente} onChange={(e) => setNomeCliente(e.target.value)} required className="w-full rounded-lg border border-stone-300 px-3 py-2 mb-4" placeholder="Ex: João" />
+              <input value={nomeCliente} onChange={(e) => setNomeCliente(e.target.value)} required className="w-full rounded-lg border border-stone-300 px-3 py-2 mb-3" placeholder="Ex: João" />
+              <label className="block text-sm font-medium text-stone-600 mb-1">Telefone (opcional)</label>
+              <input type="tel" value={telefone} onChange={(e) => setTelefone(formatarTelefone(e.target.value))} className="w-full rounded-lg border border-stone-300 px-3 py-2 mb-4" placeholder="(11) 99999-9999" />
               <div className="flex gap-2">
                 <button type="submit" disabled={submitting} className="flex-1 rounded-lg bg-amber-600 py-2 text-white hover:bg-amber-700 disabled:opacity-50">
                   Abrir
                 </button>
-                <button type="button" onClick={() => { setPopup(null); setNomeCliente(''); setErroAbrir(null); }} className="rounded-lg border border-stone-300 px-4 py-2 text-stone-600">
+                <button type="button" onClick={() => { setPopup(null); setNomeCliente(''); setTelefone(''); setErroAbrir(null); }} className="rounded-lg border border-stone-300 px-4 py-2 text-stone-600">
                   Cancelar
                 </button>
               </div>

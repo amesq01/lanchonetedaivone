@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import type { Profile } from '../../types/database';
+import { formatarTelefone } from '../../lib/mascaraTelefone';
 
 export default function AdminAtendentes() {
   const [list, setList] = useState<Profile[]>([]);
@@ -122,7 +123,7 @@ export default function AdminAtendentes() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-stone-600">Telefone</label>
-                <input value={telefone} onChange={(e) => setTelefone(e.target.value)} className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2" />
+                <input type="tel" value={telefone} onChange={(e) => setTelefone(formatarTelefone(e.target.value))} className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2" placeholder="(11) 99999-9999" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-stone-600">Senha *</label>

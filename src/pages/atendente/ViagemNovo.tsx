@@ -5,6 +5,7 @@ import { getProdutos, createPedidoViagem } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
 import type { Produto } from '../../types/database';
 import { imagensProduto, precoVenda } from '../../types/database';
+import { formatarTelefone } from '../../lib/mascaraTelefone';
 
 type ItemCarrinho = { produto: Produto; quantidade: number; observacao: string };
 
@@ -13,6 +14,7 @@ export default function AtendenteViagemNovo() {
   const navigate = useNavigate();
   const [step, setStep] = useState<'nome' | 'itens'>('nome');
   const [nomeCliente, setNomeCliente] = useState('');
+  const [telefone, setTelefone] = useState('');
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [search, setSearch] = useState('');
   const [carrinho, setCarrinho] = useState<ItemCarrinho[]>([]);
@@ -76,7 +78,7 @@ export default function AtendenteViagemNovo() {
         valor_unitario: precoVenda(i.produto),
         observacao: i.observacao || undefined,
       }));
-      await createPedidoViagem(nomeCliente.trim(), profile.id, itens);
+      await createPedidoViagem(nomeCliente.trim(), profile.id, itens, { telefone: telefone.trim() || undefined });
       navigate('/pdv/viagem');
     } finally {
       setEnviando(false);
@@ -88,7 +90,9 @@ export default function AtendenteViagemNovo() {
       <div className="max-w-sm mx-auto">
         <h1 className="text-xl font-bold text-stone-800 mb-4">Novo pedido - VIAGEM</h1>
         <label className="block text-sm font-medium text-stone-600 mb-2">Nome do cliente</label>
-        <input value={nomeCliente} onChange={(e) => setNomeCliente(e.target.value)} className="w-full rounded-lg border border-stone-300 px-3 py-2 mb-4" placeholder="Ex: Maria" />
+        <input value={nomeCliente} onChange={(e) => setNomeCliente(e.target.value)} className="w-full rounded-lg border border-stone-300 px-3 py-2 mb-3" placeholder="Ex: Maria" />
+        <label className="block text-sm font-medium text-stone-600 mb-2">Telefone (opcional)</label>
+        <input type="tel" value={telefone} onChange={(e) => setTelefone(formatarTelefone(e.target.value))} className="w-full rounded-lg border border-stone-300 px-3 py-2 mb-4" placeholder="(11) 99999-9999" />
         <button onClick={() => nomeCliente.trim() && setStep('itens')} className="w-full rounded-lg bg-amber-600 py-2 text-white font-medium hover:bg-amber-700">
           Continuar
         </button>

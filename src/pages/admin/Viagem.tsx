@@ -7,6 +7,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import type { Cupom } from '../../types/database';
 import type { Produto } from '../../types/database';
 import { precoVenda, imagensProduto } from '../../types/database';
+import { formatarTelefone } from '../../lib/mascaraTelefone';
 
 export default function AdminViagem() {
   const [pedidos, setPedidos] = useState<any[]>([]);
@@ -39,6 +40,7 @@ export default function AdminViagem() {
   /** Novo pedido viagem (admin) */
   type ItemCarrinho = { produto: Produto; quantidade: number; observacao: string };
   const [nomeClienteNovo, setNomeClienteNovo] = useState('');
+  const [telefoneNovo, setTelefoneNovo] = useState('');
   const [searchNovo, setSearchNovo] = useState('');
   const [carrinhoNovo, setCarrinhoNovo] = useState<ItemCarrinho[]>([]);
   const [enviandoNovo, setEnviandoNovo] = useState(false);
@@ -177,8 +179,9 @@ export default function AdminViagem() {
         valor_unitario: precoVenda(i.produto),
         observacao: i.observacao || undefined,
       }));
-      await createPedidoViagem(nomeClienteNovo.trim(), profile.id, itens, { lancadoPeloAdmin: true });
+      await createPedidoViagem(nomeClienteNovo.trim(), profile.id, itens, { lancadoPeloAdmin: true, telefone: telefoneNovo.trim() || undefined });
       setNomeClienteNovo('');
+      setTelefoneNovo('');
       setCarrinhoNovo([]);
       load();
     } catch (e) {
@@ -327,7 +330,7 @@ export default function AdminViagem() {
 
   return (
     <div className="no-print min-w-0">
-      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between gap-4 mb-4 sm:mb-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-4 mb-4 sm:mb-6">
         <div className="min-w-0">
           <h1 className="text-xl sm:text-2xl font-bold text-stone-800">Mesa VIAGEM</h1>
           <p className="text-stone-600 text-sm sm:text-base">Pedidos para viagem. Marque os pedidos e use &quot;Mover selecionados&quot; para enviar a uma mesa livre (sem comanda aberta).</p>
@@ -351,6 +354,10 @@ export default function AdminViagem() {
           <div className="min-w-[180px]">
             <label className="block text-sm font-medium text-stone-600 mb-1">Nome do cliente</label>
             <input type="text" value={nomeClienteNovo} onChange={(e) => setNomeClienteNovo(e.target.value)} placeholder="Ex: Maria" className="w-full rounded-lg border border-stone-300 px-3 py-2" />
+          </div>
+          <div className="min-w-[180px]">
+            <label className="block text-sm font-medium text-stone-600 mb-1">Telefone (opcional)</label>
+            <input type="tel" value={telefoneNovo} onChange={(e) => setTelefoneNovo(formatarTelefone(e.target.value))} placeholder="(11) 99999-9999" className="w-full rounded-lg border border-stone-300 px-3 py-2" />
           </div>
           <div className="flex-1 min-w-[200px] relative">
             <label className="block text-sm font-medium text-stone-600 mb-1">Buscar produto</label>
