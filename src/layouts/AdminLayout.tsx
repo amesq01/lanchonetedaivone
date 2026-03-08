@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Outlet, NavLink, useNavigate } from 'react-router-dom';
+import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useNovoPedidoOnline } from '../hooks/useNovoPedidoOnline';
 import { getAdminSidebarCounts, getLanchoneteAberta, setLanchoneteAberta as setLanchoneteAbertaApi, getLojaOnlineSoRetirada, setLojaOnlineSoRetirada as setLojaOnlineSoRetiradaApi, getLojaOnlineHorarioAbertura, setLojaOnlineHorarioAbertura as setLojaOnlineHorarioAberturaApi } from '../lib/api';
@@ -15,6 +15,8 @@ import {
   LogOut,
   BarChart3,
   FileX,
+  Menu,
+  X,
 } from 'lucide-react';
 
 const nav = [
@@ -33,8 +35,10 @@ const nav = [
 export default function AdminLayout() {
   const { profile, signOut } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const { mostrar: novoPedidoOnline, count: pendentesOnline, fechar: fecharNovoPedido } = useNovoPedidoOnline();
   const [counts, setCounts] = useState({ mesas: 0, viagem: 0, online: 0, cozinha: 0 });
+  const [menuAberto, setMenuAberto] = useState(false);
   const [lanchoneteAberta, setLanchoneteAberta] = useState<boolean | null>(null);
   const [soRetirada, setSoRetirada] = useState<boolean | null>(null);
   const [confirmandoToggle, setConfirmandoToggle] = useState<'abrir' | 'fechar' | null>(null);
@@ -58,6 +62,10 @@ export default function AdminLayout() {
     getLojaOnlineSoRetirada().then(setSoRetirada);
     getLojaOnlineHorarioAbertura().then((h) => setHorarioAbertura(h ?? ''));
   }, []);
+
+  useEffect(() => {
+    setMenuAberto(false);
+  }, [location.pathname]);
 
   const handleToggleClick = () => {
     if (lanchoneteAberta === null) return;
@@ -108,20 +116,34 @@ export default function AdminLayout() {
   };
 
   return (
-    <div className="flex h-screen bg-stone-100">
+    <div className="flex h-screen bg-stone-100 overflow-hidden">
       {novoPedidoOnline && (
-        <div className="fixed top-4 right-4 z-[100] flex items-center gap-3 rounded-lg bg-amber-500 px-4 py-3 shadow-lg text-white animate-pulse">
+        <div className="fixed top-4 right-4 z-[100] flex flex-wrap items-center gap-2 rounded-lg bg-amber-500 px-3 py-2 sm:px-4 sm:py-3 shadow-lg text-white animate-pulse text-sm sm:text-base">
           <span className="font-semibold">Novo pedido online!</span>
-          <NavLink to="/admin/pedidos-online" className="underline font-medium">Ver ({pendentesOnline})</NavLink>
-          <button onClick={fecharNovoPedido} className="ml-2 rounded px-2 py-0.5 bg-amber-600 hover:bg-amber-700">Fechar</button>
+          <NavLink to="/admin/pedidos-online" className="underline font-medium" onClick={() => setMenuAberto(false)}>Ver ({pendentesOnline})</NavLink>
+          <button onClick={fecharNovoPedido} className="rounded px-2 py-0.5 bg-amber-600 hover:bg-amber-700">Fechar</button>
         </div>
       )}
-      <aside className="no-print w-56 flex flex-col border-r border-stone-200 bg-white">
-        <div className="p-4 border-b border-stone-200">
-          <NavLink to="/admin" className="flex items-center gap-2 font-bold text-stone-800">
+      {/* Overlay no mobile quando menu aberto */}
+      <button
+        type="button"
+        aria-label="Fechar menu"
+        className={`lg:hidden fixed inset-0 z-30 bg-black/50 transition-opacity ${menuAberto ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+        onClick={() => setMenuAberto(false)}
+      />
+      <aside
+        className={`no-print flex flex-col border-r border-stone-200 bg-white z-40 transition-transform duration-200 ease-out fixed inset-y-0 left-0 w-64 lg:static lg:w-56 ${
+          menuAberto ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+        }`}
+      >
+        <div className="p-3 sm:p-4 border-b border-stone-200 flex items-center justify-between">
+          <NavLink to="/admin" className="flex items-center gap-2 font-bold text-stone-800" onClick={() => setMenuAberto(false)}>
             <img src="/logo-terra-mar.png" alt="Terra & Mar" className="h-8 w-8 rounded-full object-contain flex-shrink-0" />
-            Admin
+            <span className="truncate">Admin</span>
           </NavLink>
+          <button type="button" onClick={() => setMenuAberto(false)} className="lg:hidden p-2 rounded-lg text-stone-500 hover:bg-stone-100" aria-label="Fechar menu">
+            <X className="h-5 w-5" />
+          </button>
         </div>
         <nav className="flex-1 p-2 space-y-0.5 overflow-y-auto">
           {nav.map(({ to, label, icon: Icon, countKey }) => {
@@ -130,6 +152,7 @@ export default function AdminLayout() {
               <NavLink
                 key={to}
                 to={to}
+                onClick={() => setMenuAberto(false)}
                 className={({ isActive }) =>
                   `flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
                     isActive ? 'bg-amber-100 text-amber-800' : 'text-stone-600 hover:bg-stone-100'
@@ -269,8 +292,25 @@ export default function AdminLayout() {
           </div>
         </div>
       )}
-      <main className="flex-1 overflow-auto p-6">
-        <Outlet />
+      <main className="flex-1 flex flex-col min-w-0 overflow-auto">
+        {/* Barra superior no mobile: hamburger + título */}
+        <div className="lg:hidden flex-shrink-0 flex items-center gap-2 px-3 py-3 bg-white border-b border-stone-200 sticky top-0 z-20">
+          <button
+            type="button"
+            onClick={() => setMenuAberto(true)}
+            className="p-2 rounded-lg text-stone-600 hover:bg-stone-100"
+            aria-label="Abrir menu"
+          >
+            <Menu className="h-6 w-6" />
+          </button>
+          <NavLink to="/admin" className="flex items-center gap-2 font-bold text-stone-800 truncate min-w-0">
+            <img src="/logo-terra-mar.png" alt="" className="h-7 w-7 rounded-full object-contain flex-shrink-0" />
+            <span className="truncate">Admin</span>
+          </NavLink>
+        </div>
+        <div className="flex-1 p-3 sm:p-4 lg:p-6 min-w-0">
+          <Outlet />
+        </div>
       </main>
     </div>
   );

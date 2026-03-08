@@ -626,13 +626,13 @@ export default function AdminMesaDetail() {
     : [];
 
   return (
-    <div className="no-print">
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-stone-800">{mesaNome}</h1>
-          <p className="text-stone-600">Cliente: {comanda.nome_cliente}</p>
+    <div className="no-print min-w-0">
+      <div className="mb-4 sm:mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-2xl font-bold text-stone-800 truncate">{mesaNome}</h1>
+          <p className="text-stone-600 text-sm sm:text-base truncate">Cliente: {comanda.nome_cliente}</p>
         </div>
-        <div className="flex gap-2 flex-wrap">
+        <div className="flex flex-wrap gap-2">
           <button onClick={handleAbrirImprimir} className="rounded-lg border border-stone-300 px-4 py-2 text-stone-700 hover:bg-stone-50">
             Imprimir conta
           </button>
@@ -659,8 +659,8 @@ export default function AdminMesaDetail() {
         </div>
       </div>
 
-      <div className="rounded-xl bg-white p-4 shadow-sm mb-6">
-        <h3 className="font-semibold text-stone-800 mb-3">Lançar pedido</h3>
+      <div className="rounded-xl bg-white p-3 sm:p-4 shadow-sm mb-4 sm:mb-6">
+        <h3 className="font-semibold text-stone-800 mb-3 text-base sm:text-lg">Lançar pedido</h3>
         <p className="text-sm text-stone-500 mb-3">Busque o produto e adicione ao carrinho. Em seguida finalize o pedido.</p>
         <div className="relative mb-3">
           <input
@@ -723,8 +723,8 @@ export default function AdminMesaDetail() {
         )}
       </div>
 
-      <div className="rounded-xl bg-white p-4 shadow-sm mb-6">
-        <h3 className="font-semibold text-stone-800 mb-2">Pagamentos parciais</h3>
+      <div className="rounded-xl bg-white p-3 sm:p-4 shadow-sm mb-4 sm:mb-6">
+        <h3 className="font-semibold text-stone-800 mb-2 text-base sm:text-lg">Pagamentos parciais</h3>
         <p className="text-sm text-stone-500 mb-2">Registre pagamentos antes do encerramento. Eles reduzem o valor restante e constam na impressão da conta e no relatório financeiro.</p>
         {pagamentosComanda.length > 0 && (
           <ul className="mb-3 rounded-lg border border-stone-200 divide-y divide-stone-100">
@@ -783,9 +783,9 @@ export default function AdminMesaDetail() {
         </div>
       </div>
 
-      <div className="rounded-xl bg-white p-4 shadow-sm mb-6">
-        <div className="flex items-center justify-between mb-2">
-          <h3 className="font-semibold text-stone-800">Pedidos</h3>
+      <div className="rounded-xl bg-white p-3 sm:p-4 shadow-sm mb-4 sm:mb-6 overflow-x-auto">
+        <div className="flex items-center justify-between mb-2 min-w-0">
+          <h3 className="font-semibold text-stone-800 text-base sm:text-lg">Pedidos</h3>
           {pedidosNaMesa.length > 0 && (
             <span className="text-sm text-stone-500">Marque os pedidos e use &quot;Mover selecionados&quot; para transferir apenas alguns</span>
           )}
@@ -852,8 +852,8 @@ export default function AdminMesaDetail() {
         )}
       </div>
       {contaItens && (
-        <div className="rounded-xl bg-white p-4 shadow-sm">
-          <table className="w-full">
+        <div className="rounded-xl bg-white p-3 sm:p-4 shadow-sm overflow-x-auto">
+          <table className="w-full min-w-[280px]">
             <thead>
               <tr className="border-b border-stone-200">
                 <th className="text-left py-2 text-sm font-medium text-stone-600">Código</th>

@@ -326,26 +326,26 @@ export default function AdminViagem() {
   if (loading) return <p className="text-stone-500">Carregando...</p>;
 
   return (
-    <div className="no-print">
-      <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-stone-800">Mesa VIAGEM</h1>
-          <p className="text-stone-600">Pedidos para viagem. Marque os pedidos e use &quot;Mover selecionados&quot; para enviar a uma mesa livre (sem comanda aberta).</p>
+    <div className="no-print min-w-0">
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between gap-4 mb-4 sm:mb-6">
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-2xl font-bold text-stone-800">Mesa VIAGEM</h1>
+          <p className="text-stone-600 text-sm sm:text-base">Pedidos para viagem. Marque os pedidos e use &quot;Mover selecionados&quot; para enviar a uma mesa livre (sem comanda aberta).</p>
         </div>
         {pedidosSelecionadosViagem.size > 0 && (
-          <>
+          <div className="flex flex-wrap gap-2">
             <button type="button" onClick={() => { const sel = pedidos.filter((p) => pedidosSelecionadosViagem.has(p.id)); printPedidosUnificados(sel, 'Viagem'); }} className="rounded-lg border border-stone-400 px-4 py-2 text-stone-700 hover:bg-stone-50">
               Imprimir selecionados ({pedidosSelecionadosViagem.size})
             </button>
-            <button onClick={abrirMoverSelecionadosViagem} className="rounded-lg border border-amber-400 px-4 py-2 text-amber-700 hover:bg-amber-50">
+            <button onClick={abrirMoverSelecionadosViagem} className="rounded-lg border border-amber-400 px-4 py-2 text-amber-700 hover:bg-amber-50 text-sm sm:text-base">
               Mover selecionados para mesa local ({pedidosSelecionadosViagem.size})
             </button>
-          </>
+          </div>
         )}
       </div>
 
-      <div className="rounded-xl bg-white p-4 shadow-sm mb-6">
-        <h3 className="font-semibold text-stone-800 mb-3">Novo pedido viagem</h3>
+      <div className="rounded-xl bg-white p-3 sm:p-4 shadow-sm mb-4 sm:mb-6">
+        <h3 className="font-semibold text-stone-800 mb-3 text-base sm:text-lg">Novo pedido viagem</h3>
         <p className="text-sm text-stone-500 mb-3">Informe o cliente, busque os produtos e finalize. O pedido será exibido como &quot;lançada pelo admin&quot;.</p>
         <div className="flex flex-wrap gap-4 items-end mb-3">
           <div className="min-w-[180px]">
@@ -407,7 +407,7 @@ export default function AdminViagem() {
 
       <div className="space-y-4">
         {emPreparacao.map((p) => (
-          <div key={p.id} className="rounded-xl bg-white p-4 shadow-sm flex flex-wrap items-stretch justify-between gap-4">
+          <div key={p.id} className="rounded-xl bg-white p-3 sm:p-4 shadow-sm flex flex-wrap items-stretch justify-between gap-3 sm:gap-4">
             <div className="flex items-start gap-2 flex-1 min-w-0">
               <input type="checkbox" checked={pedidosSelecionadosViagem.has(p.id)} onChange={() => togglePedidoSelecionadoViagem(p.id)} className="mt-1 rounded border-stone-300" />
               <div className="flex-1 min-w-0">
@@ -442,7 +442,7 @@ export default function AdminViagem() {
           </div>
         ))}
         {prontosEncerrar.map((p) => (
-          <div key={p.id} className="rounded-xl bg-white p-4 shadow-sm border-l-4 border-amber-500 flex flex-wrap items-stretch justify-between gap-4">
+          <div key={p.id} className="rounded-xl bg-white p-3 sm:p-4 shadow-sm border-l-4 border-amber-500 flex flex-wrap items-stretch justify-between gap-3 sm:gap-4">
             <div className="flex items-start gap-2 flex-1 min-w-0">
               <input type="checkbox" checked={pedidosSelecionadosViagem.has(p.id)} onChange={() => togglePedidoSelecionadoViagem(p.id)} className="mt-1 rounded border-stone-300" />
               <div className="flex-1 min-w-0">

@@ -60,9 +60,9 @@ export default function AdminMesas() {
   if (loading && mesas.length === 0) return <p className="text-stone-500">Carregando...</p>;
 
   return (
-    <div>
-      <h1 className="text-2xl font-bold text-stone-800 mb-6">Mesas</h1>
-      <div className="mb-6 flex flex-wrap items-end gap-4 rounded-xl bg-white p-4 shadow-sm">
+    <div className="min-w-0">
+      <h1 className="text-xl sm:text-2xl font-bold text-stone-800 mb-4 sm:mb-6">Mesas</h1>
+      <div className="mb-4 sm:mb-6 flex flex-wrap items-end gap-3 sm:gap-4 rounded-xl bg-white p-3 sm:p-4 shadow-sm">
         <div>
           <label className="block text-sm font-medium text-stone-600">Quantidade de mesas no salão</label>
           <input type="number" min={1} value={qtd} onChange={(e) => setQtd(Number(e.target.value))} className="mt-1 w-24 rounded-lg border border-stone-300 px-3 py-2" />

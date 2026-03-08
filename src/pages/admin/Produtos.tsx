@@ -170,8 +170,8 @@ export default function AdminProdutos() {
   if (loading) return <p className="text-stone-500">Carregando...</p>;
 
   return (
-    <div>
-      <h1 className="mb-4 text-2xl font-bold text-stone-800">Produtos</h1>
+    <div className="min-w-0">
+      <h1 className="mb-4 text-xl sm:text-2xl font-bold text-stone-800">Produtos</h1>
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="relative flex-1 max-w-md">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" />
@@ -219,8 +219,8 @@ export default function AdminProdutos() {
                 </span>
               </button>
               {isOpen && (
-                <div className="border-t border-stone-200">
-                  <table className="w-full">
+                <div className="border-t border-stone-200 overflow-x-auto">
+                  <table className="w-full min-w-[500px]">
                     <thead className="border-b border-stone-200 bg-stone-50/80">
                       <tr>
                         <th className="px-4 py-2 text-left text-xs font-medium text-stone-600">Código</th>
@@ -272,8 +272,8 @@ export default function AdminProdutos() {
               </span>
             </button>
             {expandedCats.has('sem-categoria') && (
-              <div className="border-t border-stone-200">
-                <table className="w-full">
+              <div className="border-t border-stone-200 overflow-x-auto">
+                <table className="w-full min-w-[500px]">
                   <thead className="border-b border-stone-200 bg-stone-50/80">
                     <tr>
                       <th className="px-4 py-2 text-left text-xs font-medium text-stone-600">Código</th>
