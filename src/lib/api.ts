@@ -343,7 +343,9 @@ export async function getProdutos(ativoOnly = false): Promise<ProdutoWithCategor
     .from('produtos')
     .select('*, produto_categorias(categoria_id, categorias(id, nome))')
     .order('codigo');
-  if (ativoOnly) q = q.eq('ativo', true);
+  if (ativoOnly) {
+    q = q.eq('ativo', true).gt('quantidade', 0);
+  }
   const { data, error } = await q;
   if (error) throw error;
   return (data ?? []) as ProdutoWithCategorias[];
