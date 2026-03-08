@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { getMesas, initMesas, getConfig, getMesasIdsComPedidosAbertos, getMesasIdsComContaPendente, getViagemTemPedidosAbertos, getPedidosPresencialEncerradosHoje } from '../../lib/api';
+import { getMesas, initMesas, getConfig, getMesasIdsComPedidosAbertos, getMesasIdsComContaPendente, getViagemTemPedidosAbertos, getPedidosPresencialEncerradosHoje, getMesasComComandaAberta } from '../../lib/api';
 import type { Mesa } from '../../types/database';
 import { UtensilsCrossed, Truck } from 'lucide-react';
 
@@ -14,6 +14,8 @@ export default function AdminMesas() {
   const [viagemComPedidosAbertos, setViagemComPedidosAbertos] = useState(false);
   const [pedidosFinalizadosHoje, setPedidosFinalizadosHoje] = useState<any[]>([]);
   const [accordionFinalizados, setAccordionFinalizados] = useState(false);
+  /** mesa_id -> nome do atendente que abriu a comanda */
+  const [atendentePorMesa, setAtendentePorMesa] = useState<Record<string, string>>({});
 
   function load() {
     getConfig('quantidade_mesas').then(setQtd);
@@ -22,6 +24,11 @@ export default function AdminMesas() {
     getMesasIdsComContaPendente().then(setMesasComContaPendente);
     getViagemTemPedidosAbertos().then(setViagemComPedidosAbertos);
     getPedidosPresencialEncerradosHoje().then(setPedidosFinalizadosHoje);
+    getMesasComComandaAberta().then((lista) => {
+      const map: Record<string, string> = {};
+      lista.forEach(({ mesa_id, atendente_nome }) => { map[mesa_id] = atendente_nome; });
+      setAtendentePorMesa(map);
+    });
   }
 
   function totalPedido(p: any) {
@@ -82,6 +89,9 @@ export default function AdminMesas() {
               <div className="min-w-0">
                 <div className="font-semibold text-stone-800">{m.nome}</div>
                 <div className="text-sm text-stone-500">{m.is_viagem ? 'Pedidos para viagem' : `Mesa ${m.numero}`}</div>
+                {!m.is_viagem && atendentePorMesa[m.id] && (
+                  <div className="text-xs text-stone-500 mt-0.5 truncate" title={`Aberta por ${atendentePorMesa[m.id]}`}>Aberta por {atendentePorMesa[m.id]}</div>
+                )}
                 <div className="mt-1 flex flex-wrap gap-1">
                   {temPedidosAbertos && <span className="inline-block text-xs font-medium text-amber-700 bg-amber-100 px-2 py-0.5 rounded">Pedidos em aberto</span>}
                   {temContaPendente && <span className="inline-block text-xs font-medium text-amber-800 bg-amber-200 px-2 py-0.5 rounded">Conta pendente de encerramento</span>}
