@@ -573,9 +573,7 @@ export async function createPedidoViagem(
   (produtos ?? []).forEach((p: any) => { byId[p.id] = p; });
   const temItemParaCozinha = itens.some((i) => Boolean(byId[i.produto_id]?.vai_para_cozinha));
   const status = temItemParaCozinha ? 'novo_pedido' : 'finalizado';
-  const now = new Date().toISOString();
   const payload: Record<string, unknown> = { numero, comanda_id: com.id, origem: 'viagem', status, cliente_nome: nomeCliente, lancado_pelo_admin: opts?.lancadoPeloAdmin ?? false };
-  if (status === 'finalizado') payload.encerrado_em = now;
   const { data: pedido, error: e1 } = await (supabase as any).from('pedidos').insert(payload).select().single();
   if (e1) throw e1;
   const ped = pedido as { id: string };
@@ -600,11 +598,6 @@ export async function updatePedidoStatus(
   }
   const now = new Date().toISOString();
   const payload: Record<string, unknown> = { status, updated_at: now };
-  if (status === 'finalizado') {
-    const { data: pedData } = await supabase.from('pedidos').select('origem').eq('id', pedidoId).single();
-    const ped = pedData as { origem: string } | null;
-    if (ped?.origem !== 'online') payload.encerrado_em = now;
-  }
   if (status === 'cancelado' && opts) {
     if (opts.motivo_cancelamento) payload.motivo_cancelamento = opts.motivo_cancelamento;
     if (opts.cancelado_por) payload.cancelado_por = opts.cancelado_por;

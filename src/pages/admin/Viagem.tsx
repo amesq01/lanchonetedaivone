@@ -455,7 +455,7 @@ export default function AdminViagem() {
                   return (
                     <div key={p.id} className={`rounded-lg border bg-white p-3 flex flex-col gap-2 ${prontoEncerrar ? 'border-amber-400 border-l-4' : ''}`}>
                       <div className="flex items-start gap-2">
-                        <input type="checkbox" checked={pedidosSelecionadosViagem.has(p.id)} onChange={() => togglePedidoSelecionadoViagem(p.id)} className="mt-0.5 rounded border-stone-300 shrink-0" />
+                        {!jaEncerrado && <input type="checkbox" checked={pedidosSelecionadosViagem.has(p.id)} onChange={() => togglePedidoSelecionadoViagem(p.id)} className="mt-0.5 rounded border-stone-300 shrink-0" />}
                         <div className="flex-1 min-w-0">
                           <div className="font-semibold text-stone-800 text-sm">
                             {(p.comandas as any)?.profiles?.nome ? `#${p.numero} – ${(p.comandas as any).profiles.nome}${(p as any).lancado_pelo_admin ? ' (admin)' : ''}` : `#${p.numero}${(p as any).lancado_pelo_admin ? ' (admin)' : ''}`}
@@ -470,13 +470,19 @@ export default function AdminViagem() {
                         </div>
                       </div>
                       <div className="flex flex-wrap gap-1 text-xs">
-                        <button type="button" onClick={() => printPedido(p, 'Viagem')} className="text-stone-600 hover:underline">Imprimir</button>
-                        <button type="button" onClick={() => pedidoPodeEditarSemConfirmacao(p) ? abrirEdicao(p) : setConfirmarEdicaoAvancada(p)} className="text-amber-600 hover:underline">Editar</button>
-                        <button type="button" onClick={() => setPopupCancelar({ pedidoId: p.id, adminOverride: !pedidoPodeEditarSemConfirmacao(p) })} className="text-red-600 hover:underline">Cancelar</button>
-                        {prontoEncerrar && (
+                        {jaEncerrado ? (
+                          <button type="button" onClick={() => printPedido(p, 'Viagem')} className="rounded border border-stone-300 px-2 py-1 text-stone-600 hover:bg-stone-50 text-xs">Reimprimir pedido</button>
+                        ) : (
                           <>
-                            <button type="button" onClick={() => handleAbrirImprimir(p)} className="text-stone-600 hover:underline">Imprimir conta</button>
-                            <button type="button" onClick={() => handleEncerrarPedido(p)} className="text-amber-700 font-medium hover:underline">Encerrar pedido</button>
+                            <button type="button" onClick={() => printPedido(p, 'Viagem')} className={prontoEncerrar ? 'rounded border border-stone-300 px-2 py-1 text-stone-600 hover:bg-stone-50 text-xs' : 'text-stone-600 hover:underline'}>Imprimir</button>
+                            <button type="button" onClick={() => pedidoPodeEditarSemConfirmacao(p) ? abrirEdicao(p) : setConfirmarEdicaoAvancada(p)} className={prontoEncerrar ? 'rounded border border-amber-300 px-2 py-1 text-amber-700 hover:bg-amber-50 text-xs' : 'text-amber-600 hover:underline'}>Editar</button>
+                            <button type="button" onClick={() => setPopupCancelar({ pedidoId: p.id, adminOverride: !pedidoPodeEditarSemConfirmacao(p) })} className={prontoEncerrar ? 'rounded border border-red-200 px-2 py-1 text-red-600 hover:bg-red-50 text-xs' : 'text-red-600 hover:underline'}>Cancelar</button>
+                            {prontoEncerrar && (
+                              <>
+                                <button type="button" onClick={() => handleAbrirImprimir(p)} className="rounded border border-stone-300 px-2 py-1 text-stone-600 hover:bg-stone-50 text-xs">Imprimir conta</button>
+                                <button type="button" onClick={() => handleEncerrarPedido(p)} className="rounded border border-amber-400 px-2 py-1 text-amber-700 font-medium hover:bg-amber-50 text-xs">Encerrar pedido</button>
+                              </>
+                            )}
                           </>
                         )}
                       </div>
