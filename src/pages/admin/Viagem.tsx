@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { getPedidosViagemAbertos, getTotalComanda, getTotalAPagarComanda, closeComanda, getCuponsAtivos, applyDescontoComanda, clearDescontoComanda, getProdutos, updatePedidoItens, updatePedidoStatus, getMesasFechadasParaTransferencia, getComandaByMesa, openComanda, movePedidosParaOutraComanda, createPedidoViagem } from '../../lib/api';
+import { getPedidosViagemAbertos, getTotalComanda, getTotalAPagarComanda, closeComanda, getCuponsAtivos, applyDescontoComanda, clearDescontoComanda, getProdutos, updatePedidoItens, updatePedidoStatus, getMesasParaTransferencia, openComanda, movePedidosParaOutraComanda, createPedidoViagem } from '../../lib/api';
 import type { FraçãoPagamento } from '../../lib/api';
 import { printContaViagem, printPedido, printPedidosUnificados } from '../../lib/printPdf';
 import { supabase } from '../../lib/supabase';
@@ -33,7 +33,7 @@ export default function AdminViagem() {
   const [confirmarEdicaoAvancada, setConfirmarEdicaoAvancada] = useState<any | null>(null);
   const [pedidosSelecionadosViagem, setPedidosSelecionadosViagem] = useState<Set<string>>(new Set());
   const [popupMoverSelecionadosViagem, setPopupMoverSelecionadosViagem] = useState(false);
-  const [mesasDestino, setMesasDestino] = useState<{ mesaId: string; mesaNome: string }[]>([]);
+  const [mesasDestino, setMesasDestino] = useState<{ mesaId: string; mesaNome: string; comandaId: string | null }[]>([]);
   const [mesaIdDestinoViagem, setMesaIdDestinoViagem] = useState('');
   const [novoNomeClienteDestinoViagem, setNovoNomeClienteDestinoViagem] = useState('');
   const [enviandoTransferenciaViagem, setEnviandoTransferenciaViagem] = useState(false);
@@ -118,7 +118,8 @@ export default function AdminViagem() {
 
   const formas = ['dinheiro', 'pix', 'cartão de crédito', 'cartão de débito'];
   const totalPagoViagem = fracoesPagamento.reduce((s, f) => s + f.valor, 0);
-  const podeConfirmarEncerramentoViagem = popupPagamento && fracoesPagamento.length > 0 && totalPagoViagem >= totalContaEncerramento - 0.01;
+  const contaZeradaViagem = totalContaEncerramento < 0.01;
+  const podeConfirmarEncerramentoViagem = popupPagamento && (contaZeradaViagem || (fracoesPagamento.length > 0 && totalPagoViagem >= totalContaEncerramento - 0.01));
 
   const adicionarFraçãoViagem = () => {
     const v = Math.max(0, Number(novaFraçãoValor.replace(',', '.')));
@@ -136,13 +137,14 @@ export default function AdminViagem() {
   };
 
   const confirmarEncerramento = async () => {
-    if (!popupPagamento || fracoesPagamento.length === 0) return;
-    if (totalPagoViagem < totalContaEncerramento - 0.01) {
+    if (!popupPagamento) return;
+    if (totalContaEncerramento >= 0.01 && fracoesPagamento.length === 0) return;
+    if (totalContaEncerramento >= 0.01 && totalPagoViagem < totalContaEncerramento - 0.01) {
       alert(`Valor pago (R$ ${totalPagoViagem.toFixed(2)}) é menor que o total da conta (R$ ${totalContaEncerramento.toFixed(2)}).`);
       return;
     }
     try {
-      await closeComanda(popupPagamento.comandaId, fracoesPagamento);
+      await closeComanda(popupPagamento.comandaId, contaZeradaViagem ? [] : fracoesPagamento);
       setPopupPagamento(null);
       setFracoesPagamento([]);
       load();
@@ -289,7 +291,7 @@ export default function AdminViagem() {
     setMesaIdDestinoViagem('');
     setNovoNomeClienteDestinoViagem(nomeInicial);
     setPopupMoverSelecionadosViagem(true);
-    getMesasFechadasParaTransferencia()
+    getMesasParaTransferencia()
       .then(setMesasDestino)
       .catch((e) => {
         alert(e instanceof Error ? e.message : 'Erro ao carregar mesas.');
@@ -298,7 +300,13 @@ export default function AdminViagem() {
   };
 
   const confirmarMoverSelecionadosViagem = async () => {
-    if (!mesaIdDestinoViagem || !novoNomeClienteDestinoViagem.trim() || pedidosSelecionadosViagem.size === 0 || !profile?.id) return;
+    if (!mesaIdDestinoViagem || pedidosSelecionadosViagem.size === 0 || !profile?.id) return;
+    const mesaDest = mesasDestino.find((m) => m.mesaId === mesaIdDestinoViagem);
+    const comandaIdDestino = mesaDest?.comandaId;
+    if (!comandaIdDestino && !novoNomeClienteDestinoViagem.trim()) {
+      alert('Informe o nome do cliente para abrir a mesa de destino (quando a mesa estiver livre).');
+      return;
+    }
     const ids = Array.from(pedidosSelecionadosViagem);
     const pedidosMovidos = pedidos.filter((p) => ids.includes(p.id));
     const comandasMovidas = [...new Set(pedidosMovidos.map((p) => p.comanda_id).filter(Boolean))] as string[];
@@ -309,13 +317,14 @@ export default function AdminViagem() {
     });
     setEnviandoTransferenciaViagem(true);
     try {
-      const comandaExistente = await getComandaByMesa(mesaIdDestinoViagem);
-      if (comandaExistente) {
-        alert('Esta mesa já está aberta. Escolha outra mesa livre.');
-        return;
+      let comandaDestinoId: string;
+      if (comandaIdDestino) {
+        comandaDestinoId = comandaIdDestino;
+      } else {
+        const novaComanda = await openComanda(mesaIdDestinoViagem, profile.id, novoNomeClienteDestinoViagem.trim());
+        comandaDestinoId = novaComanda.id;
       }
-      const novaComanda = await openComanda(mesaIdDestinoViagem, profile.id, novoNomeClienteDestinoViagem.trim());
-      await movePedidosParaOutraComanda(ids, novaComanda.id, { fecharComandasOrigemIds });
+      await movePedidosParaOutraComanda(ids, comandaDestinoId, { fecharComandasOrigemIds });
       setPopupMoverSelecionadosViagem(false);
       setPedidosSelecionadosViagem(new Set());
       load();
@@ -333,7 +342,7 @@ export default function AdminViagem() {
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-4 mb-4 sm:mb-6">
         <div className="min-w-0">
           <h1 className="text-xl sm:text-2xl font-bold text-stone-800">Mesa VIAGEM</h1>
-          <p className="text-stone-600 text-sm sm:text-base">Pedidos para viagem. Marque os pedidos e use &quot;Mover selecionados&quot; para enviar a uma mesa livre (sem comanda aberta).</p>
+          <p className="text-stone-600 text-sm sm:text-base">Pedidos para viagem. Marque os pedidos e use &quot;Mover selecionados&quot; para enviar a uma mesa local (aberta ou livre).</p>
         </div>
         {pedidosSelecionadosViagem.size > 0 && (
           <div className="flex flex-wrap gap-2">
@@ -672,20 +681,29 @@ export default function AdminViagem() {
       {popupMoverSelecionadosViagem && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
-            <h3 className="font-semibold text-stone-800 mb-2">Mover pedidos selecionados para mesa livre</h3>
-            <p className="text-sm text-stone-500 mb-3">Escolha uma mesa que não esteja aberta e informe o nome do cliente. Será aberta uma comanda na mesa e {pedidosSelecionadosViagem.size} pedido(s) serão transferidos.</p>
-            <label className="block text-sm font-medium text-stone-600 mb-1">Mesa de destino (livre)</label>
+            <h3 className="font-semibold text-stone-800 mb-2">Mover pedidos selecionados para mesa local</h3>
+            <p className="text-sm text-stone-500 mb-3">Escolha a mesa de destino. Se estiver aberta, os {pedidosSelecionadosViagem.size} pedido(s) serão unidos aos existentes. Se estiver livre, informe o cliente para abrir.</p>
+            <label className="block text-sm font-medium text-stone-600 mb-1">Mesa de destino</label>
             <select value={mesaIdDestinoViagem} onChange={(e) => setMesaIdDestinoViagem(e.target.value)} className="w-full rounded-lg border border-stone-300 px-3 py-2 mb-2">
               <option value="">Selecione...</option>
               {mesasDestino.map((m) => (
-                <option key={m.mesaId} value={m.mesaId}>{m.mesaNome}</option>
+                <option key={m.mesaId} value={m.mesaId}>{m.mesaNome}{m.comandaId ? ' (aberta)' : ' (livre)'}</option>
               ))}
             </select>
-            <label className="block text-sm font-medium text-stone-600 mb-1 mt-2">Nome do cliente (mesa de destino)</label>
-            <input type="text" value={novoNomeClienteDestinoViagem} onChange={(e) => setNovoNomeClienteDestinoViagem(e.target.value)} placeholder="Ex: João" className="w-full rounded-lg border border-stone-300 px-3 py-2 mb-4" />
-            {mesasDestino.length === 0 && <p className="text-sm text-amber-600 mb-2">Nenhuma mesa livre no momento.</p>}
+            {mesaIdDestinoViagem && !mesasDestino.find((m) => m.mesaId === mesaIdDestinoViagem)?.comandaId && (
+              <>
+                <label className="block text-sm font-medium text-stone-600 mb-1 mt-2">Nome do cliente (para abrir a mesa)</label>
+                <input type="text" value={novoNomeClienteDestinoViagem} onChange={(e) => setNovoNomeClienteDestinoViagem(e.target.value)} placeholder="Ex: João" className="w-full rounded-lg border border-stone-300 px-3 py-2 mb-4" />
+              </>
+            )}
+            {mesaIdDestinoViagem && mesasDestino.find((m) => m.mesaId === mesaIdDestinoViagem)?.comandaId && <p className="text-sm text-stone-500 mb-4">Os pedidos serão unidos aos da mesa.</p>}
+            {mesasDestino.length === 0 && <p className="text-sm text-amber-600 mb-2">Nenhuma mesa local disponível.</p>}
             <div className="flex gap-2">
-              <button onClick={confirmarMoverSelecionadosViagem} disabled={!mesaIdDestinoViagem || !novoNomeClienteDestinoViagem.trim() || enviandoTransferenciaViagem || mesasDestino.length === 0} className="flex-1 rounded-lg bg-amber-600 py-2 text-white hover:bg-amber-700 disabled:opacity-50">
+              <button
+                onClick={confirmarMoverSelecionadosViagem}
+                disabled={!mesaIdDestinoViagem || enviandoTransferenciaViagem || mesasDestino.length === 0 || (!!mesaIdDestinoViagem && !mesasDestino.find((m) => m.mesaId === mesaIdDestinoViagem)?.comandaId && !novoNomeClienteDestinoViagem.trim())}
+                className="flex-1 rounded-lg bg-amber-600 py-2 text-white hover:bg-amber-700 disabled:opacity-50"
+              >
                 {enviandoTransferenciaViagem ? 'Transferindo...' : 'Confirmar'}
               </button>
               <button onClick={() => setPopupMoverSelecionadosViagem(false)} className="rounded-lg border border-stone-300 px-4 py-2 text-stone-600">Cancelar</button>

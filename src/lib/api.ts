@@ -160,23 +160,34 @@ export async function getMesaIdsComComandaAberta(): Promise<Set<string>> {
 
 /** Mesas SEM comanda aberta (livres) para transferência. Apenas admin. Exclui mesa Viagem e mesaIdExcluir se informado. No destino será aberta uma nova comanda. Ordenadas por número (menor para maior). */
 export async function getMesasFechadasParaTransferencia(mesaIdExcluir?: string): Promise<{ mesaId: string; mesaNome: string }[]> {
+  const todas = await getMesasParaTransferencia(mesaIdExcluir);
+  return todas.filter((m) => !m.comandaId).map(({ mesaId, mesaNome }) => ({ mesaId, mesaNome }));
+}
+
+/** Mesas para transferência: abertas (com comanda) e livres. Apenas admin. Quando comandaId existe, os pedidos vão para a comanda existente; quando null, será aberta nova comanda. */
+export async function getMesasParaTransferencia(mesaIdExcluir?: string): Promise<{ mesaId: string; mesaNome: string; comandaId: string | null }[]> {
   await exigirAdminTransferencia();
   const [comandasAbertasRes, mesasRes] = await Promise.all([
-    supabase.from('comandas').select('mesa_id').eq('aberta', true),
+    supabase.from('comandas').select('id, mesa_id').eq('aberta', true),
     supabase.from('mesas').select('id, nome, is_viagem, numero'),
   ]);
-  const comandasAbertas = (comandasAbertasRes.data ?? []) as { mesa_id: string }[];
-  const mesasAbertasIds = new Set(comandasAbertas.map((c) => c.mesa_id));
+  const comandaPorMesa = new Map<string, string>();
+  (comandasAbertasRes.data ?? []).forEach((c: any) => comandaPorMesa.set(c.mesa_id, c.id));
   const mesas = (mesasRes.data ?? []) as { id: string; nome: string; is_viagem: boolean; numero: number }[];
-  const out: { mesaId: string; mesaNome: string; numero: number }[] = [];
+  const out: { mesaId: string; mesaNome: string; comandaId: string | null; numero: number }[] = [];
   for (const m of mesas) {
     if (m.is_viagem) continue;
     if (mesaIdExcluir && m.id === mesaIdExcluir) continue;
-    if (mesasAbertasIds.has(m.id)) continue;
-    out.push({ mesaId: m.id, mesaNome: m.nome ?? `Mesa ${m.id}`, numero: typeof m.numero === 'number' && !Number.isNaN(m.numero) ? m.numero : 0 });
+    const comandaId = comandaPorMesa.get(m.id) ?? null;
+    out.push({
+      mesaId: m.id,
+      mesaNome: m.nome ?? `Mesa ${m.numero}`,
+      comandaId,
+      numero: typeof m.numero === 'number' && !Number.isNaN(m.numero) ? m.numero : 0,
+    });
   }
   out.sort((a, b) => a.numero - b.numero);
-  return out.map(({ mesaId, mesaNome }) => ({ mesaId, mesaNome }));
+  return out.map(({ mesaId, mesaNome, comandaId }) => ({ mesaId, mesaNome, comandaId }));
 }
 
 /** Transfere pedidos para outra comanda. Apenas admin. A mesa de destino deve estar com comanda aberta. Se passar fecharComandasOrigemIds, comandas de origem que ficarem sem pedidos são encerradas (mesa fica livre para novo atendimento). */

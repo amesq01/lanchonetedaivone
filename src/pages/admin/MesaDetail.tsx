@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getComandaByMesa, getComandaWithPedidos, getTotalComanda, getPagamentosComanda, addPagamentoParcial, deletePagamentoParcial, closeComanda, getMesas, updatePedidoStatus, updatePedidoItens, getProdutos, getCuponsAtivos, applyDescontoComanda, clearDescontoComanda, getMesasFechadasParaTransferencia, openComanda, movePedidosParaOutraComanda, createPedidoPresencial, getAtendentes, atribuirComandaParaAtendente } from '../../lib/api';
+import { getComandaByMesa, getComandaWithPedidos, getTotalComanda, getPagamentosComanda, addPagamentoParcial, deletePagamentoParcial, closeComanda, getMesas, updatePedidoStatus, updatePedidoItens, getProdutos, getCuponsAtivos, applyDescontoComanda, clearDescontoComanda, getMesasParaTransferencia, openComanda, movePedidosParaOutraComanda, createPedidoPresencial, getAtendentes, atribuirComandaParaAtendente } from '../../lib/api';
 import type { FraçãoPagamento } from '../../lib/api';
 import { printContaMesa, printPedido, printPedidosUnificados } from '../../lib/printPdf';
 import { useAuth } from '../../contexts/AuthContext';
@@ -43,7 +43,7 @@ export default function AdminMesaDetail() {
   const [popupMoverTodos, setPopupMoverTodos] = useState(false);
   const [popupMoverSelecionados, setPopupMoverSelecionados] = useState(false);
   const [pedidosSelecionados, setPedidosSelecionados] = useState<Set<string>>(new Set());
-  const [mesasDestino, setMesasDestino] = useState<{ mesaId: string; mesaNome: string }[]>([]);
+  const [mesasDestino, setMesasDestino] = useState<{ mesaId: string; mesaNome: string; comandaId: string | null }[]>([]);
   const [mesaIdDestino, setMesaIdDestino] = useState('');
   const [novoNomeClienteDestino, setNovoNomeClienteDestino] = useState('');
   const [enviandoTransferencia, setEnviandoTransferencia] = useState(false);
@@ -345,7 +345,7 @@ export default function AdminMesaDetail() {
   };
 
   const abrirModalMoverTodos = () => {
-    getMesasFechadasParaTransferencia(mesaId ?? undefined).then(setMesasDestino);
+    getMesasParaTransferencia(mesaId ?? undefined).then(setMesasDestino);
     setMesaIdDestino('');
     setNovoNomeClienteDestino(comanda?.nome_cliente ?? '');
     setPopupMoverTodos(true);
@@ -353,7 +353,7 @@ export default function AdminMesaDetail() {
 
   const abrirModalMoverSelecionados = () => {
     if (pedidosSelecionados.size === 0) return;
-    getMesasFechadasParaTransferencia(mesaId ?? undefined).then(setMesasDestino);
+    getMesasParaTransferencia(mesaId ?? undefined).then(setMesasDestino);
     setMesaIdDestino('');
     setNovoNomeClienteDestino('');
     setPopupMoverSelecionados(true);
@@ -369,17 +369,24 @@ export default function AdminMesaDetail() {
   };
 
   const confirmarMoverTodos = async () => {
-    if (!comanda || !mesaIdDestino || !novoNomeClienteDestino.trim() || !profile?.id) return;
+    if (!comanda || !mesaIdDestino || !profile?.id) return;
+    const mesaDest = mesasDestino.find((m) => m.mesaId === mesaIdDestino);
+    const comandaIdDestino = mesaDest?.comandaId;
+    if (!comandaIdDestino && !novoNomeClienteDestino.trim()) {
+      alert('Informe o nome do cliente para abrir a mesa de destino.');
+      return;
+    }
     setEnviandoTransferencia(true);
     try {
-      const comandaExistente = await getComandaByMesa(mesaIdDestino);
-      if (comandaExistente) {
-        alert('Esta mesa já está aberta. Escolha outra mesa livre.');
-        return;
-      }
       const ids = pedidosNaMesa.map((p) => p.id);
-      const novaComanda = await openComanda(mesaIdDestino, profile.id, novoNomeClienteDestino.trim());
-      await movePedidosParaOutraComanda(ids, novaComanda.id, { fecharComandasOrigemIds: [comanda.id] });
+      let comandaDestinoId: string;
+      if (comandaIdDestino) {
+        comandaDestinoId = comandaIdDestino;
+      } else {
+        const novaComanda = await openComanda(mesaIdDestino, profile.id, novoNomeClienteDestino.trim());
+        comandaDestinoId = novaComanda.id;
+      }
+      await movePedidosParaOutraComanda(ids, comandaDestinoId, { fecharComandasOrigemIds: [comanda.id] });
       setPopupMoverTodos(false);
       navigate('/admin/mesas');
     } catch (e) {
@@ -390,19 +397,23 @@ export default function AdminMesaDetail() {
   };
 
   const confirmarMoverSelecionados = async () => {
-    if (!mesaIdDestino || !novoNomeClienteDestino.trim() || !profile?.id) {
-      alert('Escolha a mesa de destino e informe o nome do cliente.');
+    if (!mesaIdDestino || !profile?.id) return;
+    const mesaDest = mesasDestino.find((m) => m.mesaId === mesaIdDestino);
+    const comandaIdDestino = mesaDest?.comandaId;
+    if (!comandaIdDestino && !novoNomeClienteDestino.trim()) {
+      alert('Escolha a mesa de destino e informe o nome do cliente (quando a mesa estiver livre).');
       return;
     }
     setEnviandoTransferencia(true);
     try {
-      const comandaExistente = await getComandaByMesa(mesaIdDestino);
-      if (comandaExistente) {
-        alert('Esta mesa já está aberta. Escolha outra mesa livre.');
-        return;
+      let comandaDestinoId: string;
+      if (comandaIdDestino) {
+        comandaDestinoId = comandaIdDestino;
+      } else {
+        const novaComanda = await openComanda(mesaIdDestino, profile.id, novoNomeClienteDestino.trim());
+        comandaDestinoId = novaComanda.id;
       }
-      const novaComanda = await openComanda(mesaIdDestino, profile.id, novoNomeClienteDestino.trim());
-      await movePedidosParaOutraComanda(Array.from(pedidosSelecionados), novaComanda.id);
+      await movePedidosParaOutraComanda(Array.from(pedidosSelecionados), comandaDestinoId);
       setPopupMoverSelecionados(false);
       setPedidosSelecionados(new Set());
       if (comanda) {
@@ -1230,19 +1241,28 @@ export default function AdminMesaDetail() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
             <h3 className="font-semibold text-stone-800 mb-2">Mover todos os pedidos para outra mesa</h3>
-            <p className="text-sm text-stone-500 mb-3">Escolha uma mesa que não esteja aberta. Será aberta uma comanda e os pedidos serão transferidos. Esta mesa ficará livre.</p>
-            <label className="block text-sm font-medium text-stone-600 mb-1">Mesa de destino (livre)</label>
+            <p className="text-sm text-stone-500 mb-3">Escolha a mesa de destino. Se estiver aberta, os pedidos serão unidos aos existentes. Se estiver livre, informe o cliente para abrir. Esta mesa ficará livre.</p>
+            <label className="block text-sm font-medium text-stone-600 mb-1">Mesa de destino</label>
             <select value={mesaIdDestino} onChange={(e) => setMesaIdDestino(e.target.value)} className="w-full rounded-lg border border-stone-300 px-3 py-2 mb-2">
               <option value="">Selecione...</option>
               {mesasDestino.map((m) => (
-                <option key={m.mesaId} value={m.mesaId}>{m.mesaNome}</option>
+                <option key={m.mesaId} value={m.mesaId}>{m.mesaNome}{m.comandaId ? ' (aberta)' : ' (livre)'}</option>
               ))}
             </select>
-            <label className="block text-sm font-medium text-stone-600 mb-1 mt-2">Nome do cliente (mesa de destino)</label>
-            <input type="text" value={novoNomeClienteDestino} onChange={(e) => setNovoNomeClienteDestino(e.target.value)} placeholder="Ex: Maria" className="w-full rounded-lg border border-stone-300 px-3 py-2 mb-4" />
-            {mesasDestino.length === 0 && <p className="text-sm text-amber-600 mb-2">Nenhuma outra mesa livre no momento.</p>}
+            {mesaIdDestino && !mesasDestino.find((m) => m.mesaId === mesaIdDestino)?.comandaId && (
+              <>
+                <label className="block text-sm font-medium text-stone-600 mb-1 mt-2">Nome do cliente (para abrir a mesa)</label>
+                <input type="text" value={novoNomeClienteDestino} onChange={(e) => setNovoNomeClienteDestino(e.target.value)} placeholder="Ex: Maria" className="w-full rounded-lg border border-stone-300 px-3 py-2 mb-4" />
+              </>
+            )}
+            {mesaIdDestino && mesasDestino.find((m) => m.mesaId === mesaIdDestino)?.comandaId && <p className="text-sm text-stone-500 mb-4">Os pedidos serão unidos aos da mesa.</p>}
+            {mesasDestino.length === 0 && <p className="text-sm text-amber-600 mb-2">Nenhuma outra mesa disponível.</p>}
             <div className="flex gap-2">
-              <button onClick={confirmarMoverTodos} disabled={!mesaIdDestino || !novoNomeClienteDestino.trim() || enviandoTransferencia || mesasDestino.length === 0} className="flex-1 rounded-lg bg-amber-600 py-2 text-white hover:bg-amber-700 disabled:opacity-50">
+              <button
+                onClick={confirmarMoverTodos}
+                disabled={!mesaIdDestino || enviandoTransferencia || mesasDestino.length === 0 || (!!mesaIdDestino && !mesasDestino.find((m) => m.mesaId === mesaIdDestino)?.comandaId && !novoNomeClienteDestino.trim())}
+                className="flex-1 rounded-lg bg-amber-600 py-2 text-white hover:bg-amber-700 disabled:opacity-50"
+              >
                 {enviandoTransferencia ? 'Transferindo...' : 'Confirmar'}
               </button>
               <button onClick={() => setPopupMoverTodos(false)} className="rounded-lg border border-stone-300 px-4 py-2 text-stone-600">Cancelar</button>
@@ -1255,19 +1275,28 @@ export default function AdminMesaDetail() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
             <h3 className="font-semibold text-stone-800 mb-2">Mover pedidos selecionados</h3>
-            <p className="text-sm text-stone-500 mb-3">Escolha uma mesa que não esteja aberta e informe o nome do cliente. Será aberta uma comanda na mesa de destino.</p>
-            <label className="block text-sm font-medium text-stone-600 mb-1">Mesa de destino (livre)</label>
-            <select value={mesaIdDestino} onChange={(e) => setMesaIdDestino(e.target.value)} className="w-full rounded-lg border border-stone-300 px-3 py-2 mb-3">
+            <p className="text-sm text-stone-500 mb-3">Escolha a mesa de destino. Se estiver aberta, os pedidos serão unidos aos existentes. Se estiver livre, informe o cliente para abrir.</p>
+            <label className="block text-sm font-medium text-stone-600 mb-1">Mesa de destino</label>
+            <select value={mesaIdDestino} onChange={(e) => setMesaIdDestino(e.target.value)} className="w-full rounded-lg border border-stone-300 px-3 py-2 mb-2">
               <option value="">Selecione...</option>
               {mesasDestino.map((m) => (
-                <option key={m.mesaId} value={m.mesaId}>{m.mesaNome}</option>
+                <option key={m.mesaId} value={m.mesaId}>{m.mesaNome}{m.comandaId ? ' (aberta)' : ' (livre)'}</option>
               ))}
             </select>
-            <label className="block text-sm font-medium text-stone-600 mb-1">Nome do cliente (mesa de destino)</label>
-            <input type="text" value={novoNomeClienteDestino} onChange={(e) => setNovoNomeClienteDestino(e.target.value)} placeholder="Ex: Maria" className="w-full rounded-lg border border-stone-300 px-3 py-2 mb-4" />
-            {mesasDestino.length === 0 && <p className="text-sm text-amber-600 mb-2">Nenhuma outra mesa livre no momento.</p>}
+            {mesaIdDestino && !mesasDestino.find((m) => m.mesaId === mesaIdDestino)?.comandaId && (
+              <>
+                <label className="block text-sm font-medium text-stone-600 mb-1 mt-2">Nome do cliente (para abrir a mesa)</label>
+                <input type="text" value={novoNomeClienteDestino} onChange={(e) => setNovoNomeClienteDestino(e.target.value)} placeholder="Ex: Maria" className="w-full rounded-lg border border-stone-300 px-3 py-2 mb-4" />
+              </>
+            )}
+            {mesaIdDestino && mesasDestino.find((m) => m.mesaId === mesaIdDestino)?.comandaId && <p className="text-sm text-stone-500 mb-4">Os pedidos serão unidos aos da mesa.</p>}
+            {mesasDestino.length === 0 && <p className="text-sm text-amber-600 mb-2">Nenhuma outra mesa disponível.</p>}
             <div className="flex gap-2">
-              <button onClick={confirmarMoverSelecionados} disabled={!mesaIdDestino || !novoNomeClienteDestino.trim() || enviandoTransferencia || mesasDestino.length === 0} className="flex-1 rounded-lg bg-amber-600 py-2 text-white hover:bg-amber-700 disabled:opacity-50">
+              <button
+                onClick={confirmarMoverSelecionados}
+                disabled={!mesaIdDestino || enviandoTransferencia || mesasDestino.length === 0 || (!!mesaIdDestino && !mesasDestino.find((m) => m.mesaId === mesaIdDestino)?.comandaId && !novoNomeClienteDestino.trim())}
+                className="flex-1 rounded-lg bg-amber-600 py-2 text-white hover:bg-amber-700 disabled:opacity-50"
+              >
                 {enviandoTransferencia ? 'Transferindo...' : 'Confirmar'}
               </button>
               <button onClick={() => setPopupMoverSelecionados(false)} className="rounded-lg border border-stone-300 px-4 py-2 text-stone-600">Cancelar</button>
