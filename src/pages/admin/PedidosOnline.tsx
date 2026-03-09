@@ -12,7 +12,7 @@ export default function AdminPedidosOnline() {
   const [todos, setTodos] = useState<any[]>([]);
   const [encerradosHoje, setEncerradosHoje] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [accordionEncerrados, setAccordionEncerrados] = useState(false);
+  const [searchPedidos, setSearchPedidos] = useState('');
   const [popupCancelar, setPopupCancelar] = useState<{ pedidoId: string; adminOverride?: boolean } | null>(null);
   const [motivoCancelamento, setMotivoCancelamento] = useState('');
   const [confirmarEdicaoAvancada, setConfirmarEdicaoAvancada] = useState<any | null>(null);
@@ -209,110 +209,91 @@ export default function AdminPedidosOnline() {
     return Math.max(0, subtotal - desconto + taxa);
   }
 
+  const pedidosOnline = [...pendentes, ...todos, ...encerradosHoje];
+
   if (loading) return <p className="text-stone-500">Carregando...</p>;
 
   return (
     <div className="no-print">
-      <h1 className="text-2xl font-bold text-stone-800 mb-6">Pedidos Online</h1>
+      <h1 className="text-2xl font-bold text-stone-800 mb-4">Pedidos Online</h1>
 
-      {pendentes.length > 0 && (
-        <section className="mb-8">
-          <h2 className="text-lg font-semibold text-stone-700 mb-4">Aguardando aceite</h2>
-          <div className="space-y-4">
-            {pendentes.map((p) => (
-              <div key={p.id} className="rounded-xl bg-white p-4 shadow-sm flex flex-wrap items-start justify-between gap-4">
-                <div>
-                  <div className="font-semibold text-stone-800">Pedido #{p.numero}</div>
-                  <p className="text-sm font-medium text-amber-700 mt-0.5">Total: R$ {totalPedido(p).toFixed(2)}</p>
-                  <p className="text-sm text-stone-600">{p.cliente_nome} - {p.cliente_whatsapp}</p>
-                  <p className="text-sm text-stone-500">{p.cliente_endereco}</p>
-                  {p.ponto_referencia && <p className="text-sm text-stone-500">Ref: {p.ponto_referencia}</p>}
-                  <p className="text-sm">Pagamento: {p.forma_pagamento} {p.troco_para ? `- Troco para R$ ${p.troco_para}` : ''}</p>
-                  {p.observacoes && <p className="text-sm italic text-stone-500">{p.observacoes}</p>}
-                  <ul className="mt-2 text-sm">
-                    {(p.pedido_itens ?? []).map((i: any) => (
-                      <li key={i.id}>{i.quantidade}x {i.produtos?.nome || i.produtos?.descricao} {i.observacao ? `(${i.observacao})` : ''}</li>
-                    ))}
-                  </ul>
-                </div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <button type="button" onClick={() => handleImprimirPedido(p)} className="rounded-lg border border-stone-300 px-4 py-2 text-stone-700 hover:bg-stone-50">
-                    Imprimir pedido
-                  </button>
-                  <button type="button" onClick={() => (pedidoPodeEditarSemConfirmacao(p) ? abrirEdicao(p) : setConfirmarEdicaoAvancada(p))} className="rounded-lg border border-amber-300 px-4 py-2 text-amber-700 hover:bg-amber-50">
-                    Editar pedido
-                  </button>
-                  <button onClick={() => handleAceitar(p.id)} className="rounded-lg bg-green-600 px-4 py-2 text-white hover:bg-green-700">
-                    Aceitar pedido
-                  </button>
-                  <button type="button" onClick={() => abrirEnviarParaMesa(p)} className="rounded-lg border border-stone-400 px-4 py-2 text-stone-700 hover:bg-stone-50">
-                    Enviar para mesa
-                  </button>
-                  <button onClick={() => setPopupCancelar({ pedidoId: p.id, adminOverride: false })} className="rounded-lg border border-red-300 px-4 py-2 text-red-700 hover:bg-red-50">
-                    Cancelar pedido
-                  </button>
-                </div>
+      <div className="mb-4">
+        <label className="block text-sm font-medium text-stone-600 mb-1">Buscar pedido</label>
+        <input
+          type="text"
+          value={searchPedidos}
+          onChange={(e) => setSearchPedidos(e.target.value)}
+          placeholder="Número do pedido, nome ou WhatsApp..."
+          className="w-full max-w-md rounded-lg border border-stone-300 px-3 py-2"
+        />
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        {[
+          { titulo: 'Aguardando aceite', statuses: ['aguardando_aceite'], cor: 'stone' },
+          { titulo: 'Pedidos aceitos', statuses: ['novo_pedido'], cor: 'blue' },
+          { titulo: 'Em preparação', statuses: ['em_preparacao'], cor: 'amber' },
+          { titulo: 'Finalizados', statuses: ['finalizado'], cor: 'green' },
+        ].map((col) => {
+          const s = (searchPedidos || '').trim().toLowerCase();
+          const colPedidos = pedidosOnline.filter((p) => {
+            if (!col.statuses.includes(p.status)) return false;
+            if (!s) return true;
+            const numero = String(p.numero ?? '');
+            const nome = (p.cliente_nome || '').toLowerCase();
+            const whatsapp = (p.cliente_whatsapp || '').replace(/\D/g, '');
+            const sDigitos = s.replace(/\D/g, '');
+            return numero.includes(s) || nome.includes(s) || (sDigitos && whatsapp.includes(sDigitos)) || (p.cliente_whatsapp || '').toLowerCase().includes(s);
+          });
+          return (
+            <div key={col.titulo} className={`rounded-xl border-2 min-h-[160px] flex flex-col overflow-hidden ${col.cor === 'stone' ? 'border-stone-200 bg-stone-50/30' : col.cor === 'blue' ? 'border-blue-200 bg-blue-50/30' : col.cor === 'amber' ? 'border-amber-200 bg-amber-50/30' : 'border-green-200 bg-green-50/30'}`}>
+              <div className={`px-3 py-2 font-semibold text-sm border-b ${col.cor === 'stone' ? 'border-stone-200 text-stone-700' : col.cor === 'blue' ? 'border-blue-200 text-blue-800' : col.cor === 'amber' ? 'border-amber-200 text-amber-800' : 'border-green-200 text-green-800'}`}>
+                {col.titulo} ({colPedidos.length})
               </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      <section className="mb-8">
-        <h2 className="text-lg font-semibold text-stone-700 mb-4">Pendentes de entrega</h2>
-        {todos.length === 0 ? (
-          <p className="text-stone-500">Nenhum pedido aceito no momento.</p>
-        ) : (
-          <div className="space-y-4">
-            {todos.map((p) => (
-              <div key={p.id} className="rounded-xl bg-white p-4 shadow-sm flex flex-wrap items-stretch justify-between gap-4">
-                <div className="flex-1 min-w-0">
-                  <div className="font-semibold text-stone-800">Pedido #{p.numero}</div>
-                  <p className="text-sm font-medium text-amber-700 mt-0.5">Total: R$ {totalPedido(p).toFixed(2)}</p>
-                  <span className="text-xs px-2 py-0.5 rounded bg-stone-100 text-stone-600">{statusLabel[p.status] ?? p.status}</span>
-                  <p className="text-sm text-stone-600 mt-1">{p.cliente_nome} - {p.cliente_whatsapp}</p>
-                  <p className="text-sm text-stone-500">{p.cliente_endereco}</p>
-                  {p.ponto_referencia && <p className="text-sm text-stone-500">Ref: {p.ponto_referencia}</p>}
-                  <p className="text-sm">Pagamento: {p.forma_pagamento} {p.troco_para ? `- Troco para R$ ${p.troco_para}` : ''}</p>
-                  <ul className="mt-2 text-sm">
-                    {(p.pedido_itens ?? []).map((i: any) => (
-                      <li key={i.id}>{i.quantidade}x {i.produtos?.nome || i.produtos?.descricao} {i.observacao ? `(${i.observacao})` : ''}</li>
-                    ))}
-                  </ul>
-                </div>
-                <div className="min-w-[200px] w-[200px] flex flex-col items-center justify-center gap-2 shrink-0">
-                  <button type="button" onClick={() => handleImprimirPedido(p)} className="rounded-lg border border-stone-300 px-4 py-2 text-sm text-stone-700 hover:bg-stone-50">
-                    Imprimir pedido
-                  </button>
-                  <button type="button" onClick={() => (pedidoPodeEditarSemConfirmacao(p) ? abrirEdicao(p) : setConfirmarEdicaoAvancada(p))} className="rounded-lg border border-amber-300 px-4 py-2 text-sm text-amber-700 hover:bg-amber-50">
-                    Editar pedido
-                  </button>
-                  {p.status === 'finalizado' && (
-                    <>
-                      {!p.imprimido_entrega_em ? null : (
-                        <button onClick={() => abrirEncerrar(p)} className="rounded-lg bg-amber-600 px-4 py-2 text-white hover:bg-amber-700">
-                          Encerrar pedido
-                        </button>
+              <div className="flex-1 p-2 space-y-3 overflow-y-auto max-h-[60vh]">
+                {colPedidos.map((p) => {
+                  const isAguardando = p.status === 'aguardando_aceite';
+                  const isFinalizado = p.status === 'finalizado';
+                  const jaEncerrado = Boolean(p.encerrado_em);
+                  return (
+                    <div key={p.id} className={`rounded-lg border bg-white p-3 flex flex-col gap-2 ${isFinalizado && !jaEncerrado ? 'border-amber-400 border-l-4' : ''}`}>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-semibold text-stone-800 text-sm">#{p.numero}</div>
+                        <p className="text-xs font-medium text-amber-700">R$ {totalPedido(p).toFixed(2)}</p>
+                        <span className="text-xs text-stone-600">{p.cliente_nome} – {p.cliente_whatsapp}</span>
+                        {!isAguardando && <span className="ml-1 text-xs px-1.5 py-0.5 rounded bg-stone-100 text-stone-600">{statusLabel[p.status] ?? p.status}</span>}
+                        <ul className="mt-1 text-xs text-stone-600 line-clamp-2">
+                          {(p.pedido_itens ?? []).map((i: any) => (
+                            <li key={i.id}>{i.quantidade}x {i.produtos?.nome || i.produtos?.descricao}</li>
+                          ))}
+                        </ul>
+                      </div>
+                      <div className="flex flex-wrap gap-1 text-xs">
+                        <button type="button" onClick={() => handleImprimirPedido(p)} className="text-stone-600 hover:underline">Imprimir</button>
+                        <button type="button" onClick={() => (pedidoPodeEditarSemConfirmacao(p) ? abrirEdicao(p) : setConfirmarEdicaoAvancada(p))} className="text-amber-600 hover:underline">Editar</button>
+                        <button type="button" onClick={() => setPopupCancelar({ pedidoId: p.id, adminOverride: !pedidoPodeEditarSemConfirmacao(p) })} className="text-red-600 hover:underline">Cancelar</button>
+                        {isAguardando && (
+                          <button type="button" onClick={() => handleAceitar(p.id)} className="text-green-700 font-medium hover:underline">Aceitar</button>
+                        )}
+                        <button type="button" onClick={() => abrirEnviarParaMesa(p)} className="text-stone-600 hover:underline">Enviar para mesa</button>
+                        {isFinalizado && !jaEncerrado && p.imprimido_entrega_em && (
+                          <button type="button" onClick={() => abrirEncerrar(p)} className="text-amber-700 font-medium hover:underline">Encerrar pedido</button>
+                        )}
+                      </div>
+                      {!jaEncerrado && (p.status === 'novo_pedido' || p.status === 'em_preparacao') && pedidoTemItemParaCozinha(p) && (
+                        <span className="text-xs text-stone-500">Aguardando cozinha</span>
                       )}
-                    </>
-                  )}
-                  {pedidoTemItemParaCozinha(p) && (p.status === 'novo_pedido' || p.status === 'em_preparacao') && (
-                    <span className="rounded-lg border border-stone-200 bg-stone-50 px-4 py-2 text-sm text-stone-500">
-                      Aguardando finalização na cozinha
-                    </span>
-                  )}
-                  <button type="button" onClick={() => abrirEnviarParaMesa(p)} className="rounded-lg border border-stone-400 px-4 py-2 text-sm text-stone-700 hover:bg-stone-50">
-                    Enviar para mesa
-                  </button>
-                  <button onClick={() => setPopupCancelar({ pedidoId: p.id, adminOverride: !pedidoPodeEditarSemConfirmacao(p) })} className="rounded-lg border border-red-300 px-4 py-2 text-sm text-red-700 hover:bg-red-50">
-                    Cancelar pedido
-                  </button>
-                </div>
+                      {jaEncerrado && (
+                        <span className="text-xs text-green-700">Encerrado – {p.forma_pagamento ?? '-'}</span>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
-            ))}
-          </div>
-        )}
-      </section>
+            </div>
+          );
+        })}
+      </div>
 
       {popupEnviarParaMesa && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -463,26 +444,6 @@ export default function AdminPedidosOnline() {
         </div>
       )}
 
-      <div>
-        <button onClick={() => setAccordionEncerrados(!accordionEncerrados)} className="flex w-full items-center justify-between rounded-lg bg-stone-100 px-4 py-2 text-left font-medium text-stone-700">
-          Pedidos encerrados hoje
-          <span>{accordionEncerrados ? '−' : '+'}</span>
-        </button>
-        {accordionEncerrados && (
-          <div className="mt-2 space-y-2">
-            {encerradosHoje.length === 0 ? (
-              <p className="text-sm text-stone-500 py-2">Nenhum pedido encerrado hoje.</p>
-            ) : (
-              encerradosHoje.map((p) => (
-                <div key={p.id} className="rounded-lg border border-stone-200 bg-white px-4 py-2 text-sm flex flex-wrap justify-between gap-2 items-center">
-                  <span>#{p.numero} - {p.cliente_nome} - {p.forma_pagamento ?? '-'} - {p.encerrado_em ? new Date(p.encerrado_em).toLocaleString('pt-BR') : ''}</span>
-                  <span className="font-medium text-amber-700">R$ {totalPedido(p).toFixed(2)}</span>
-                </div>
-              ))
-            )}
-          </div>
-        )}
-      </div>
     </div>
   );
 }
