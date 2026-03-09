@@ -37,13 +37,16 @@ export default function AtendenteViagem() {
   }, [toast]);
 
   useEffect(() => {
+    if (!profile?.id) return;
     load();
     getProdutos(true).then(setProdutos);
-  }, []);
+  }, [profile?.id]);
 
   async function load() {
+    if (!profile?.id) return;
     const [data, hoje] = await Promise.all([getPedidosViagemAbertos(), getPedidosViagemHoje()]);
-    setPedidos(data.filter((p) => p.status === 'novo_pedido'));
+    const meusAbertos = data.filter((p) => p.status === 'novo_pedido' && (p.comandas as any)?.atendente_id === profile?.id);
+    setPedidos(meusAbertos);
     setPedidosHoje(hoje);
     setLoading(false);
   }

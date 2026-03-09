@@ -697,10 +697,31 @@ export async function getPedidosViagemAbertos() {
   if (!comandaIds.length) return [];
   const { data } = await supabase
     .from('pedidos')
-    .select('*, pedido_itens(*, produtos(*)), comandas(nome_cliente, aberta, profiles(nome))')
+    .select('*, pedido_itens(*, produtos(*)), comandas(nome_cliente, aberta, atendente_id, profiles(nome))')
     .in('comanda_id', comandaIds)
     .neq('status', 'cancelado')
     .order('created_at', { ascending: false });
+  return (data ?? []) as any[];
+}
+
+/** Pedidos da mesa Viagem já encerrados hoje (para o accordion de finalizados). */
+export async function getPedidosViagemEncerradosHoje() {
+  const { data: mesas } = await supabase.from('mesas').select('id').eq('is_viagem', true).limit(1);
+  const viagemMesaId = ((mesas ?? []) as { id: string }[])[0]?.id;
+  if (!viagemMesaId) return [];
+  const { data: comandas } = await supabase.from('comandas').select('id').eq('mesa_id', viagemMesaId).eq('aberta', false);
+  const comandaIds = (comandas ?? []).map((c: { id: string }) => c.id);
+  if (!comandaIds.length) return [];
+  const { desde, ate } = hojeBrasiliaUTC();
+  const { data } = await supabase
+    .from('pedidos')
+    .select('*, pedido_itens(*, produtos(*)), comandas(nome_cliente, aberta, profiles(nome))')
+    .in('comanda_id', comandaIds)
+    .eq('status', 'finalizado')
+    .not('encerrado_em', 'is', null)
+    .gte('encerrado_em', desde)
+    .lte('encerrado_em', ate)
+    .order('encerrado_em', { ascending: false });
   return (data ?? []) as any[];
 }
 

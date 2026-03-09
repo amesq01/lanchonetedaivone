@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { getPedidosViagemAbertos, getTotalComanda, getTotalAPagarComanda, closeComanda, getCuponsAtivos, applyDescontoComanda, clearDescontoComanda, getProdutos, updatePedidoItens, updatePedidoStatus, getMesasParaTransferencia, openComanda, movePedidosParaOutraComanda, createPedidoViagem } from '../../lib/api';
+import { getPedidosViagemAbertos, getPedidosViagemEncerradosHoje, getTotalComanda, getTotalAPagarComanda, closeComanda, getCuponsAtivos, applyDescontoComanda, clearDescontoComanda, getProdutos, updatePedidoItens, updatePedidoStatus, getMesasParaTransferencia, openComanda, movePedidosParaOutraComanda, createPedidoViagem } from '../../lib/api';
 import type { FraçãoPagamento } from '../../lib/api';
 import { printContaViagem, printPedido, printPedidosUnificados } from '../../lib/printPdf';
 import { supabase } from '../../lib/supabase';
@@ -54,8 +54,8 @@ export default function AdminViagem() {
   }, []);
 
   async function load() {
-    const abertos = await getPedidosViagemAbertos();
-    setPedidos(abertos);
+    const [abertos, encerrados] = await Promise.all([getPedidosViagemAbertos(), getPedidosViagemEncerradosHoje()]);
+    setPedidos([...abertos, ...encerrados]);
     setLoading(false);
   }
 
