@@ -708,7 +708,7 @@ export async function getPedidosViagemEncerradosHoje() {
   const { desde, ate } = hojeBrasiliaUTC();
   const { data } = await supabase
     .from('pedidos')
-    .select('*, pedido_itens(*, produtos(*)), comandas(nome_cliente, aberta, profiles(nome))')
+    .select('*, pedido_itens(*, produtos(*)), comandas(nome_cliente, aberta, atendente_id, profiles(nome))')
     .in('comanda_id', comandaIds)
     .eq('status', 'finalizado')
     .not('encerrado_em', 'is', null)

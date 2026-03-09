@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { getPedidosViagemAbertos, getPedidosViagemEncerradosHoje, getTotalComanda, getTotalAPagarComanda, closeComanda, getCuponsAtivos, applyDescontoComanda, clearDescontoComanda, getProdutos, updatePedidoItens, updatePedidoStatus, getMesasParaTransferencia, openComanda, movePedidosParaOutraComanda, createPedidoViagem } from '../../lib/api';
 import type { FraçãoPagamento } from '../../lib/api';
 import { printContaViagem, printPedido, printPedidosUnificados } from '../../lib/printPdf';
@@ -8,6 +8,33 @@ import type { Cupom } from '../../types/database';
 import type { Produto } from '../../types/database';
 import { precoVenda, imagensProduto } from '../../types/database';
 import { formatarTelefone } from '../../lib/mascaraTelefone';
+
+function haXmin(fromAt: string): string {
+  const min = Math.floor((Date.now() - new Date(fromAt).getTime()) / 60_000);
+  if (min < 1) return 'há menos de 1 min';
+  if (min === 1) return 'há 1 min';
+  return `há ${min} min`;
+}
+
+function finalizadoHa(fromAt: string): string {
+  const min = Math.floor((Date.now() - new Date(fromAt).getTime()) / 60_000);
+  if (min < 1) return 'Finalizado há menos de 1 min';
+  if (min === 1) return 'Finalizado há 1 min';
+  if (min < 60) return `Finalizado há ${min} min`;
+  const horas = Math.floor(min / 60);
+  if (horas === 1) return 'Finalizado há 1 hora';
+  return `Finalizado há ${horas} horas`;
+}
+
+function encerradoHa(fromAt: string): string {
+  const min = Math.floor((Date.now() - new Date(fromAt).getTime()) / 60_000);
+  if (min < 1) return 'Encerrado há menos de 1 min';
+  if (min === 1) return 'Encerrado há 1 min';
+  if (min < 60) return `Encerrado há ${min} min`;
+  const horas = Math.floor(min / 60);
+  if (horas === 1) return 'Encerrado há 1 hora';
+  return `Encerrado há ${horas} horas`;
+}
 
 export default function AdminViagem() {
   const [pedidos, setPedidos] = useState<any[]>([]);
@@ -44,14 +71,32 @@ export default function AdminViagem() {
   const [carrinhoNovo, setCarrinhoNovo] = useState<ItemCarrinho[]>([]);
   const [enviandoNovo, setEnviandoNovo] = useState(false);
   const [searchPedidos, setSearchPedidos] = useState('');
+  const [atendenteIdFiltro, setAtendenteIdFiltro] = useState<string | null>(null);
+  const [, setTick] = useState(0);
 
   const { profile } = useAuth();
+
+  useEffect(() => {
+    const t = setInterval(() => setTick((n) => n + 1), 60_000);
+    return () => clearInterval(t);
+  }, []);
   const STATUS_EDITAVEL = ['novo_pedido', 'aguardando_aceite'];
 
   useEffect(() => {
     load();
     getProdutos(true).then(setProdutos);
   }, []);
+
+  const atendentes = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const p of pedidos) {
+      const c = p.comandas as any;
+      const id = c?.atendente_id;
+      const nome = c?.profiles?.nome ?? '-';
+      if (id) map.set(id, nome);
+    }
+    return Array.from(map.entries()).map(([id, nome]) => ({ id, nome })).sort((a, b) => a.nome.localeCompare(b.nome));
+  }, [pedidos]);
 
   async function load() {
     const [abertos, encerrados] = await Promise.all([getPedidosViagemAbertos(), getPedidosViagemEncerradosHoje()]);
@@ -418,15 +463,37 @@ export default function AdminViagem() {
         )}
       </div>
 
-      <div className="mb-3">
-        <label className="block text-sm font-medium text-stone-600 mb-1">Buscar pedido</label>
-        <input
-          type="text"
-          value={searchPedidos}
-          onChange={(e) => setSearchPedidos(e.target.value)}
-          placeholder="Nome do cliente ou número do pedido..."
-          className="w-full max-w-md rounded-lg border border-stone-300 px-3 py-2"
-        />
+      <div className="mb-3 flex flex-wrap items-end gap-2">
+        <div className="w-[250px]">
+          <label className="block text-base font-medium text-stone-600 mb-1">Buscar pedido</label>
+          <input
+            type="text"
+            value={searchPedidos}
+            onChange={(e) => setSearchPedidos(e.target.value)}
+            placeholder="Nome do cliente ou número do pedido..."
+            className="w-full rounded-lg border border-stone-300 px-3 py-2 text-base"
+          />
+        </div>
+        <div className="flex flex-wrap gap-1.5 items-center">
+          <span className="text-sm font-medium text-stone-600">Atendente:</span>
+          <button
+            type="button"
+            onClick={() => setAtendenteIdFiltro(null)}
+            className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium ${atendenteIdFiltro === null ? 'border-amber-500 bg-amber-100 text-amber-800' : 'border-stone-300 bg-white text-stone-600 hover:bg-stone-50'}`}
+          >
+            Todos
+          </button>
+          {atendentes.map((a) => (
+            <button
+              key={a.id}
+              type="button"
+              onClick={() => setAtendenteIdFiltro(a.id)}
+              className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium whitespace-nowrap ${atendenteIdFiltro === a.id ? 'border-amber-500 bg-amber-100 text-amber-800' : 'border-stone-300 bg-white text-stone-600 hover:bg-stone-50'}`}
+            >
+              {a.nome}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -438,6 +505,10 @@ export default function AdminViagem() {
           const s = (searchPedidos || '').trim().toLowerCase();
           const colPedidos = pedidos.filter((p) => {
             if (!col.statuses.includes(p.status)) return false;
+            if (atendenteIdFiltro != null) {
+              const atendenteId = (p.comandas as any)?.atendente_id;
+              if (atendenteId !== atendenteIdFiltro) return false;
+            }
             if (!s) return true;
             const numero = String(p.numero ?? '');
             const nomeCliente = (p.cliente_nome || (p.comandas as any)?.nome_cliente || '').toLowerCase();
@@ -452,8 +523,16 @@ export default function AdminViagem() {
                 {colPedidos.map((p) => {
                   const prontoEncerrar = p.status === 'finalizado' && comandaAberta(p);
                   const jaEncerrado = p.status === 'finalizado' && !comandaAberta(p);
+                  const tempoTexto = !jaEncerrado && (p.status === 'novo_pedido' || p.status === 'aguardando_aceite' || p.status === 'em_preparacao') && p.created_at
+                    ? haXmin(p.created_at)
+                    : prontoEncerrar && p.updated_at
+                      ? finalizadoHa(p.updated_at)
+                      : jaEncerrado && p.encerrado_em
+                        ? encerradoHa(p.encerrado_em)
+                        : null;
                   return (
-                    <div key={p.id} className={`rounded-lg border bg-white p-3 flex flex-col gap-2 ${prontoEncerrar ? 'border-amber-400 border-l-4' : ''}`}>
+                    <div key={p.id} className={`rounded-lg border bg-white p-3 flex flex-col gap-2 relative ${prontoEncerrar ? 'border-amber-400 border-l-4 pr-20' : ''}`}>
+                      {tempoTexto && <span className="absolute bottom-2 right-2 text-xs text-stone-500">{tempoTexto}</span>}
                       <div className="flex items-start gap-2">
                         {!jaEncerrado && <input type="checkbox" checked={pedidosSelecionadosViagem.has(p.id)} onChange={() => togglePedidoSelecionadoViagem(p.id)} className="mt-0.5 rounded border-stone-300 shrink-0" />}
                         <div className="flex-1 min-w-0">
@@ -468,27 +547,29 @@ export default function AdminViagem() {
                             ))}
                           </ul>
                         </div>
+                        {prontoEncerrar && (
+                          <div className="absolute top-1/2 right-3 -translate-y-1/2 flex flex-col gap-1">
+                            <button type="button" onClick={() => pedidoPodeEditarSemConfirmacao(p) ? abrirEdicao(p) : setConfirmarEdicaoAvancada(p)} className="rounded border border-amber-300 px-2 py-1 text-amber-700 hover:bg-amber-50 text-xs whitespace-nowrap">Editar</button>
+                            <button type="button" onClick={() => setPopupCancelar({ pedidoId: p.id, adminOverride: !pedidoPodeEditarSemConfirmacao(p) })} className="rounded border border-red-200 px-2 py-1 text-red-600 hover:bg-red-50 text-xs whitespace-nowrap">Cancelar</button>
+                          </div>
+                        )}
                       </div>
                       <div className="flex flex-wrap gap-1 text-xs">
                         {jaEncerrado ? (
                           <button type="button" onClick={() => printPedido(p, 'Viagem')} className="rounded border border-stone-300 px-2 py-1 text-stone-600 hover:bg-stone-50 text-xs">Reimprimir pedido</button>
+                        ) : prontoEncerrar ? (
+                          <>
+                            <button type="button" onClick={() => handleAbrirImprimir(p)} className="rounded border border-stone-300 px-2 py-1 text-stone-600 hover:bg-stone-50 text-xs">Imprimir conta</button>
+                            <button type="button" onClick={() => handleEncerrarPedido(p)} className="rounded border border-amber-400 bg-amber-100 px-2 py-1 text-amber-700 font-medium hover:bg-amber-200 text-xs">Encerrar pedido</button>
+                          </>
                         ) : (
                           <>
-                            <button type="button" onClick={() => printPedido(p, 'Viagem')} className={prontoEncerrar ? 'rounded border border-stone-300 px-2 py-1 text-stone-600 hover:bg-stone-50 text-xs' : 'text-stone-600 hover:underline'}>Imprimir</button>
-                            <button type="button" onClick={() => pedidoPodeEditarSemConfirmacao(p) ? abrirEdicao(p) : setConfirmarEdicaoAvancada(p)} className={prontoEncerrar ? 'rounded border border-amber-300 px-2 py-1 text-amber-700 hover:bg-amber-50 text-xs' : 'text-amber-600 hover:underline'}>Editar</button>
-                            <button type="button" onClick={() => setPopupCancelar({ pedidoId: p.id, adminOverride: !pedidoPodeEditarSemConfirmacao(p) })} className={prontoEncerrar ? 'rounded border border-red-200 px-2 py-1 text-red-600 hover:bg-red-50 text-xs' : 'text-red-600 hover:underline'}>Cancelar</button>
-                            {prontoEncerrar && (
-                              <>
-                                <button type="button" onClick={() => handleAbrirImprimir(p)} className="rounded border border-stone-300 px-2 py-1 text-stone-600 hover:bg-stone-50 text-xs">Imprimir conta</button>
-                                <button type="button" onClick={() => handleEncerrarPedido(p)} className="rounded border border-amber-400 px-2 py-1 text-amber-700 font-medium hover:bg-amber-50 text-xs">Encerrar pedido</button>
-                              </>
-                            )}
+                            <button type="button" onClick={() => printPedido(p, 'Viagem')} className="rounded border border-stone-300 px-2 py-1 text-stone-600 hover:bg-stone-50 text-xs">Imprimir</button>
+                            <button type="button" onClick={() => pedidoPodeEditarSemConfirmacao(p) ? abrirEdicao(p) : setConfirmarEdicaoAvancada(p)} className="rounded border border-amber-300 px-2 py-1 text-amber-700 hover:bg-amber-50 text-xs">Editar</button>
+                            <button type="button" onClick={() => setPopupCancelar({ pedidoId: p.id, adminOverride: !pedidoPodeEditarSemConfirmacao(p) })} className="rounded border border-red-200 px-2 py-1 text-red-600 hover:bg-red-50 text-xs">Cancelar</button>
                           </>
                         )}
                       </div>
-                      {!jaEncerrado && (p.status === 'novo_pedido' || p.status === 'aguardando_aceite' || p.status === 'em_preparacao') && (
-                        <span className="text-xs text-stone-500">Aguardando cozinha</span>
-                      )}
                       {jaEncerrado && (
                         <span className="text-xs text-green-700">Encerrado – {p.forma_pagamento ?? '-'}</span>
                       )}
