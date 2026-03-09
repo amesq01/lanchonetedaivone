@@ -12,7 +12,6 @@ import { formatarTelefone } from '../../lib/mascaraTelefone';
 export default function AdminViagem() {
   const [pedidos, setPedidos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [accordionFinalizados, setAccordionFinalizados] = useState(false);
   const [popupPagamento, setPopupPagamento] = useState<{ pedidoId: string; comandaId: string } | null>(null);
   const [totalContaEncerramento, setTotalContaEncerramento] = useState(0);
   const [fracoesPagamento, setFracoesPagamento] = useState<FraçãoPagamento[]>([]);
@@ -257,9 +256,6 @@ export default function AdminViagem() {
   const filtradosEdicao = sEdicao ? produtos.filter((p) => (p.codigo?.toLowerCase().includes(sEdicao) || (p.nome ?? '').toLowerCase().includes(sEdicao) || (p.descricao ?? '').toLowerCase().includes(sEdicao))) : [];
 
   const comandaAberta = (p: any) => (Array.isArray(p.comandas) ? p.comandas[0]?.aberta : p.comandas?.aberta) !== false;
-  const emPreparacao = pedidos.filter((p) => p.status !== 'finalizado');
-  const prontosEncerrar = pedidos.filter((p) => p.status === 'finalizado' && comandaAberta(p));
-  const finalizadosEncerrados = pedidos.filter((p) => p.status === 'finalizado' && !comandaAberta(p));
 
   function totalPedido(p: any) {
     const subtotal = (p.pedido_itens ?? []).reduce((s: number, i: any) => s + (i.quantidade || 0) * Number(i.valor_unitario || 0), 0);
@@ -421,80 +417,63 @@ export default function AdminViagem() {
         )}
       </div>
 
-      <div className="space-y-4">
-        {emPreparacao.map((p) => (
-          <div key={p.id} className="rounded-xl bg-white p-3 sm:p-4 shadow-sm flex flex-wrap items-stretch justify-between gap-3 sm:gap-4">
-            <div className="flex items-start gap-2 flex-1 min-w-0">
-              <input type="checkbox" checked={pedidosSelecionadosViagem.has(p.id)} onChange={() => togglePedidoSelecionadoViagem(p.id)} className="mt-1 rounded border-stone-300" />
-              <div className="flex-1 min-w-0">
-              <div className="font-semibold text-stone-800">
-              {(p.comandas as any)?.profiles?.nome
-                ? `Pedido #${p.numero} – ${(p.comandas as any).profiles.nome}${(p as any).lancado_pelo_admin ? ' (lançada pelo admin)' : ''}`
-                : `Pedido #${p.numero}${(p as any).lancado_pelo_admin ? ' (lançada pelo admin)' : ''}`}
-            </div>
-              <p className="text-sm font-medium text-amber-700 mt-0.5">Total: R$ {totalPedido(p).toFixed(2)}</p>
-              <span className="text-stone-600">- {p.cliente_nome || (p.comandas as any)?.nome_cliente}</span>
-              <ul className="mt-2 text-sm text-stone-600">
-                {(p.pedido_itens ?? []).map((i: any) => (
-                  <li key={i.id}>{i.quantidade}x {i.produtos?.nome || i.produtos?.descricao}</li>
-                ))}
-              </ul>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {[
+          { titulo: 'Novos pedidos', statuses: ['novo_pedido', 'aguardando_aceite'], cor: 'stone' },
+          { titulo: 'Em preparação', statuses: ['em_preparacao'], cor: 'amber' },
+          { titulo: 'Finalizados', statuses: ['finalizado'], cor: 'green' },
+        ].map((col) => {
+          const colPedidos = pedidos.filter((p) => col.statuses.includes(p.status));
+          return (
+            <div key={col.titulo} className={`rounded-xl border-2 min-h-[160px] flex flex-col overflow-hidden ${col.cor === 'stone' ? 'border-stone-200 bg-stone-50/30' : col.cor === 'amber' ? 'border-amber-200 bg-amber-50/30' : 'border-green-200 bg-green-50/30'}`}>
+              <div className={`px-3 py-2 font-semibold text-sm border-b ${col.cor === 'stone' ? 'border-stone-200 text-stone-700' : col.cor === 'amber' ? 'border-amber-200 text-amber-800' : 'border-green-200 text-green-800'}`}>
+                {col.titulo} ({colPedidos.length})
+              </div>
+              <div className="flex-1 p-2 space-y-3 overflow-y-auto max-h-[60vh]">
+                {colPedidos.map((p) => {
+                  const prontoEncerrar = p.status === 'finalizado' && comandaAberta(p);
+                  const jaEncerrado = p.status === 'finalizado' && !comandaAberta(p);
+                  return (
+                    <div key={p.id} className={`rounded-lg border bg-white p-3 flex flex-col gap-2 ${prontoEncerrar ? 'border-amber-400 border-l-4' : ''}`}>
+                      <div className="flex items-start gap-2">
+                        <input type="checkbox" checked={pedidosSelecionadosViagem.has(p.id)} onChange={() => togglePedidoSelecionadoViagem(p.id)} className="mt-0.5 rounded border-stone-300 shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <div className="font-semibold text-stone-800 text-sm">
+                            {(p.comandas as any)?.profiles?.nome ? `#${p.numero} – ${(p.comandas as any).profiles.nome}${(p as any).lancado_pelo_admin ? ' (admin)' : ''}` : `#${p.numero}${(p as any).lancado_pelo_admin ? ' (admin)' : ''}`}
+                          </div>
+                          <p className="text-xs font-medium text-amber-700">R$ {totalPedido(p).toFixed(2)}</p>
+                          <span className="text-xs text-stone-600">{p.cliente_nome || (p.comandas as any)?.nome_cliente}</span>
+                          <ul className="mt-1 text-xs text-stone-600 line-clamp-2">
+                            {(p.pedido_itens ?? []).map((i: any) => (
+                              <li key={i.id}>{i.quantidade}x {i.produtos?.nome || i.produtos?.descricao}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-1 text-xs">
+                        <button type="button" onClick={() => printPedido(p, 'Viagem')} className="text-stone-600 hover:underline">Imprimir</button>
+                        <button type="button" onClick={() => pedidoPodeEditarSemConfirmacao(p) ? abrirEdicao(p) : setConfirmarEdicaoAvancada(p)} className="text-amber-600 hover:underline">Editar</button>
+                        <button type="button" onClick={() => setPopupCancelar({ pedidoId: p.id, adminOverride: !pedidoPodeEditarSemConfirmacao(p) })} className="text-red-600 hover:underline">Cancelar</button>
+                        {prontoEncerrar && (
+                          <>
+                            <button type="button" onClick={() => handleAbrirImprimir(p)} className="text-stone-600 hover:underline">Imprimir conta</button>
+                            <button type="button" onClick={() => handleEncerrarPedido(p)} className="text-amber-700 font-medium hover:underline">Encerrar pedido</button>
+                          </>
+                        )}
+                      </div>
+                      {!jaEncerrado && (p.status === 'novo_pedido' || p.status === 'aguardando_aceite' || p.status === 'em_preparacao') && (
+                        <span className="text-xs text-stone-500">Aguardando cozinha</span>
+                      )}
+                      {jaEncerrado && (
+                        <span className="text-xs text-green-700">Encerrado – {p.forma_pagamento ?? '-'}</span>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
-            <div className="min-w-[200px] w-[200px] flex flex-col items-center justify-center gap-2 shrink-0">
-              <button type="button" onClick={() => printPedido(p, 'Viagem')} className="rounded-lg border border-stone-300 px-4 py-2 text-sm text-stone-700 hover:bg-stone-50 mb-2">
-                Imprimir pedido
-              </button>
-              <button type="button" onClick={() => pedidoPodeEditarSemConfirmacao(p) ? abrirEdicao(p) : setConfirmarEdicaoAvancada(p)} className="rounded-lg border border-amber-300 px-4 py-2 text-sm text-amber-700 hover:bg-amber-50 mb-2">
-                Editar pedido
-              </button>
-              <button type="button" onClick={() => setPopupCancelar({ pedidoId: p.id, adminOverride: !pedidoPodeEditarSemConfirmacao(p) })} className="rounded-lg border border-red-300 px-4 py-2 text-sm text-red-700 hover:bg-red-50 mb-2">
-                Cancelar pedido
-              </button>
-              <span className="rounded-lg border border-stone-200 bg-stone-50 px-4 py-2 text-sm text-stone-500">
-                Aguardando finalização na cozinha
-              </span>
-            </div>
-          </div>
-        ))}
-        {prontosEncerrar.map((p) => (
-          <div key={p.id} className="rounded-xl bg-white p-3 sm:p-4 shadow-sm border-l-4 border-amber-500 flex flex-wrap items-stretch justify-between gap-3 sm:gap-4">
-            <div className="flex items-start gap-2 flex-1 min-w-0">
-              <input type="checkbox" checked={pedidosSelecionadosViagem.has(p.id)} onChange={() => togglePedidoSelecionadoViagem(p.id)} className="mt-1 rounded border-stone-300" />
-              <div className="flex-1 min-w-0">
-              <div className="font-semibold text-stone-800">
-              {(p.comandas as any)?.profiles?.nome
-                ? `Pedido #${p.numero} – ${(p.comandas as any).profiles.nome}${(p as any).lancado_pelo_admin ? ' (lançada pelo admin)' : ''}`
-                : `Pedido #${p.numero}${(p as any).lancado_pelo_admin ? ' (lançada pelo admin)' : ''}`}
-            </div>
-              <p className="text-sm font-medium text-amber-700 mt-0.5">Total: R$ {totalPedido(p).toFixed(2)}</p>
-              <span className="text-stone-600">- {p.cliente_nome || (p.comandas as any)?.nome_cliente}</span>
-              <ul className="mt-2 text-sm text-stone-600">
-                {(p.pedido_itens ?? []).map((i: any) => (
-                  <li key={i.id}>{i.quantidade}x {i.produtos?.nome || i.produtos?.descricao}</li>
-                ))}
-              </ul>
-              </div>
-            </div>
-            <div className="min-w-[200px] w-[200px] flex flex-col items-center justify-center gap-2 shrink-0">
-              <button type="button" onClick={() => printPedido(p, 'Viagem')} className="rounded-lg border border-stone-300 px-4 py-2 text-sm text-stone-700 hover:bg-stone-50">
-                Imprimir pedido
-              </button>
-              <button type="button" onClick={() => pedidoPodeEditarSemConfirmacao(p) ? abrirEdicao(p) : setConfirmarEdicaoAvancada(p)} className="rounded-lg border border-amber-300 px-4 py-2 text-sm text-amber-700 hover:bg-amber-50">
-                Editar pedido
-              </button>
-              <button type="button" onClick={() => setPopupCancelar({ pedidoId: p.id, adminOverride: !pedidoPodeEditarSemConfirmacao(p) })} className="rounded-lg border border-red-300 px-4 py-2 text-sm text-red-700 hover:bg-red-50">
-                Cancelar pedido
-              </button>
-              <button onClick={() => handleAbrirImprimir(p)} className="rounded-lg border border-stone-300 px-4 py-2 text-sm text-stone-700 hover:bg-stone-50">
-                Imprimir conta
-              </button>
-              <button onClick={() => handleEncerrarPedido(p)} className="rounded-lg bg-amber-600 px-4 py-2 text-sm text-white hover:bg-amber-700">
-                Encerrar pedido
-              </button>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {popupEditar && (
@@ -588,23 +567,6 @@ export default function AdminViagem() {
           </div>
         </div>
       )}
-
-      <div className="mt-8">
-        <button onClick={() => setAccordionFinalizados(!accordionFinalizados)} className="flex w-full items-center justify-between rounded-lg bg-stone-100 px-4 py-2 text-left font-medium text-stone-700">
-          Pedidos finalizados
-          <span>{accordionFinalizados ? '−' : '+'}</span>
-        </button>
-        {accordionFinalizados && (
-          <div className="mt-2 space-y-2">
-            {finalizadosEncerrados.map((p) => (
-              <div key={p.id} className="rounded-lg border border-stone-200 bg-white px-4 py-2 text-sm flex flex-wrap justify-between items-center gap-2">
-                <span>#{p.numero}{(p.comandas as any)?.profiles?.nome ? ` – ${(p.comandas as any).profiles.nome}${(p as any).lancado_pelo_admin ? ' (lançada pelo admin)' : ''}` : (p as any).lancado_pelo_admin ? ' (lançada pelo admin)' : ''} - {(p.comandas as any)?.nome_cliente ?? p.cliente_nome} - {p.forma_pagamento ?? '-'}</span>
-                <span className="font-medium text-amber-700">R$ {totalPedido(p).toFixed(2)}</span>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
 
       {popupImprimir && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
