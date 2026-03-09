@@ -11,29 +11,27 @@ import { formatarTelefone } from '../../lib/mascaraTelefone';
 
 function haXmin(fromAt: string): string {
   const min = Math.floor((Date.now() - new Date(fromAt).getTime()) / 60_000);
-  if (min < 1) return 'há menos de 1 min';
+  if (min < 1) return 'há <1 min';
   if (min === 1) return 'há 1 min';
   return `há ${min} min`;
 }
 
 function finalizadoHa(fromAt: string): string {
   const min = Math.floor((Date.now() - new Date(fromAt).getTime()) / 60_000);
-  if (min < 1) return 'Finalizado há menos de 1 min';
-  if (min === 1) return 'Finalizado há 1 min';
-  if (min < 60) return `Finalizado há ${min} min`;
-  const horas = Math.floor(min / 60);
-  if (horas === 1) return 'Finalizado há 1 hora';
-  return `Finalizado há ${horas} horas`;
+  if (min < 1) return 'Fin. há <1 min';
+  if (min === 1) return 'Fin. há 1 min';
+  if (min < 60) return `Fin. há ${min} min`;
+  const h = Math.floor(min / 60);
+  return `Fin. há ${h}h`;
 }
 
 function encerradoHa(fromAt: string): string {
   const min = Math.floor((Date.now() - new Date(fromAt).getTime()) / 60_000);
-  if (min < 1) return 'Encerrado há menos de 1 min';
-  if (min === 1) return 'Encerrado há 1 min';
-  if (min < 60) return `Encerrado há ${min} min`;
-  const horas = Math.floor(min / 60);
-  if (horas === 1) return 'Encerrado há 1 hora';
-  return `Encerrado há ${horas} horas`;
+  if (min < 1) return 'Encerr. há <1 min';
+  if (min === 1) return 'Encerr. há 1 min';
+  if (min < 60) return `Encerr. há ${min} min`;
+  const h = Math.floor(min / 60);
+  return `Encerr. há ${h}h`;
 }
 
 export default function AdminViagem() {
