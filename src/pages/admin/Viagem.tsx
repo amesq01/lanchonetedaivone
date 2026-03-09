@@ -43,6 +43,7 @@ export default function AdminViagem() {
   const [searchNovo, setSearchNovo] = useState('');
   const [carrinhoNovo, setCarrinhoNovo] = useState<ItemCarrinho[]>([]);
   const [enviandoNovo, setEnviandoNovo] = useState(false);
+  const [searchPedidos, setSearchPedidos] = useState('');
 
   const { profile } = useAuth();
   const STATUS_EDITAVEL = ['novo_pedido', 'aguardando_aceite'];
@@ -417,13 +418,31 @@ export default function AdminViagem() {
         )}
       </div>
 
+      <div className="mb-3">
+        <label className="block text-sm font-medium text-stone-600 mb-1">Buscar pedido</label>
+        <input
+          type="text"
+          value={searchPedidos}
+          onChange={(e) => setSearchPedidos(e.target.value)}
+          placeholder="Nome do cliente ou número do pedido..."
+          className="w-full max-w-md rounded-lg border border-stone-300 px-3 py-2"
+        />
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {[
           { titulo: 'Novos pedidos', statuses: ['novo_pedido', 'aguardando_aceite'], cor: 'stone' },
           { titulo: 'Em preparação', statuses: ['em_preparacao'], cor: 'amber' },
           { titulo: 'Finalizados', statuses: ['finalizado'], cor: 'green' },
         ].map((col) => {
-          const colPedidos = pedidos.filter((p) => col.statuses.includes(p.status));
+          const s = (searchPedidos || '').trim().toLowerCase();
+          const colPedidos = pedidos.filter((p) => {
+            if (!col.statuses.includes(p.status)) return false;
+            if (!s) return true;
+            const numero = String(p.numero ?? '');
+            const nomeCliente = (p.cliente_nome || (p.comandas as any)?.nome_cliente || '').toLowerCase();
+            return numero.includes(s) || nomeCliente.includes(s);
+          });
           return (
             <div key={col.titulo} className={`rounded-xl border-2 min-h-[160px] flex flex-col overflow-hidden ${col.cor === 'stone' ? 'border-stone-200 bg-stone-50/30' : col.cor === 'amber' ? 'border-amber-200 bg-amber-50/30' : 'border-green-200 bg-green-50/30'}`}>
               <div className={`px-3 py-2 font-semibold text-sm border-b ${col.cor === 'stone' ? 'border-stone-200 text-stone-700' : col.cor === 'amber' ? 'border-amber-200 text-amber-800' : 'border-green-200 text-green-800'}`}>
