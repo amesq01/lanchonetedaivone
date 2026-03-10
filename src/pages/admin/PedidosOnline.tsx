@@ -18,6 +18,7 @@ export default function AdminPedidosOnline() {
   const [popupCancelar, setPopupCancelar] = useState<{ pedidoId: string; adminOverride?: boolean } | null>(null);
   const [motivoCancelamento, setMotivoCancelamento] = useState('');
   const [confirmarEdicaoAvancada, setConfirmarEdicaoAvancada] = useState<any | null>(null);
+  const [confirmarAceitar, setConfirmarAceitar] = useState<any | null>(null);
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [popupEditar, setPopupEditar] = useState<any | null>(null);
   const [carrinhoEdicao, setCarrinhoEdicao] = useState<{ produto: Produto; quantidade: number; observacao: string }[]>([]);
@@ -403,7 +404,7 @@ export default function AdminPedidosOnline() {
                           </>
                         )}
                         {isAguardando && (
-                          <button type="button" onClick={() => handleAceitar(p.id)} className="rounded border border-green-600 bg-green-600 px-2 py-1 text-white font-medium hover:bg-green-700">Aceitar</button>
+                          <button type="button" onClick={() => setConfirmarAceitar(p)} className="rounded border border-green-600 bg-green-600 px-2 py-1 text-white font-medium hover:bg-green-700">Aceitar</button>
                         )}
                         {!jaEncerrado && (
                           <button type="button" onClick={() => abrirEnviarParaMesa(p)} className="rounded border border-stone-300 px-2 py-1 text-stone-600 hover:bg-stone-50">Enviar para mesa</button>
@@ -565,6 +566,19 @@ export default function AdminPedidosOnline() {
             <div className="flex gap-2">
               <button onClick={salvarEdicao} disabled={enviandoEdicao || carrinhoEdicao.length === 0} className="flex-1 rounded-lg bg-amber-600 py-2 font-medium text-white hover:bg-amber-700 disabled:opacity-50">Salvar alterações</button>
               <button onClick={() => setPopupEditar(null)} className="rounded-lg border border-stone-300 px-4 py-2 text-stone-600">Fechar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmarAceitar && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
+            <h3 className="font-semibold text-stone-800 mb-2">Aceitar pedido</h3>
+            <p className="text-sm text-stone-600 mb-4">Deseja aceitar o pedido #{confirmarAceitar.numero}?</p>
+            <div className="flex gap-2">
+              <button onClick={() => { handleAceitar(confirmarAceitar.id); setConfirmarAceitar(null); }} className="flex-1 rounded-lg bg-green-600 py-2 text-white hover:bg-green-700">Sim, aceitar</button>
+              <button onClick={() => setConfirmarAceitar(null)} className="rounded-lg border border-stone-300 px-4 py-2 text-stone-600">Não</button>
             </div>
           </div>
         </div>
