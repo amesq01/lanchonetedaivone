@@ -96,7 +96,7 @@ export default function AdminAtendentes() {
     setSavingEdit(true);
     setError('');
     try {
-      const { error: upError } = await supabase
+      const { error: upError } = await (supabase as any)
         .from('profiles')
         .update({
           codigo: editCodigo.trim() || null,
