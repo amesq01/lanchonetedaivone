@@ -1115,6 +1115,24 @@ export async function clearDescontoComanda(comandaId: string) {
   }
 }
 
+/** Aplica desconto em pedido online (cupom e/ou manual). Persiste para que o encerramento use o total correto. */
+export async function applyDescontoPedidoOnline(pedidoId: string, cupomId: string | null, valorDesconto: number) {
+  await (supabase as any).from('pedidos').update({
+    desconto: valorDesconto,
+    cupom_id: cupomId,
+    updated_at: new Date().toISOString(),
+  }).eq('id', pedidoId);
+}
+
+/** Remove o desconto do pedido online. */
+export async function clearDescontoPedidoOnline(pedidoId: string) {
+  await (supabase as any).from('pedidos').update({
+    desconto: 0,
+    cupom_id: null,
+    updated_at: new Date().toISOString(),
+  }).eq('id', pedidoId);
+}
+
 export async function getRelatorioCancelamentos(desde: string, ate: string) {
   const { data } = await supabase
     .from('pedidos')

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Copy } from 'lucide-react';
-import { getPedidosOnlinePendentes, getPedidosOnlineTodos, getPedidosOnlineEncerradosHoje, acceptPedidoOnline, setImprimidoEntregaPedido, encerrarPedidoOnline, getTotalAPagarPedido, getTotalPedidoById, getCuponsAtivos, updatePedidoStatus, updatePedidoItens, getProdutos, getMesasFechadasParaTransferencia, getComandaByMesa, openComanda, movePedidosParaOutraComanda } from '../../lib/api';
+import { getPedidosOnlinePendentes, getPedidosOnlineTodos, getPedidosOnlineEncerradosHoje, acceptPedidoOnline, setImprimidoEntregaPedido, encerrarPedidoOnline, getTotalAPagarPedido, getTotalPedidoById, getCuponsAtivos, updatePedidoStatus, updatePedidoItens, getProdutos, getMesasFechadasParaTransferencia, getComandaByMesa, openComanda, movePedidosParaOutraComanda, applyDescontoPedidoOnline, clearDescontoPedidoOnline } from '../../lib/api';
 import type { FraçãoPagamento } from '../../lib/api';
 import type { Cupom } from '../../types/database';
 import { printPedido, printContaViagem } from '../../lib/printPdf';
@@ -102,6 +102,11 @@ export default function AdminPedidosOnline() {
   const handleImprimirConta = async () => {
     if (!popupImprimirConta || !contaItensPedido) return;
     const subtotal = contaItensPedido.itens.reduce((s, i) => s + i.valor, 0);
+    if (valorDescontoPrint > 0) {
+      await applyDescontoPedidoOnline(popupImprimirConta.id, cupomSelecionado?.id ?? null, valorDescontoPrint);
+    } else {
+      await clearDescontoPedidoOnline(popupImprimirConta.id);
+    }
     await printContaViagem({
       pedidoNumero: popupImprimirConta.numero,
       clienteNome: popupImprimirConta.cliente_nome || '-',
@@ -121,6 +126,7 @@ export default function AdminPedidosOnline() {
     setPopupImprimirConta(null);
     setCupomDesconto('');
     setDescontoManual('');
+    load();
   };
 
   async function handleAceitar(pedidoId: string) {
