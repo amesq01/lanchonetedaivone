@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { createPedidoOnline, getConfig, getProdutos, validarCupom, canPlaceOrderOnline, getLojaOnlineSoRetirada } from '../../lib/api';
+import { createPedidoOnline, getConfig, getProdutos, validarCupom, canPlaceOrderOnline, getLojaOnlineSoRetirada, getLojaOnlineFormasPagamento } from '../../lib/api';
 import { precoVenda } from '../../types/database';
 import type { SavedItem } from './Carrinho';
 import { getCupomAplicado } from './Carrinho';
@@ -38,6 +38,7 @@ export default function LojaCheckout() {
   const [produtos, setProdutos] = useState<{ id: string; valor: number }[]>([]);
   const [bloqueado, setBloqueado] = useState<{ motivo: string } | null>(null);
   const [soRetirada, setSoRetirada] = useState(false);
+  const [formasPagamento, setFormasPagamento] = useState<string[]>(['PIX', 'Cartão crédito', 'Cartão débito', 'Dinheiro']);
   const cupomDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const cart = getCart();
@@ -51,6 +52,9 @@ export default function LojaCheckout() {
       setSoRetirada(v);
       if (v) setTipoEntrega('retirada');
     });
+    getLojaOnlineFormasPagamento().then(setFormasPagamento);
+    const t = setInterval(() => getLojaOnlineFormasPagamento().then(setFormasPagamento), 10000);
+    return () => clearInterval(t);
   }, []);
 
   useEffect(() => {
@@ -159,7 +163,9 @@ export default function LojaCheckout() {
     }
   };
 
-  const formas = ['PIX', 'Cartão crédito', 'Cartão débito', 'Dinheiro'];
+  useEffect(() => {
+    if (formaPagamento && !formasPagamento.includes(formaPagamento)) setFormaPagamento('');
+  }, [formasPagamento, formaPagamento]);
 
   return (
     <div className="min-h-screen bg-stone-50">
@@ -214,7 +220,7 @@ export default function LojaCheckout() {
             <label className="block text-sm font-medium text-stone-600">Forma de pagamento *</label>
             <select value={formaPagamento} onChange={(e) => setFormaPagamento(e.target.value)} required className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2">
               <option value="">Selecione</option>
-              {formas.map((f) => (
+              {formasPagamento.map((f) => (
                 <option key={f} value={f}>{f}</option>
               ))}
             </select>

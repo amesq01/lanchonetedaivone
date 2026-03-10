@@ -38,6 +38,22 @@ export async function setConfigValue(key: string, value: string | number) {
   await (supabase as any).from('config').upsert({ key, value, updated_at: new Date().toISOString() });
 }
 
+const FORMAS_PAGAMENTO_PADRAO = ['PIX', 'Cartão crédito', 'Cartão débito', 'Dinheiro'];
+
+/** Formas de pagamento disponíveis na loja online. Retorna as marcadas no admin. */
+export async function getLojaOnlineFormasPagamento(): Promise<string[]> {
+  const { data } = await supabase.from('config').select('value').eq('key', 'loja_online_formas_pagamento').maybeSingle();
+  const v = (data as { value?: unknown } | null)?.value;
+  if (!Array.isArray(v) || v.length === 0) return [...FORMAS_PAGAMENTO_PADRAO];
+  return v.filter((x): x is string => typeof x === 'string');
+}
+
+/** Atualiza as formas de pagamento disponíveis na loja online. */
+export async function setLojaOnlineFormasPagamento(formas: string[]) {
+  const validas = formas.filter((f) => typeof f === 'string' && f.trim());
+  await (supabase as any).from('config').upsert({ key: 'loja_online_formas_pagamento', value: validas.length ? validas : FORMAS_PAGAMENTO_PADRAO, updated_at: new Date().toISOString() });
+}
+
 /** Lanchonete aberta para pedidos online? (toggle admin). Default true se não configurado. */
 export async function getLanchoneteAberta(): Promise<boolean> {
   const v = await getConfigValue('pedido_online_aberta');
@@ -60,27 +76,36 @@ export async function setLojaOnlineSoRetirada(soRetirada: boolean) {
   await setConfigValue('loja_online_so_retirada', soRetirada ? 1 : 0);
 }
 
-/** Horário de abertura da loja online (ex.: "08:00"). null se não configurado. */
+/** Horário de abertura da loja online (ex.: "08:00"). null se não configurado. @deprecated Use getLojaOnlineAgendaAbertura */
 export async function getLojaOnlineHorarioAbertura(): Promise<string | null> {
-  const v = await getConfigValue('loja_online_horario_abertura');
-  if (v === null || v === undefined) return null;
-  const s = String(v).trim();
-  return s || null;
+  const agenda = await getLojaOnlineAgendaAbertura();
+  return agenda.horario || null;
 }
 
 export async function setLojaOnlineHorarioAbertura(horario: string) {
-  await setConfigValue('loja_online_horario_abertura', horario.trim() || '');
+  const agenda = await getLojaOnlineAgendaAbertura();
+  await setLojaOnlineAgendaAbertura(agenda.dias, horario.trim() || '');
 }
 
-/** Retorna se o cliente pode fazer pedido online (lanchonete aberta). */
-export async function canPlaceOrderOnline(): Promise<{ allowed: boolean; message?: string; horarioAbertura?: string | null }> {
-  const [aberta, horarioAbertura] = await Promise.all([getLanchoneteAberta(), getLojaOnlineHorarioAbertura()]);
-  if (aberta) return { allowed: true, horarioAbertura };
-  const msg = horarioAbertura
-    ? `A lanchonete está fechada para pedidos online. Abre às ${formatarHoraExibicao(horarioAbertura)}.`
-    : 'A lanchonete está fechada para pedidos online no momento. Tente novamente mais tarde.';
-  return { allowed: false, message: msg, horarioAbertura };
+/** Agenda de abertura: dias da semana (0=dom, 1=seg, ..., 6=sáb) e horário "HH:mm". */
+export async function getLojaOnlineAgendaAbertura(): Promise<{ dias: number[]; horario: string }> {
+  const { data } = await supabase.from('config').select('value').eq('key', 'loja_online_agenda_abertura').maybeSingle();
+  const v = (data as { value?: { dias?: number[]; horario?: string } } | null)?.value;
+  if (v && typeof v === 'object' && Array.isArray(v.dias) && typeof v.horario === 'string' && v.horario.trim()) {
+    return { dias: v.dias.filter((d) => d >= 0 && d <= 6), horario: v.horario.trim() };
+  }
+  const legacy = await getConfigValue('loja_online_horario_abertura');
+  const horarioLegacy = legacy != null ? String(legacy).trim() : '';
+  return { dias: [1, 2, 3, 4, 5, 6], horario: horarioLegacy || '08:00' };
 }
+
+export async function setLojaOnlineAgendaAbertura(dias: number[], horario: string) {
+  const h = horario.trim() || '08:00';
+  const d = dias.filter((x) => x >= 0 && x <= 6);
+  await (supabase as any).from('config').upsert({ key: 'loja_online_agenda_abertura', value: { dias: d.length ? d : [1, 2, 3, 4, 5, 6], horario: h }, updated_at: new Date().toISOString() });
+}
+
+const DIAS_SEMANA = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
 
 function formatarHoraExibicao(hhmm: string): string {
   const [h, m] = hhmm.split(':');
@@ -88,8 +113,35 @@ function formatarHoraExibicao(hhmm: string): string {
   const min = parseInt(m ?? '0', 10);
   if (Number.isNaN(hour)) return hhmm;
   if (hour === 0 && min === 0) return 'meia-noite';
-  if (hour === 12 && min === 0) return '12h';
-  return `${hour.toString().padStart(2, '0')}:${(min || 0).toString().padStart(2, '0')}`;
+  if (min === 0) return `${hour}h`;
+  return `${hour}h${min.toString().padStart(2, '0')}`;
+}
+
+/** Mensagem para o cliente: "Abre hoje às 19h" ou "Abre segunda às 19h" etc. */
+export async function getLojaOnlineMensagemAbertura(): Promise<string | null> {
+  const agenda = await getLojaOnlineAgendaAbertura();
+  if (!agenda.horario || agenda.dias.length === 0) return null;
+  const horaFmt = formatarHoraExibicao(agenda.horario);
+  const hoje = new Date().getDay();
+  if (agenda.dias.includes(hoje)) return `Abre hoje às ${horaFmt}`;
+  for (let i = 1; i <= 7; i++) {
+    const prox = (hoje + i) % 7;
+    if (agenda.dias.includes(prox)) {
+      if (i === 1) return `Abre amanhã às ${horaFmt}`;
+      return `Abre ${DIAS_SEMANA[prox]} às ${horaFmt}`;
+    }
+  }
+  return `Abre ${DIAS_SEMANA[agenda.dias[0]]} às ${horaFmt}`;
+}
+
+/** Retorna se o cliente pode fazer pedido online (lanchonete aberta). */
+export async function canPlaceOrderOnline(): Promise<{ allowed: boolean; message?: string; mensagemAbertura?: string | null }> {
+  const [aberta, mensagem] = await Promise.all([getLanchoneteAberta(), getLojaOnlineMensagemAbertura()]);
+  if (aberta) return { allowed: true, mensagemAbertura: mensagem };
+  const msg = mensagem
+    ? `A lanchonete está fechada para pedidos online. ${mensagem.charAt(0).toLowerCase() + mensagem.slice(1)}.`
+    : 'A lanchonete está fechada para pedidos online no momento. Tente novamente mais tarde.';
+  return { allowed: false, message: msg, mensagemAbertura: mensagem };
 }
 
 export async function getMesas() {

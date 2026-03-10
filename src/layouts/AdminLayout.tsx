@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useNovoPedidoOnline } from '../hooks/useNovoPedidoOnline';
-import { getAdminSidebarCounts, getLanchoneteAberta, setLanchoneteAberta as setLanchoneteAbertaApi, getLojaOnlineSoRetirada, setLojaOnlineSoRetirada as setLojaOnlineSoRetiradaApi, getLojaOnlineHorarioAbertura, setLojaOnlineHorarioAbertura as setLojaOnlineHorarioAberturaApi } from '../lib/api';
+import { getAdminSidebarCounts, getLanchoneteAberta, setLanchoneteAberta as setLanchoneteAbertaApi, getLojaOnlineSoRetirada, setLojaOnlineSoRetirada as setLojaOnlineSoRetiradaApi, getLojaOnlineAgendaAbertura, setLojaOnlineAgendaAbertura as setLojaOnlineAgendaAberturaApi, getLojaOnlineFormasPagamento, setLojaOnlineFormasPagamento as setLojaOnlineFormasPagamentoApi } from '../lib/api';
 import {
   UtensilsCrossed,
   Truck,
@@ -17,6 +17,7 @@ import {
   FileX,
   Menu,
   X,
+  ChevronDown,
 } from 'lucide-react';
 
 const nav = [
@@ -45,8 +46,14 @@ export default function AdminLayout() {
   const [toggleLoading, setToggleLoading] = useState(false);
   const [soRetiradaLoading, setSoRetiradaLoading] = useState(false);
   const [confirmandoSoRetirada, setConfirmandoSoRetirada] = useState<'ativar' | 'desativar' | null>(null);
-  const [horarioAbertura, setHorarioAbertura] = useState<string>('');
-  const [horarioAberturaSaving, setHorarioAberturaSaving] = useState(false);
+  const DIAS_SEMANA = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+  const [agendaAbertura, setAgendaAbertura] = useState<{ dias: number[]; horario: string }>({ dias: [1, 2, 3, 4, 5, 6], horario: '08:00' });
+  const [agendaSaving, setAgendaSaving] = useState(false);
+  const [diasSelectAberto, setDiasSelectAberto] = useState(false);
+  const FORMAS_PAGAMENTO = ['PIX', 'Cartão crédito', 'Cartão débito', 'Dinheiro'];
+  const [formasPagamento, setFormasPagamento] = useState<Set<string>>(new Set(FORMAS_PAGAMENTO));
+  const [formasPagamentoSaving, setFormasPagamentoSaving] = useState(false);
+  const [formasPagamentoSelectAberto, setFormasPagamentoSelectAberto] = useState(false);
 
   useEffect(() => {
     function load() {
@@ -60,7 +67,8 @@ export default function AdminLayout() {
   useEffect(() => {
     getLanchoneteAberta().then(setLanchoneteAberta);
     getLojaOnlineSoRetirada().then(setSoRetirada);
-    getLojaOnlineHorarioAbertura().then((h) => setHorarioAbertura(h ?? ''));
+    getLojaOnlineAgendaAbertura().then(setAgendaAbertura);
+    getLojaOnlineFormasPagamento().then((f) => setFormasPagamento(new Set(f)));
   }, []);
 
   useEffect(() => {
@@ -212,23 +220,126 @@ export default function AdminLayout() {
             </button>
           </div>
           <div className="px-3 py-2">
-            <label className="block text-xs font-medium text-stone-600 mb-1">Abre às (loja online)</label>
-            <input
-              type="time"
-              value={horarioAbertura}
-              onChange={(e) => setHorarioAbertura(e.target.value)}
-              onBlur={async () => {
-                if (horarioAberturaSaving) return;
-                setHorarioAberturaSaving(true);
-                try {
-                  await setLojaOnlineHorarioAberturaApi(horarioAbertura);
-                } finally {
-                  setHorarioAberturaSaving(false);
-                }
-              }}
-              className="w-full rounded border border-stone-300 px-2 py-1.5 text-sm"
-            />
-            {horarioAberturaSaving && <span className="text-xs text-stone-400">Salvando...</span>}
+            <label className="block text-xs font-medium text-stone-600 mb-1">Abertura (loja online)</label>
+            <div className="relative mb-1.5">
+              <button
+                type="button"
+                onClick={() => setDiasSelectAberto((v) => !v)}
+                className="w-full flex items-center justify-between rounded border border-stone-300 bg-white px-2 py-1.5 text-left text-sm text-stone-700"
+              >
+                <span className="truncate">
+                  {agendaAbertura.dias.length === 7 ? 'Todos os dias' : agendaAbertura.dias.length === 0 ? 'Nenhum' : agendaAbertura.dias.sort((a, b) => a - b).map((d) => DIAS_SEMANA[d]).join(', ')}
+                </span>
+                <ChevronDown className={`h-4 w-4 flex-shrink-0 text-stone-500 transition-transform ${diasSelectAberto ? 'rotate-180' : ''}`} />
+              </button>
+              {diasSelectAberto && (
+                <>
+                  <div className="fixed inset-0 z-10" aria-hidden onClick={() => setDiasSelectAberto(false)} />
+                  <div className="absolute left-0 right-0 top-full z-20 mt-0.5 rounded border border-stone-200 bg-white p-2 shadow-lg">
+                    <div className="flex flex-wrap gap-x-2 gap-y-1.5">
+                      {DIAS_SEMANA.map((label, i) => (
+                        <label key={i} className="flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={agendaAbertura.dias.includes(i)}
+                            disabled={agendaSaving}
+                            onChange={async () => {
+                              if (agendaSaving) return;
+                              const novo = new Set(agendaAbertura.dias);
+                              if (novo.has(i)) {
+                                if (novo.size <= 1) return;
+                                novo.delete(i);
+                              } else novo.add(i);
+                              const dias = [...novo].sort((a, b) => a - b);
+                              setAgendaAbertura((prev) => ({ ...prev, dias }));
+                              setAgendaSaving(true);
+                              try {
+                                await setLojaOnlineAgendaAberturaApi(dias, agendaAbertura.horario);
+                              } finally {
+                                setAgendaSaving(false);
+                              }
+                            }}
+                            className="rounded border-stone-300"
+                          />
+                          <span className="text-xs text-stone-600">{label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="time"
+                value={agendaAbertura.horario}
+                onChange={(e) => setAgendaAbertura((prev) => ({ ...prev, horario: e.target.value }))}
+                onBlur={async () => {
+                  if (agendaSaving) return;
+                  setAgendaSaving(true);
+                  try {
+                    await setLojaOnlineAgendaAberturaApi(agendaAbertura.dias, agendaAbertura.horario);
+                  } finally {
+                    setAgendaSaving(false);
+                  }
+                }}
+                className="rounded border border-stone-300 px-2 py-1.5 text-sm"
+              />
+              {agendaSaving && <span className="text-xs text-stone-400">Salvando...</span>}
+            </div>
+          </div>
+          <div className="px-3 py-2">
+            <label className="block text-xs font-medium text-stone-600 mb-1.5">Formas de pagamento (loja online)</label>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setFormasPagamentoSelectAberto((v) => !v)}
+                className="w-full flex items-center justify-between rounded border border-stone-300 bg-white px-2 py-1.5 text-left text-sm text-stone-700"
+              >
+                <span className="truncate">
+                  {formasPagamento.size === 4 ? 'Todas' : formasPagamento.size === 0 ? 'Nenhuma' : [...formasPagamento].join(', ')}
+                </span>
+                <ChevronDown className={`h-4 w-4 flex-shrink-0 text-stone-500 transition-transform ${formasPagamentoSelectAberto ? 'rotate-180' : ''}`} />
+              </button>
+              {formasPagamentoSelectAberto && (
+                <>
+                  <div className="fixed inset-0 z-10" aria-hidden onClick={() => setFormasPagamentoSelectAberto(false)} />
+                  <div className="absolute left-0 right-0 top-full z-20 mt-0.5 rounded border border-stone-200 bg-white p-2 shadow-lg">
+                    <div className="flex flex-wrap gap-x-3 gap-y-1.5">
+                      {FORMAS_PAGAMENTO.map((forma) => (
+                        <label key={forma} className="flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={formasPagamento.has(forma)}
+                            disabled={formasPagamentoSaving}
+                            onChange={async () => {
+                              if (formasPagamentoSaving) return;
+                              const novo = new Set(formasPagamento);
+                              if (novo.has(forma)) {
+                                if (novo.size <= 1) return;
+                                novo.delete(forma);
+                              } else {
+                                novo.add(forma);
+                              }
+                              setFormasPagamento(novo);
+                              setFormasPagamentoSaving(true);
+                              try {
+                                await setLojaOnlineFormasPagamentoApi([...novo]);
+                              } finally {
+                                setFormasPagamentoSaving(false);
+                              }
+                            }}
+                            className="rounded border-stone-300"
+                          />
+                          <span className="text-xs text-stone-600">{forma}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+            {formasPagamentoSaving && <span className="text-xs text-stone-400">Salvando...</span>}
           </div>
           <p className="px-3 py-1 text-xs text-stone-500 truncate">{profile?.nome}</p>
           <button

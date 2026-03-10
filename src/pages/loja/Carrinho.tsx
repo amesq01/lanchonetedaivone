@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Trash2 } from 'lucide-react';
-import { getConfig, getProdutos, validarCupom, getLanchoneteAberta, getLojaOnlineSoRetirada, getLojaOnlineHorarioAbertura } from '../../lib/api';
+import { getConfig, getProdutos, validarCupom, getLanchoneteAberta, getLojaOnlineSoRetirada, getLojaOnlineMensagemAbertura } from '../../lib/api';
 import type { Produto } from '../../types/database';
 import { precoVenda, imagensProduto } from '../../types/database';
 
@@ -57,13 +57,13 @@ export default function LojaCarrinho() {
   const [taxaEntrega, setTaxaEntrega] = useState<number | null>(null);
   const [lanchoneteAberta, setLanchoneteAberta] = useState<boolean | null>(null);
   const [soRetirada, setSoRetirada] = useState(false);
-  const [horarioAbertura, setHorarioAbertura] = useState<string | null>(null);
+  const [mensagemAbertura, setMensagemAbertura] = useState<string | null>(null);
 
   useEffect(() => {
     getConfig('taxa_entrega').then(setTaxaEntrega);
     getLanchoneteAberta().then(setLanchoneteAberta);
     getLojaOnlineSoRetirada().then(setSoRetirada);
-    getLojaOnlineHorarioAbertura().then(setHorarioAbertura);
+    getLojaOnlineMensagemAbertura().then(setMensagemAbertura);
   }, []);
 
   useEffect(() => {
@@ -259,7 +259,7 @@ export default function LojaCarrinho() {
               {lanchoneteAberta === false ? (
                 <div className="block w-full rounded-lg bg-stone-300 py-3 text-center font-medium text-stone-500 cursor-not-allowed">
                   Lanchonete fechada para pedidos
-                  {horarioAbertura && <span className="block text-sm mt-1">Abre às {horarioAbertura}</span>}
+                  {mensagemAbertura && <span className="block text-sm mt-1">{mensagemAbertura}</span>}
                 </div>
               ) : (
                 <Link to="/checkout" className="block w-full rounded-lg bg-amber-600 py-3 text-center font-medium text-white hover:bg-amber-700">

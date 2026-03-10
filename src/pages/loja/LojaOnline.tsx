@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, ShoppingCart, Trash2, X } from 'lucide-react';
-import { getProdutos, getCategorias, getLanchoneteAberta, getLojaOnlineSoRetirada, getLojaOnlineHorarioAbertura } from '../../lib/api';
+import { getProdutos, getCategorias, getLanchoneteAberta, getLojaOnlineSoRetirada, getLojaOnlineMensagemAbertura } from '../../lib/api';
 import type { ProdutoWithCategorias } from '../../types/database';
 import type { Categoria } from '../../types/database';
 import { precoVenda, imagensProduto } from '../../types/database';
@@ -79,7 +79,7 @@ export default function LojaOnline() {
   const [categoriaSelecionada, setCategoriaSelecionada] = useState<string | null>(null);
   const [lanchoneteAberta, setLanchoneteAberta] = useState<boolean | null>(null);
   const [soRetirada, setSoRetirada] = useState<boolean>(false);
-  const [horarioAbertura, setHorarioAbertura] = useState<string | null>(null);
+  const [mensagemAbertura, setMensagemAbertura] = useState<string | null>(null);
   const [modalProduto, setModalProduto] = useState<ProdutoWithCategorias | null>(null);
 
   const refreshCartCount = useCallback(() => {
@@ -90,10 +90,10 @@ export default function LojaOnline() {
   const carregarCardapio = useCallback(() => {
     setErro(null);
     setLoading(true);
-    Promise.all([getLanchoneteAberta(), getLojaOnlineSoRetirada(), getLojaOnlineHorarioAbertura()]).then(([aberta, soRet, horario]) => {
+    Promise.all([getLanchoneteAberta(), getLojaOnlineSoRetirada(), getLojaOnlineMensagemAbertura()]).then(([aberta, soRet, mensagem]) => {
       setLanchoneteAberta(aberta);
       setSoRetirada(soRet);
-      setHorarioAbertura(horario);
+      setMensagemAbertura(mensagem);
     });
     Promise.all([getCategorias(), getProdutos(true)])
       .then(([cats, list]) => {
@@ -208,10 +208,8 @@ export default function LojaOnline() {
                 <span className={`inline-flex items-center gap-1.5 text-sm font-medium ${lanchoneteAberta ? 'text-green-600' : 'text-red-600'}`}>
                   <span className={`h-2 w-2 rounded-full flex-shrink-0 ${lanchoneteAberta ? 'bg-green-500' : 'bg-red-500'}`} />
                   {lanchoneteAberta ? 'Aberto' : 'Fechado'} para pedidos
-                  {horarioAbertura && (
-                    <span className="text-stone-500 font-normal">
-                      {lanchoneteAberta ? ` (abre às ${horarioAbertura})` : ` – Abre às ${horarioAbertura}`}
-                    </span>
+                  {mensagemAbertura && !lanchoneteAberta && (
+                    <span className="text-stone-500 font-normal"> – {mensagemAbertura}</span>
                   )}
                 </span>
               )}
