@@ -122,6 +122,7 @@ export default function AdminPedidosOnline() {
       pontoReferencia: popupImprimirConta.ponto_referencia,
       formaPagamento: popupImprimirConta.forma_pagamento,
       trocoPara: popupImprimirConta.troco_para != null ? Number(popupImprimirConta.troco_para) : undefined,
+      taxaEntrega: taxaPrint > 0 ? taxaPrint : undefined,
     });
     setPopupImprimirConta(null);
     setCupomDesconto('');

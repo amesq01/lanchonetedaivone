@@ -256,6 +256,8 @@ export async function printContaViagem(opts: {
   pontoReferencia?: string;
   formaPagamento?: string;
   trocoPara?: number;
+  /** Taxa de entrega (pedidos online com entrega) */
+  taxaEntrega?: number;
 }) {
   const doc = createDoc();
   let y = 10;
@@ -317,6 +319,7 @@ export async function printContaViagem(opts: {
   const linhasViagem: LinhaTotal[] = [];
   if (opts.valorCupom > 0 && opts.cupomCodigo) linhasViagem.push({ label: `Desconto cupom (${opts.cupomCodigo}):`, valor: `- R$ ${opts.valorCupom.toFixed(2)}` });
   if (opts.valorManual > 0) linhasViagem.push({ label: 'Desconto:', valor: `- R$ ${opts.valorManual.toFixed(2)}` });
+  if ((opts.taxaEntrega ?? 0) > 0) linhasViagem.push({ label: 'Taxa de entrega:', valor: `R$ ${(opts.taxaEntrega ?? 0).toFixed(2)}` });
   y = addTotaisSection(doc, y, opts.subtotal, opts.total, linhasViagem);
   y = await addPixQrCode(doc, y);
   addFooter(doc, y);
