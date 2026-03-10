@@ -31,7 +31,12 @@ npm install
 INSERT INTO profiles (id, role, nome, email) VALUES ('COLE-O-UID-AQUI', 'admin', 'Admin', 'seu@email.com');
 ```
 
-6. (Opcional) Para cadastro de atendentes pela aplicação, publique a Edge Function `create-atendente` (a pasta `supabase/config.toml` já desativa a verificação de JWT no gateway; a função valida o token internamente). Use a Service Role Key apenas no backend da função.
+6. (Opcional) Para cadastro de atendentes pela aplicação, publique a Edge Function via CLI para que o `config.toml` seja aplicado (evita "Invalid JWT" no gateway):
+   ```bash
+   supabase link   # se ainda não vinculou o projeto
+   supabase functions deploy create-atendente
+   ```
+   O `supabase/config.toml` define `verify_jwt = false`; a função valida o JWT internamente com `auth.getUser(token)`.
 
 ### 3. Variáveis de ambiente
 

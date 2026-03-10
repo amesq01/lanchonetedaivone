@@ -992,7 +992,9 @@ export async function getTotalComanda(comandaId: string): Promise<{ itens: { des
 export async function getRelatorioFinanceiro(desde: string, ate: string) {
   const { data } = await supabase
     .from('pedidos')
-    .select('id, numero, origem, encerrado_em, created_at, cliente_nome, desconto, taxa_entrega, forma_pagamento, comanda_id, comandas(nome_cliente, mesa_id, atendente_id, mesas(numero, nome))')
+    .select(
+      'id, numero, origem, encerrado_em, created_at, cliente_nome, desconto, taxa_entrega, forma_pagamento, comanda_id, comandas(nome_cliente, mesa_id, atendente_id, mesas(numero, nome))'
+    )
     .eq('status', 'finalizado')
     .gte('encerrado_em', desde)
     .lte('encerrado_em', ate)
