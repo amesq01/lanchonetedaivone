@@ -384,7 +384,7 @@ export default function AdminPedidosOnline() {
                             <span>Pagamento: {p.forma_pagamento ?? '-'}{p.forma_pagamento && String(p.forma_pagamento).toLowerCase().includes('dinheiro') && p.troco_para != null ? ` – Troco R$ ${Number(p.troco_para).toFixed(2)}` : ''}</span>
                           </div>
                         )}
-                        {!isAguardando && <span className="ml-1 text-xs px-1.5 py-0.5 rounded bg-stone-100 text-stone-600">{jaEncerrado ? 'Entregue' : (statusLabel[p.status] ?? p.status)}</span>}
+                        {!isAguardando && <span className={`ml-1 text-xs px-1.5 py-0.5 rounded ${jaEncerrado ? 'bg-green-200 text-green-800 font-medium' : 'bg-stone-100 text-stone-600'}`}>{jaEncerrado ? 'Entregue' : (statusLabel[p.status] ?? p.status)}</span>}
                         <ul className="mt-1 text-xs text-stone-600 line-clamp-2">
                           {(p.pedido_itens ?? []).map((i: any) => (
                             <li key={i.id}>{i.quantidade}x {i.produtos?.nome || i.produtos?.descricao}</li>
