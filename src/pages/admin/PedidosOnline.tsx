@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Copy } from 'lucide-react';
 import { getPedidosOnlinePendentes, getPedidosOnlineTodos, getPedidosOnlineEncerradosHoje, acceptPedidoOnline, setImprimidoEntregaPedido, encerrarPedidoOnline, getTotalAPagarPedido, getTotalPedidoById, getCuponsAtivos, updatePedidoStatus, updatePedidoItens, getProdutos, getMesasFechadasParaTransferencia, getComandaByMesa, openComanda, movePedidosParaOutraComanda } from '../../lib/api';
 import type { FraçãoPagamento } from '../../lib/api';
 import type { Cupom } from '../../types/database';
@@ -278,6 +279,27 @@ export default function AdminPedidosOnline() {
 
   const pedidosOnline = [...pendentes, ...todos, ...encerradosHoje];
 
+  const textoCardPedido = (p: any) => {
+    const linhas: string[] = [];
+    linhas.push(`#${p.numero} – ${p.tipo_entrega === 'retirada' ? 'RETIRADA' : 'ENTREGA'}`);
+    linhas.push(`R$ ${totalPedido(p).toFixed(2)}`);
+    linhas.push(`${p.cliente_nome} – ${p.cliente_whatsapp ?? ''}`);
+    if (p.tipo_entrega === 'entrega') {
+      if (p.cliente_endereco) linhas.push(p.cliente_endereco);
+      if (p.ponto_referencia) linhas.push(`Ref.: ${p.ponto_referencia}`);
+      let pag = p.forma_pagamento ?? '-';
+      if (p.forma_pagamento && String(p.forma_pagamento).toLowerCase().includes('dinheiro') && p.troco_para != null) pag += ` – Troco R$ ${Number(p.troco_para).toFixed(2)}`;
+      linhas.push(`Pagamento: ${pag}`);
+    }
+    const itens = (p.pedido_itens ?? []).map((i: any) => `${i.quantidade}x ${i.produtos?.nome || i.produtos?.descricao}`).join('\n');
+    if (itens) linhas.push(itens);
+    return linhas.join('\n');
+  };
+
+  const copiarClipboard = (texto: string) => {
+    navigator.clipboard.writeText(texto).catch(() => {});
+  };
+
   if (loading) return <p className="text-stone-500">Carregando...</p>;
 
   return (
@@ -325,11 +347,23 @@ export default function AdminPedidosOnline() {
                   return (
                     <div key={p.id} className={`rounded-lg border bg-white p-3 flex flex-col gap-2 ${isFinalizado && !jaEncerrado ? 'border-amber-400 border-l-4' : ''}`}>
                       <div className="flex-1 min-w-0">
-                        <div className="font-semibold text-stone-800 text-sm">
+                        <div className="font-semibold text-stone-800 text-sm flex items-center gap-1">
                           #{p.numero} – {p.tipo_entrega === 'retirada' ? 'RETIRADA' : 'ENTREGA'}
+                          {isAguardando && (
+                            <button type="button" onClick={() => copiarClipboard(textoCardPedido(p))} className="p-0.5 rounded text-stone-400 hover:text-stone-600 hover:bg-stone-100" title="Copiar dados do card">
+                              <Copy className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                         </div>
                         <p className="text-xs font-medium text-amber-700">R$ {totalPedido(p).toFixed(2)}</p>
-                        <span className="text-xs text-stone-600">{p.cliente_nome} – {p.cliente_whatsapp}</span>
+                        <span className="text-xs text-stone-600 inline-flex items-center gap-1">
+                          {p.cliente_nome} – {p.cliente_whatsapp}
+                          {isAguardando && (
+                            <button type="button" onClick={() => copiarClipboard(p.cliente_whatsapp ?? '')} className="p-0.5 rounded text-stone-400 hover:text-stone-600 hover:bg-stone-100" title="Copiar telefone">
+                              <Copy className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </span>
                         {p.tipo_entrega === 'entrega' && (
                           <div className="mt-1 flex flex-col gap-0.5 text-xs text-stone-600">
                             {p.cliente_endereco && <span>{p.cliente_endereco}</span>}
