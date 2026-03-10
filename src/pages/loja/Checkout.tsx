@@ -7,6 +7,13 @@ import { getCupomAplicado } from './Carrinho';
 
 const CART_KEY = 'lanchonete_cart';
 
+function mascaraWhatsApp(valor: string): string {
+  const digitos = valor.replace(/\D/g, '').slice(0, 11);
+  if (digitos.length <= 2) return digitos ? `(${digitos}` : '';
+  if (digitos.length <= 6) return `(${digitos.slice(0, 2)}) ${digitos.slice(2)}`;
+  return `(${digitos.slice(0, 2)}) ${digitos.slice(2, 7)}-${digitos.slice(7)}`;
+}
+
 function getCart(): SavedItem[] {
   try {
     const raw = localStorage.getItem(CART_KEY);
@@ -186,7 +193,16 @@ export default function LojaCheckout() {
           </div>
           <div>
             <label className="block text-sm font-medium text-stone-600">WhatsApp *</label>
-            <input value={whatsapp} onChange={(e) => setWhatsapp(e.target.value)} required placeholder="(00) 00000-0000" className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2" />
+            <input
+              type="tel"
+              inputMode="numeric"
+              value={whatsapp}
+              onChange={(e) => setWhatsapp(mascaraWhatsApp(e.target.value))}
+              required
+              placeholder="(00) 00000-0000"
+              maxLength={15}
+              className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2"
+            />
           </div>
           <div>
             <label className="block text-sm font-medium text-stone-600">Como deseja receber? *</label>
