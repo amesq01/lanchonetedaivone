@@ -186,7 +186,14 @@ export default function AdminProdutos() {
         <div className="flex items-center gap-2 shrink-0">
           <button
             type="button"
-            onClick={() => setExpandedCats(new Set([...categoriasComProdutos.map((c) => c.categoria.id), ...(semCategoria.length > 0 ? ['sem-categoria'] : [])]))}
+            onClick={() =>
+              setExpandedCats(
+                new Set([
+                  ...categoriasComProdutos.map((c) => c.categoria.id),
+                  ...(semCategoria.length > 0 ? ['sem-categoria'] : []),
+                ]),
+              )
+            }
             className="rounded-lg border border-stone-300 px-3 py-1.5 text-sm text-stone-600 hover:bg-stone-50"
           >
             Expandir todos
@@ -198,7 +205,10 @@ export default function AdminProdutos() {
           >
             Recolher todos
           </button>
-          <button onClick={() => openForm()} className="rounded-lg bg-amber-600 px-4 py-2 text-white hover:bg-amber-700">
+          <button
+            onClick={() => openForm()}
+            className="rounded-lg bg-amber-600 px-4 py-1.5 text-sm text-white hover:bg-amber-700"
+          >
             Novo produto
           </button>
         </div>

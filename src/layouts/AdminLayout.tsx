@@ -221,75 +221,88 @@ export default function AdminLayout() {
           </div>
           <div className="px-3 py-2">
             <label className="block text-xs font-medium text-stone-600 mb-1">Abertura (loja online)</label>
-            <div className="relative mb-1.5">
-              <button
-                type="button"
-                onClick={() => setDiasSelectAberto((v) => !v)}
-                className="w-full flex items-center justify-between rounded border border-stone-300 bg-white px-2 py-1.5 text-left text-sm text-stone-700"
-              >
-                <span className="truncate">
-                  {agendaAbertura.dias.length === 7 ? 'Todos os dias' : agendaAbertura.dias.length === 0 ? 'Nenhum' : agendaAbertura.dias.sort((a, b) => a - b).map((d) => DIAS_SEMANA[d]).join(', ')}
-                </span>
-                <ChevronDown className={`h-4 w-4 flex-shrink-0 text-stone-500 transition-transform ${diasSelectAberto ? 'rotate-180' : ''}`} />
-              </button>
-              {diasSelectAberto && (
-                <>
-                  <div className="fixed inset-0 z-10" aria-hidden onClick={() => setDiasSelectAberto(false)} />
-                  <div className="absolute left-0 right-0 top-full z-20 mt-0.5 rounded border border-stone-200 bg-white p-2 shadow-lg">
-                    <div className="flex flex-wrap gap-x-2 gap-y-1.5">
-                      {DIAS_SEMANA.map((label, i) => (
-                        <label key={i} className="flex items-center gap-1.5 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={agendaAbertura.dias.includes(i)}
-                            disabled={agendaSaving}
-                            onChange={async () => {
-                              if (agendaSaving) return;
-                              const novo = new Set(agendaAbertura.dias);
-                              if (novo.has(i)) {
-                                if (novo.size <= 1) return;
-                                novo.delete(i);
-                              } else novo.add(i);
-                              const dias = [...novo].sort((a, b) => a - b);
-                              setAgendaAbertura((prev) => ({ ...prev, dias }));
-                              setAgendaSaving(true);
-                              try {
-                                await setLojaOnlineAgendaAberturaApi(dias, agendaAbertura.horario);
-                              } finally {
-                                setAgendaSaving(false);
-                              }
-                            }}
-                            className="rounded border-stone-300"
-                          />
-                          <span className="text-xs text-stone-600">{label}</span>
-                        </label>
-                      ))}
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative flex-1 min-w-0">
+                <button
+                  type="button"
+                  onClick={() => setDiasSelectAberto((v) => !v)}
+                  className="w-full flex items-center justify-between rounded border border-stone-300 bg-white px-2 py-1.5 text-left text-sm text-stone-700"
+                >
+                  <span className="truncate">
+                    {agendaAbertura.dias.length === 7
+                      ? 'Todos os dias'
+                      : agendaAbertura.dias.length === 0
+                        ? 'Nenhum'
+                        : agendaAbertura.dias
+                            .sort((a, b) => a - b)
+                            .map((d) => DIAS_SEMANA[d])
+                            .join(', ')}
+                  </span>
+                  <ChevronDown
+                    className={`h-4 w-4 flex-shrink-0 text-stone-500 transition-transform ${
+                      diasSelectAberto ? 'rotate-180' : ''
+                    }`}
+                  />
+                </button>
+                {diasSelectAberto && (
+                  <>
+                    <div className="fixed inset-0 z-10" aria-hidden onClick={() => setDiasSelectAberto(false)} />
+                    <div className="absolute left-0 right-0 top-full z-20 mt-0.5 rounded border border-stone-200 bg-white p-2 shadow-lg">
+                      <div className="flex flex-wrap gap-x-2 gap-y-1.5">
+                        {DIAS_SEMANA.map((label, i) => (
+                          <label key={i} className="flex items-center gap-1.5 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={agendaAbertura.dias.includes(i)}
+                              disabled={agendaSaving}
+                              onChange={async () => {
+                                if (agendaSaving) return;
+                                const novo = new Set(agendaAbertura.dias);
+                                if (novo.has(i)) {
+                                  if (novo.size <= 1) return;
+                                  novo.delete(i);
+                                } else novo.add(i);
+                                const dias = [...novo].sort((a, b) => a - b);
+                                setAgendaAbertura((prev) => ({ ...prev, dias }));
+                                setAgendaSaving(true);
+                                try {
+                                  await setLojaOnlineAgendaAberturaApi(dias, agendaAbertura.horario);
+                                } finally {
+                                  setAgendaSaving(false);
+                                }
+                              }}
+                              className="rounded border-stone-300"
+                            />
+                            <span className="text-xs text-stone-600">{label}</span>
+                          </label>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                </>
-              )}
-            </div>
-            <div className="flex items-center gap-2">
-              <input
-                type="time"
-                value={agendaAbertura.horario}
-                onChange={(e) => setAgendaAbertura((prev) => ({ ...prev, horario: e.target.value }))}
-                onBlur={async () => {
-                  if (agendaSaving) return;
-                  setAgendaSaving(true);
-                  try {
-                    await setLojaOnlineAgendaAberturaApi(agendaAbertura.dias, agendaAbertura.horario);
-                  } finally {
-                    setAgendaSaving(false);
-                  }
-                }}
-                className="rounded border border-stone-300 px-2 py-1.5 text-sm"
-              />
-              {agendaSaving && <span className="text-xs text-stone-400">Salvando...</span>}
+                  </>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="time"
+                  value={agendaAbertura.horario}
+                  onChange={(e) => setAgendaAbertura((prev) => ({ ...prev, horario: e.target.value }))}
+                  onBlur={async () => {
+                    if (agendaSaving) return;
+                    setAgendaSaving(true);
+                    try {
+                      await setLojaOnlineAgendaAberturaApi(agendaAbertura.dias, agendaAbertura.horario);
+                    } finally {
+                      setAgendaSaving(false);
+                    }
+                  }}
+                  className="w-[82px] rounded border border-stone-300 px-1.5 py-1 text-sm"
+                />
+                {agendaSaving && <span className="text-xs text-stone-400">Salvando...</span>}
+              </div>
             </div>
           </div>
           <div className="px-3 py-2">
-            <label className="block text-xs font-medium text-stone-600 mb-1.5">Formas de pagamento (loja online)</label>
+            <label className="block text-xs font-medium text-stone-600 mb-1.5">Forma de pagamento online</label>
             <div className="relative">
               <button
                 type="button"

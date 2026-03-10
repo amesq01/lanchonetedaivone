@@ -1,45 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { Volume2, Inbox, ChefHat, CheckCircle } from 'lucide-react';
+import { Inbox, ChefHat, CheckCircle } from 'lucide-react';
 import { getPedidosCozinha, updatePedidoStatus } from '../../lib/api';
-
-let audioCtx: AudioContext | null = null;
-let somAtivadoGlobal = true;
-
-function tocarBip() {
-  if (!audioCtx || audioCtx.state === 'closed') return;
-  const ctx = audioCtx;
-  const play = () => {
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.frequency.value = 880;
-    osc.type = 'sine';
-    gain.gain.setValueAtTime(0.5, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
-    osc.start(ctx.currentTime);
-    osc.stop(ctx.currentTime + 0.3);
-    const osc2 = ctx.createOscillator();
-    const gain2 = ctx.createGain();
-    osc2.connect(gain2);
-    gain2.connect(ctx.destination);
-    osc2.frequency.value = 1100;
-    osc2.type = 'sine';
-    gain2.gain.setValueAtTime(0.5, ctx.currentTime + 0.35);
-    gain2.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.65);
-    osc2.start(ctx.currentTime + 0.35);
-    osc2.stop(ctx.currentTime + 0.65);
-  };
-  if (ctx.state === 'suspended') {
-    ctx.resume().then(play).catch(() => {});
-  } else {
-    play();
-  }
-}
-
-function playSomNovoPedido() {
-  if (somAtivadoGlobal && audioCtx) tocarBip();
-}
+import { playSomNovoPedido, cozinhaSomInitOnFirstClick } from '../../lib/cozinhaSound';
 
 const COLUNAS = [
   { key: 'novo_pedido', label: 'Novo pedido', icon: Inbox, className: 'bg-amber-100 border-amber-200 text-amber-900' },
@@ -94,31 +56,7 @@ export default function CozinhaKanban() {
   const [loading, setLoading] = useState(true);
   const [, setTick] = useState(0);
   const [confirmacao, setConfirmacao] = useState<ConfirmacaoAcao | null>(null);
-  const [somAtivado, setSomAtivado] = useState(true);
   const idsNovoPedidoRef = useRef<Set<string> | null>(null);
-
-  const toggleSom = () => {
-    if (somAtivado) {
-      somAtivadoGlobal = false;
-      setSomAtivado(false);
-      if (audioCtx) {
-        audioCtx.close().catch(() => {});
-        audioCtx = null;
-      }
-    } else {
-      try {
-        const CtxClass = window.AudioContext || (window as any).webkitAudioContext;
-        if (!CtxClass) return;
-        if (audioCtx?.state === 'closed') audioCtx = null;
-        if (!audioCtx) audioCtx = new CtxClass();
-        somAtivadoGlobal = true;
-        setSomAtivado(true);
-        audioCtx.resume().then(() => tocarBip()).catch(() => {});
-      } catch {
-        //
-      }
-    }
-  };
 
   useEffect(() => {
     load();
@@ -128,19 +66,7 @@ export default function CozinhaKanban() {
 
   // No primeiro clique (som ativado por padrão), cria o contexto de áudio para o bip poder tocar
   useEffect(() => {
-    const unlock = () => {
-      if (somAtivadoGlobal && !audioCtx) {
-        try {
-          const CtxClass = window.AudioContext || (window as any).webkitAudioContext;
-          if (CtxClass) {
-            audioCtx = new CtxClass();
-            audioCtx.resume().catch(() => {});
-          }
-        } catch {
-          //
-        }
-      }
-    };
+    const unlock = () => cozinhaSomInitOnFirstClick();
     document.addEventListener('click', unlock, { once: true });
     return () => document.removeEventListener('click', unlock);
   }, []);
@@ -184,21 +110,6 @@ export default function CozinhaKanban() {
 
   return (
     <div className="h-full flex flex-col min-h-0">
-      <div className="flex-shrink-0 flex items-center justify-between gap-4 mb-4">
-        <div />
-        <button
-          type="button"
-          onClick={toggleSom}
-          className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium ${
-            somAtivado
-              ? 'border-green-500 bg-green-50 text-green-800 hover:bg-green-100'
-              : 'border-stone-300 bg-stone-50 text-stone-600 hover:bg-stone-100'
-          }`}
-        >
-          <Volume2 className="h-4 w-4" />
-          {somAtivado ? 'Desativar som de novos pedidos' : 'Ativar som de novos pedidos'}
-        </button>
-      </div>
       <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-4 min-h-0">
       {COLUNAS.map((col) => {
         const Icon = col.icon;
