@@ -148,7 +148,7 @@ export default function AdminLayout() {
       <aside
         className={`no-print group flex flex-col border-r border-stone-200 bg-white z-40 transition-all duration-200 ease-out fixed inset-y-0 left-0 overflow-hidden ${
           menuAberto ? 'translate-x-0 w-52' : '-translate-x-full lg:translate-x-0 w-52 lg:w-14 lg:hover:w-52'
-        } ${asidePinned ? 'lg:!w-45' : ''}`}
+        } ${asidePinned ? 'lg:!w-52' : ''}`}
       >
         <div
           className={`p-3 sm:p-4 border-b border-stone-200 flex items-center justify-between shrink-0 ${
