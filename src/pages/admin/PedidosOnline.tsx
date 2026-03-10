@@ -112,6 +112,11 @@ export default function AdminPedidosOnline() {
       valorManual: valorManualPrint,
       total: totalComDescontoPrint,
       cupomCodigo: cupomSelecionado?.codigo,
+      tipoEntrega: popupImprimirConta.tipo_entrega,
+      clienteEndereco: popupImprimirConta.cliente_endereco,
+      pontoReferencia: popupImprimirConta.ponto_referencia,
+      formaPagamento: popupImprimirConta.forma_pagamento,
+      trocoPara: popupImprimirConta.troco_para != null ? Number(popupImprimirConta.troco_para) : undefined,
     });
     setPopupImprimirConta(null);
     setCupomDesconto('');

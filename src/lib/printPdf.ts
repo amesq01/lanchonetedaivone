@@ -239,7 +239,7 @@ export async function printContaMesa(opts: {
   openAndPrint(doc);
 }
 
-/** Conta do pedido viagem. */
+/** Conta do pedido viagem ou online. Para online: passar tipoEntrega e opcionalmente endereço, pagamento, etc. */
 export async function printContaViagem(opts: {
   pedidoNumero: number;
   clienteNome: string;
@@ -250,6 +250,12 @@ export async function printContaViagem(opts: {
   valorManual: number;
   total: number;
   cupomCodigo?: string;
+  /** Para pedidos online: 'retirada' ou 'entrega' */
+  tipoEntrega?: 'retirada' | 'entrega';
+  clienteEndereco?: string;
+  pontoReferencia?: string;
+  formaPagamento?: string;
+  trocoPara?: number;
 }) {
   const doc = createDoc();
   let y = 10;
@@ -260,16 +266,34 @@ export async function printContaViagem(opts: {
   doc.setFontSize(11);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(...BLACK);
-  doc.text(`Pedido #${opts.pedidoNumero} - VIAGEM`, PAPER_WIDTH_MM / 2, y, { align: 'center' });
-  y +=6;
+  const tituloSuffix = opts.tipoEntrega ? (opts.tipoEntrega === 'retirada' ? 'RETIRADA' : 'ENTREGA') : 'VIAGEM';
+  doc.text(`Pedido #${opts.pedidoNumero} - ${tituloSuffix}`, PAPER_WIDTH_MM / 2, y, { align: 'center' });
+  y += 6;
   doc.text(`${opts.clienteNome}`, PAPER_WIDTH_MM / 2, y, { align: 'center' });
 
   y += 8;
+  doc.setFontSize(10);
   if (opts.clienteTelefone) {
-    doc.setFontSize(10);
     doc.text('Tel.: ', MARGIN_MM, y);
     const w = doc.getTextWidth('Tel.: ');
     doc.text(opts.clienteTelefone, MARGIN_MM + w, y);
+    y += 4;
+  }
+  if (opts.clienteEndereco) {
+    const addrLines = doc.splitTextToSize(opts.clienteEndereco, CONTENT_WIDTH);
+    doc.text(addrLines, MARGIN_MM, y);
+    y += addrLines.length * 4 + 2;
+  }
+  if (opts.pontoReferencia) {
+    doc.text(`Ref.: ${opts.pontoReferencia}`, MARGIN_MM, y);
+    y += 4;
+  }
+  if (opts.formaPagamento) {
+    let pag = opts.formaPagamento;
+    if (opts.trocoPara != null && opts.trocoPara > 0 && String(opts.formaPagamento).toLowerCase().includes('dinheiro')) {
+      pag += ` – Troco R$ ${opts.trocoPara.toFixed(2)}`;
+    }
+    doc.text(`Pagamento: ${pag}`, MARGIN_MM, y);
     y += 4;
   }
   y += 2;
