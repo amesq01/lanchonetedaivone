@@ -19,6 +19,8 @@ import {
   X,
   ChevronDown,
   Settings,
+  Pin,
+  PinOff,
 } from 'lucide-react';
 
 const nav = [
@@ -57,6 +59,7 @@ export default function AdminLayout() {
   const [formasPagamentoSaving, setFormasPagamentoSaving] = useState(false);
   const [formasPagamentoSelectAberto, setFormasPagamentoSelectAberto] = useState(false);
   const [configModalAberto, setConfigModalAberto] = useState(false);
+  const [asidePinned, setAsidePinned] = useState(false);
 
   useEffect(() => {
     function load() {
@@ -143,20 +146,39 @@ export default function AdminLayout() {
         onClick={() => setMenuAberto(false)}
       />
       <aside
-        className={`no-print flex flex-col border-r border-stone-200 bg-white z-40 transition-transform duration-200 ease-out fixed inset-y-0 left-0 w-64 lg:static lg:w-56 ${
-          menuAberto ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
-        }`}
+        className={`no-print group flex flex-col border-r border-stone-200 bg-white z-40 transition-all duration-200 ease-out fixed inset-y-0 left-0 overflow-hidden ${
+          menuAberto ? 'translate-x-0 w-52' : '-translate-x-full lg:translate-x-0 w-52 lg:w-14 lg:hover:w-52'
+        } ${asidePinned ? 'lg:!w-45' : ''}`}
       >
-        <div className="p-3 sm:p-4 border-b border-stone-200 flex items-center justify-between">
-          <NavLink to="/admin" className="flex items-center gap-2 font-bold text-stone-800" onClick={() => setMenuAberto(false)}>
+        <div
+          className={`p-3 sm:p-4 border-b border-stone-200 flex items-center justify-between shrink-0 ${
+            !asidePinned
+              ? 'lg:flex-col lg:items-center lg:gap-2 lg:justify-center lg:group-hover:flex-row lg:group-hover:items-center lg:group-hover:justify-between'
+              : ''
+          }`}
+        >
+          <NavLink to="/admin" className="flex items-center gap-2 font-bold text-stone-800 min-w-0" onClick={() => setMenuAberto(false)}>
             <img src="/logo-terra-mar.png" alt="Terra & Mar" className="h-8 w-8 rounded-full object-contain flex-shrink-0" />
-            <span className="truncate">Admin</span>
+            <span className={`truncate ${!asidePinned ? 'lg:hidden lg:group-hover:inline' : ''}`}>Admin</span>
           </NavLink>
-          <button type="button" onClick={() => setMenuAberto(false)} className="lg:hidden p-2 rounded-lg text-stone-500 hover:bg-stone-100" aria-label="Fechar menu">
-            <X className="h-5 w-5" />
-          </button>
+          <div className="flex items-center gap-0.5 shrink-0">
+            <button
+              type="button"
+              onClick={() => setAsidePinned((v) => !v)}
+              className={`hidden p-2 rounded-lg text-stone-500 hover:bg-stone-100 hover:text-stone-700 ${
+                asidePinned ? 'lg:inline-flex' : 'lg:hidden lg:group-hover:inline-flex'
+              }`}
+              aria-label={asidePinned ? 'Desfixar menu' : 'Fixar menu'}
+              title={asidePinned ? 'Desfixar menu' : 'Fixar menu'}
+            >
+              {asidePinned ? <PinOff className="h-5 w-5" /> : <Pin className="h-5 w-5" />}
+            </button>
+            <button type="button" onClick={() => setMenuAberto(false)} className="lg:hidden p-2 rounded-lg text-stone-500 hover:bg-stone-100" aria-label="Fechar menu">
+              <X className="h-5 w-5" />
+            </button>
+          </div>
         </div>
-        <nav className="flex-1 p-2 space-y-0.5 overflow-y-auto">
+        <nav className="flex-1 p-2 space-y-0.5 overflow-y-auto overflow-x-hidden">
           {nav.map((item) => {
             if ('isModal' in item && item.isModal) {
               const Icon = item.icon;
@@ -170,10 +192,10 @@ export default function AdminLayout() {
                     setConfigModalAberto(true);
                     setMenuAberto(false);
                   }}
-                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-stone-600 hover:bg-stone-100 transition-colors"
+                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-stone-600 hover:bg-stone-100 transition-colors min-w-0"
                 >
                   <Icon className="h-4 w-4 flex-shrink-0" />
-                  <span className="flex-1 min-w-0 truncate text-left">{item.label}</span>
+                  <span className={`flex-1 min-w-0 truncate text-left ${!asidePinned ? 'lg:w-0 lg:min-w-0 lg:overflow-hidden lg:opacity-0 lg:group-hover:opacity-100 lg:group-hover:min-w-0' : ''}`}>{item.label}</span>
                 </button>
               );
             }
@@ -185,15 +207,15 @@ export default function AdminLayout() {
                 to={to}
                 onClick={() => setMenuAberto(false)}
                 className={({ isActive }) =>
-                  `flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                  `flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors min-w-0 ${
                     isActive ? 'bg-amber-100 text-amber-800' : 'text-stone-600 hover:bg-stone-100'
                   }`
                 }
               >
                 <Icon className="h-4 w-4 flex-shrink-0" />
-                <span className="flex-1 min-w-0 truncate">{label}</span>
+                <span className={`flex-1 min-w-0 truncate ${!asidePinned ? 'lg:w-0 lg:min-w-0 lg:overflow-hidden lg:opacity-0 lg:group-hover:opacity-100 lg:group-hover:min-w-0' : ''}`}>{label}</span>
                 {n > 0 && (
-                  <span className="flex-shrink-0 min-w-[1.25rem] text-center rounded-full bg-amber-500 text-white text-xs font-semibold px-1.5 py-0.5">
+                  <span className={`flex-shrink-0 min-w-[1.25rem] text-center rounded-full bg-amber-500 text-white text-xs font-semibold px-1.5 py-0.5 ${!asidePinned ? 'lg:hidden lg:group-hover:inline-flex' : ''}`}>
                     {n > 99 ? '99+' : n}
                   </span>
                 )}
@@ -201,14 +223,26 @@ export default function AdminLayout() {
             );
           })}
         </nav>
-        <div className="p-2 border-t border-stone-200">
-          <p className="px-3 py-1 text-xs text-stone-500 truncate">{profile?.nome}</p>
+        <div className="p-2 border-t border-stone-200 shrink-0">
+          <p
+            className={`px-3 py-1 text-xs text-stone-500 truncate min-w-0 ${
+              !asidePinned ? 'lg:opacity-0 lg:group-hover:opacity-100' : ''
+            }`}
+          >
+            {profile?.nome}
+          </p>
           <button
             onClick={handleSignOut}
-            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-stone-600 hover:bg-stone-100"
+            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-stone-600 hover:bg-stone-100 min-w-0"
           >
-            <LogOut className="h-4 w-4" />
-            Sair
+            <LogOut className="h-4 w-4 flex-shrink-0" />
+            <span
+              className={`truncate ${
+                !asidePinned ? 'lg:opacity-0 lg:group-hover:opacity-100' : ''
+              }`}
+            >
+              Sair
+            </span>
           </button>
         </div>
       </aside>
@@ -406,7 +440,7 @@ export default function AdminLayout() {
           </div>
         </div>
       )}
-      <main className="flex-1 flex flex-col min-w-0 overflow-auto">
+      <main className={`flex-1 flex flex-col min-w-0 overflow-auto transition-[padding] duration-200 ${asidePinned ? 'lg:pl-52' : 'lg:pl-14'}`}>
         {/* Barra superior no mobile: hamburger + título */}
         <div className="lg:hidden flex-shrink-0 flex items-center gap-2 px-3 py-3 bg-white border-b border-stone-200 sticky top-0 z-20">
           <button
