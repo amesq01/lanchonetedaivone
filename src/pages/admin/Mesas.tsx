@@ -38,7 +38,7 @@ export default function AdminMesas() {
 
   useEffect(() => {
     load();
-    const t = setInterval(load, 8000);
+    const t = setInterval(load, 3000);
     return () => clearInterval(t);
   }, []);
 

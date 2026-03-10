@@ -76,6 +76,19 @@ export default function AdminPedidosOnline() {
     getProdutos(true).then(setProdutos);
   }, []);
 
+  // Polling leve para manter a lista de pedidos online atualizada automaticamente
+  useEffect(() => {
+    let active = true;
+    const interval = setInterval(() => {
+      if (!active) return;
+      load();
+    }, 5000);
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, []);
+
   useEffect(() => {
     getCuponsAtivos().then(setCupons);
   }, []);
