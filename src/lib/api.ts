@@ -1088,7 +1088,7 @@ export async function getRelatorioFinanceiro(desde: string, ate: string) {
 
   for (const p of online) {
     (p as any).mesa = '-';
-    (p as any).atendente_nome = '-';
+    (p as any).atendente_nome = 'Online';
   }
 
   const resultado = [...aggregated, ...online].sort(
@@ -1134,8 +1134,46 @@ export async function getRelatorioFinanceiro(desde: string, ate: string) {
       row.forma_pagamento = fmtPagamento(pagamentosByPedido[row.id]) ?? row.forma_pagamento;
     }
     const list = row.comanda_id ? pagamentosByComanda[row.comanda_id] : row.origem === 'online' ? pagamentosByPedido[row.id] : null;
-    if (list) for (const x of list) {
-      totalPorFormaPagamento[x.forma_pagamento] = (totalPorFormaPagamento[x.forma_pagamento] ?? 0) + x.valor;
+    if (list && list.length) {
+      for (const x of list) {
+        totalPorFormaPagamento[x.forma_pagamento] = (totalPorFormaPagamento[x.forma_pagamento] ?? 0) + x.valor;
+      }
+    } else {
+      // Dados legados: não há registros na tabela pagamentos, apenas o campo forma_pagamento na linha.
+      const fpRaw = String(row.forma_pagamento ?? '').trim();
+      const total = Number(row.total ?? 0);
+      if (!fpRaw) {
+        totalPorFormaPagamento['-'] = (totalPorFormaPagamento['-'] ?? 0) + total;
+        continue;
+      }
+      const normalizarForma = (s: string): string => {
+        const t = s.toLowerCase().trim();
+        if (t.startsWith('pix')) return 'pix';
+        if (t.startsWith('dinheiro')) return 'dinheiro';
+        if (t.startsWith('cartão crédito') || t.startsWith('cartao credito')) return 'cartão crédito';
+        if (t.startsWith('cartão débito') || t.startsWith('cartao debito')) return 'cartão débito';
+        return s.trim() || '-';
+      };
+      const partes = fpRaw.split(',');
+      let teveValorFracionado = false;
+      for (const parteRaw of partes) {
+        const parte = parteRaw.trim();
+        if (!parte) continue;
+        const m = parte.match(/R\$\s*([\d.,]+)/);
+        if (!m) continue;
+        const valor = Number(m[1].replace(',', '.'));
+        if (!Number.isFinite(valor)) continue;
+        teveValorFracionado = true;
+        const idx = parte.toLowerCase().indexOf('r$');
+        const formaTexto = idx > 0 ? parte.slice(0, idx).trim() : parte;
+        const forma = normalizarForma(formaTexto);
+        totalPorFormaPagamento[forma] = (totalPorFormaPagamento[forma] ?? 0) + valor;
+      }
+      if (!teveValorFracionado) {
+        // Somente nome da forma, sem valores R$: considera o total inteiro.
+        const forma = normalizarForma(fpRaw);
+        totalPorFormaPagamento[forma] = (totalPorFormaPagamento[forma] ?? 0) + total;
+      }
     }
   }
   return { pedidos: resultado, totalGeral, totalPorFormaPagamento };
