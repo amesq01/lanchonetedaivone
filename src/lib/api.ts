@@ -379,13 +379,30 @@ export async function closeComanda(comandaId: string, pagamentosOrForma: Fraçã
 
 /** Total a pagar de um pedido (subtotal - desconto + taxa). */
 export async function getTotalAPagarPedido(pedidoId: string): Promise<number> {
+  const r = await getTotalPedidoById(pedidoId);
+  return r.total;
+}
+
+/** Itens e total de um pedido (para impressão de conta). Funciona para qualquer pedido (mesa, viagem, online). */
+export async function getTotalPedidoById(pedidoId: string): Promise<{ itens: { codigo: string; descricao: string; quantidade: number; valor: number }[]; total: number }> {
   const { data: ped } = await supabase.from('pedidos').select('desconto, taxa_entrega').eq('id', pedidoId).single();
-  if (!ped) throw new Error('Pedido não encontrado.');
-  const { data: itens } = await supabase.from('pedido_itens').select('quantidade, valor_unitario').eq('pedido_id', pedidoId);
-  const subtotal = (itens ?? []).reduce((s: number, i: any) => s + i.quantidade * Number(i.valor_unitario), 0);
+  if (!ped) return { itens: [], total: 0 };
+  const { data: itensData } = await supabase.from('pedido_itens').select('*, produtos(codigo, descricao, nome)').eq('pedido_id', pedidoId);
+  const itens = (itensData ?? []) as any[];
+  const list: { codigo: string; descricao: string; quantidade: number; valor: number }[] = [];
+  let subtotal = 0;
+  for (const i of itens) {
+    const prod = i.produtos;
+    const descricao = (prod?.nome ?? prod?.descricao) ?? '';
+    const codigo = prod?.codigo ?? '';
+    const valor = i.quantidade * Number(i.valor_unitario);
+    list.push({ codigo, descricao, quantidade: i.quantidade, valor });
+    subtotal += valor;
+  }
   const desconto = Number((ped as any).desconto ?? 0);
   const taxa = Number((ped as any).taxa_entrega ?? 0);
-  return Math.max(0, subtotal - desconto + taxa);
+  const total = Math.max(0, subtotal - desconto + taxa);
+  return { itens: list, total };
 }
 
 export async function getComandaWithPedidos(comandaId: string) {
@@ -805,13 +822,14 @@ export async function setImprimidoEntregaPedido(pedidoId: string) {
 }
 
 export async function encerrarPedidoOnline(pedidoId: string, pagamentos: FraçãoPagamento[]) {
-  if (!pagamentos?.length) throw new Error('Informe ao menos uma forma de pagamento.');
   const totalAPagar = await getTotalAPagarPedido(pedidoId);
-  const totalPago = pagamentos.reduce((s, p) => s + p.valor, 0);
-  if (totalPago < totalAPagar - 0.01) throw new Error(`Valor pago (R$ ${totalPago.toFixed(2)}) é menor que o total do pedido (R$ ${totalAPagar.toFixed(2)}).`);
+  const contaZerada = totalAPagar < 0.01;
+  if (!contaZerada && (!pagamentos?.length)) throw new Error('Informe ao menos uma forma de pagamento.');
+  const totalPago = (pagamentos ?? []).reduce((s, p) => s + p.valor, 0);
+  if (!contaZerada && totalPago < totalAPagar - 0.01) throw new Error(`Valor pago (R$ ${totalPago.toFixed(2)}) é menor que o total do pedido (R$ ${totalAPagar.toFixed(2)}).`);
   const now = new Date().toISOString();
-  const resumo = pagamentos.length === 1 ? pagamentos[0].forma_pagamento : `Misto (${pagamentos.map((p) => p.forma_pagamento).join(', ')})`;
-  for (const p of pagamentos) {
+  const resumo = contaZerada || !pagamentos?.length ? 'Cortesia' : pagamentos.length === 1 ? pagamentos[0].forma_pagamento : `Misto (${pagamentos.map((p) => p.forma_pagamento).join(', ')})`;
+  for (const p of pagamentos ?? []) {
     await (supabase as any).from('pagamentos').insert({ pedido_id: pedidoId, valor: p.valor, forma_pagamento: p.forma_pagamento });
   }
   await (supabase as any).from('pedidos').update({ encerrado_em: now, forma_pagamento: resumo, updated_at: now }).eq('id', pedidoId);

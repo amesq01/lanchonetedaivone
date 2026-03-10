@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { getPedidosOnlinePendentes, getPedidosOnlineTodos, getPedidosOnlineEncerradosHoje, acceptPedidoOnline, setImprimidoEntregaPedido, encerrarPedidoOnline, updatePedidoStatus, updatePedidoItens, getProdutos, getMesasFechadasParaTransferencia, getComandaByMesa, openComanda, movePedidosParaOutraComanda } from '../../lib/api';
+import { getPedidosOnlinePendentes, getPedidosOnlineTodos, getPedidosOnlineEncerradosHoje, acceptPedidoOnline, setImprimidoEntregaPedido, encerrarPedidoOnline, getTotalAPagarPedido, getTotalPedidoById, getCuponsAtivos, updatePedidoStatus, updatePedidoItens, getProdutos, getMesasFechadasParaTransferencia, getComandaByMesa, openComanda, movePedidosParaOutraComanda } from '../../lib/api';
 import type { FraçãoPagamento } from '../../lib/api';
-import { printPedido } from '../../lib/printPdf';
+import type { Cupom } from '../../types/database';
+import { printPedido, printContaViagem } from '../../lib/printPdf';
 import { useAuth } from '../../contexts/AuthContext';
 import type { Produto } from '../../types/database';
 import { precoVenda, imagensProduto } from '../../types/database';
@@ -30,11 +31,23 @@ export default function AdminPedidosOnline() {
   const [mesaIdEnviar, setMesaIdEnviar] = useState('');
   const [novoNomeClienteEnviar, setNovoNomeClienteEnviar] = useState('');
   const [enviandoEnviar, setEnviandoEnviar] = useState(false);
+  const [popupImprimirConta, setPopupImprimirConta] = useState<any | null>(null);
+  const [contaItensPedido, setContaItensPedido] = useState<{ itens: { codigo: string; descricao: string; quantidade: number; valor: number }[]; total: number } | null>(null);
+  const [cupons, setCupons] = useState<Cupom[]>([]);
+  const [cupomDesconto, setCupomDesconto] = useState('');
+  const [descontoManual, setDescontoManual] = useState('');
 
   const formasPagamento = ['dinheiro', 'pix', 'cartão crédito', 'cartão débito'];
+  const normalizarFormaPagamento = (forma: string | null | undefined): string => {
+    if (!forma?.trim()) return formasPagamento[0];
+    const f = forma.trim();
+    const map: Record<string, string> = { PIX: 'pix', Dinheiro: 'dinheiro', 'Cartão crédito': 'cartão crédito', 'Cartão débito': 'cartão débito' };
+    return map[f] ?? (formasPagamento.includes(f) ? f : formasPagamento.find((x) => x.toLowerCase() === f.toLowerCase()) ?? f);
+  };
   const totalPagoEncerrar = fracoesEncerrar.reduce((s, f) => s + f.valor, 0);
   const totalEncerramento = popupEncerrar?.total ?? 0;
-  const podeConfirmarEncerrar = popupEncerrar && fracoesEncerrar.length > 0 && totalPagoEncerrar >= totalEncerramento - 0.01;
+  const contaZeradaOnline = totalEncerramento < 0.01;
+  const podeConfirmarEncerrar = popupEncerrar && (contaZeradaOnline || (fracoesEncerrar.length > 0 && totalPagoEncerrar >= totalEncerramento - 0.01));
 
   const STATUS_EDITAVEL = ['novo_pedido', 'aguardando_aceite'];
   const pedidoPodeEditarSemConfirmacao = (p: any) => STATUS_EDITAVEL.includes(p.status);
@@ -61,6 +74,49 @@ export default function AdminPedidosOnline() {
     getProdutos(true).then(setProdutos);
   }, []);
 
+  useEffect(() => {
+    getCuponsAtivos().then(setCupons);
+  }, []);
+
+  useEffect(() => {
+    if (popupImprimirConta) getTotalPedidoById(popupImprimirConta.id).then(setContaItensPedido);
+    else setContaItensPedido(null);
+  }, [popupImprimirConta?.id]);
+
+  const handleAbrirImprimirConta = (p: any) => {
+    setPopupImprimirConta(p);
+    setCupomDesconto(p.cupom_id ?? '');
+    setDescontoManual('');
+  };
+
+  const cupomSelecionado = cupomDesconto ? cupons.find((c) => c.id === cupomDesconto) : null;
+  const subtotalPrint = contaItensPedido ? contaItensPedido.itens.reduce((s, i) => s + i.valor, 0) : 0;
+  let valorCupomPrint = cupomSelecionado ? (subtotalPrint * Number(cupomSelecionado.porcentagem)) / 100 : 0;
+  if (cupomSelecionado?.valor_maximo != null) valorCupomPrint = Math.min(valorCupomPrint, Number(cupomSelecionado.valor_maximo));
+  const valorManualPrint = Math.max(0, Number(descontoManual) || 0);
+  const valorDescontoPrint = Math.min(subtotalPrint, valorCupomPrint + valorManualPrint);
+  const taxaPrint = Number(popupImprimirConta?.taxa_entrega ?? 0);
+  const totalComDescontoPrint = Math.max(0, subtotalPrint - valorDescontoPrint + taxaPrint);
+
+  const handleImprimirConta = async () => {
+    if (!popupImprimirConta || !contaItensPedido) return;
+    const subtotal = contaItensPedido.itens.reduce((s, i) => s + i.valor, 0);
+    await printContaViagem({
+      pedidoNumero: popupImprimirConta.numero,
+      clienteNome: popupImprimirConta.cliente_nome || '-',
+      clienteTelefone: popupImprimirConta.cliente_whatsapp ?? undefined,
+      itens: contaItensPedido.itens,
+      subtotal,
+      valorCupom: valorCupomPrint,
+      valorManual: valorManualPrint,
+      total: totalComDescontoPrint,
+      cupomCodigo: cupomSelecionado?.codigo,
+    });
+    setPopupImprimirConta(null);
+    setCupomDesconto('');
+    setDescontoManual('');
+  };
+
   async function handleAceitar(pedidoId: string) {
     await acceptPedidoOnline(pedidoId);
     load();
@@ -73,11 +129,21 @@ export default function AdminPedidosOnline() {
   }
 
   function abrirEncerrar(p: any) {
-    const total = totalPedido(p);
-    setPopupEncerrar({ pedido: p, total });
+    setPopupEncerrar({ pedido: p, total: totalPedido(p) });
     setFracoesEncerrar([]);
-    setNovaFraçãoValor(total.toFixed(2));
+    setNovaFraçãoValor('');
     setNovaFraçãoForma('');
+    getTotalAPagarPedido(p.id).then((total) => {
+      setPopupEncerrar((prev) => (prev ? { ...prev, total } : null));
+      const formaCliente = p.forma_pagamento ? normalizarFormaPagamento(p.forma_pagamento) : null;
+      if (total >= 0.01 && formaCliente) {
+        setFracoesEncerrar([{ valor: total, forma_pagamento: formaCliente }]);
+        setNovaFraçãoValor('0.00');
+        setNovaFraçãoForma(formaCliente);
+      } else {
+        setNovaFraçãoValor(total.toFixed(2));
+      }
+    });
   }
 
   const adicionarFraçãoEncerrar = () => {
@@ -96,13 +162,14 @@ export default function AdminPedidosOnline() {
   };
 
   async function confirmarEncerrar() {
-    if (!popupEncerrar || fracoesEncerrar.length === 0) return;
-    if (totalPagoEncerrar < totalEncerramento - 0.01) {
+    if (!popupEncerrar) return;
+    if (totalEncerramento >= 0.01 && fracoesEncerrar.length === 0) return;
+    if (totalEncerramento >= 0.01 && totalPagoEncerrar < totalEncerramento - 0.01) {
       alert(`Valor pago (R$ ${totalPagoEncerrar.toFixed(2)}) é menor que o total do pedido (R$ ${totalEncerramento.toFixed(2)}).`);
       return;
     }
     try {
-      await encerrarPedidoOnline(popupEncerrar.pedido.id, fracoesEncerrar);
+      await encerrarPedidoOnline(popupEncerrar.pedido.id, contaZeradaOnline ? [] : fracoesEncerrar);
       setPopupEncerrar(null);
       setFracoesEncerrar([]);
       load();
@@ -258,10 +325,19 @@ export default function AdminPedidosOnline() {
                   return (
                     <div key={p.id} className={`rounded-lg border bg-white p-3 flex flex-col gap-2 ${isFinalizado && !jaEncerrado ? 'border-amber-400 border-l-4' : ''}`}>
                       <div className="flex-1 min-w-0">
-                        <div className="font-semibold text-stone-800 text-sm">#{p.numero}</div>
+                        <div className="font-semibold text-stone-800 text-sm">
+                          #{p.numero} – {p.tipo_entrega === 'retirada' ? 'RETIRADA' : 'ENTREGA'}
+                        </div>
                         <p className="text-xs font-medium text-amber-700">R$ {totalPedido(p).toFixed(2)}</p>
                         <span className="text-xs text-stone-600">{p.cliente_nome} – {p.cliente_whatsapp}</span>
-                        {!isAguardando && <span className="ml-1 text-xs px-1.5 py-0.5 rounded bg-stone-100 text-stone-600">{statusLabel[p.status] ?? p.status}</span>}
+                        {p.tipo_entrega === 'entrega' && (
+                          <div className="mt-1 flex flex-col gap-0.5 text-xs text-stone-600">
+                            {p.cliente_endereco && <span>{p.cliente_endereco}</span>}
+                            {p.ponto_referencia && <span>Ref.: {p.ponto_referencia}</span>}
+                            <span>Pagamento: {p.forma_pagamento ?? '-'}{p.forma_pagamento && String(p.forma_pagamento).toLowerCase().includes('dinheiro') && p.troco_para != null ? ` – Troco R$ ${Number(p.troco_para).toFixed(2)}` : ''}</span>
+                          </div>
+                        )}
+                        {!isAguardando && <span className="ml-1 text-xs px-1.5 py-0.5 rounded bg-stone-100 text-stone-600">{jaEncerrado ? 'Entregue' : (statusLabel[p.status] ?? p.status)}</span>}
                         <ul className="mt-1 text-xs text-stone-600 line-clamp-2">
                           {(p.pedido_itens ?? []).map((i: any) => (
                             <li key={i.id}>{i.quantidade}x {i.produtos?.nome || i.produtos?.descricao}</li>
@@ -269,15 +345,28 @@ export default function AdminPedidosOnline() {
                         </ul>
                       </div>
                       <div className="flex flex-wrap gap-1 text-xs">
-                        <button type="button" onClick={() => handleImprimirPedido(p)} className="text-stone-600 hover:underline">Imprimir</button>
-                        <button type="button" onClick={() => (pedidoPodeEditarSemConfirmacao(p) ? abrirEdicao(p) : setConfirmarEdicaoAvancada(p))} className="text-amber-600 hover:underline">Editar</button>
-                        <button type="button" onClick={() => setPopupCancelar({ pedidoId: p.id, adminOverride: !pedidoPodeEditarSemConfirmacao(p) })} className="text-red-600 hover:underline">Cancelar</button>
-                        {isAguardando && (
-                          <button type="button" onClick={() => handleAceitar(p.id)} className="text-green-700 font-medium hover:underline">Aceitar</button>
+                        {jaEncerrado ? (
+                          <button type="button" onClick={() => handleImprimirPedido(p)} className="rounded border border-stone-300 px-2 py-1 text-stone-600 hover:bg-stone-50">Reimprimir</button>
+                        ) : !(isFinalizado && !jaEncerrado) && (
+                          <button type="button" onClick={() => handleImprimirPedido(p)} className="rounded border border-stone-300 px-2 py-1 text-stone-600 hover:bg-stone-50">Imprimir</button>
                         )}
-                        <button type="button" onClick={() => abrirEnviarParaMesa(p)} className="text-stone-600 hover:underline">Enviar para mesa</button>
-                        {isFinalizado && !jaEncerrado && p.imprimido_entrega_em && (
-                          <button type="button" onClick={() => abrirEncerrar(p)} className="text-amber-700 font-medium hover:underline">Encerrar pedido</button>
+                        {!jaEncerrado && (
+                          <>
+                            <button type="button" onClick={() => (pedidoPodeEditarSemConfirmacao(p) ? abrirEdicao(p) : setConfirmarEdicaoAvancada(p))} className="rounded border border-amber-300 px-2 py-1 text-amber-700 hover:bg-amber-50">Editar</button>
+                            <button type="button" onClick={() => setPopupCancelar({ pedidoId: p.id, adminOverride: !pedidoPodeEditarSemConfirmacao(p) })} className="rounded border border-red-200 px-2 py-1 text-red-600 hover:bg-red-50">Cancelar</button>
+                          </>
+                        )}
+                        {isAguardando && (
+                          <button type="button" onClick={() => handleAceitar(p.id)} className="rounded border border-green-600 bg-green-600 px-2 py-1 text-white font-medium hover:bg-green-700">Aceitar</button>
+                        )}
+                        {!jaEncerrado && (
+                          <button type="button" onClick={() => abrirEnviarParaMesa(p)} className="rounded border border-stone-300 px-2 py-1 text-stone-600 hover:bg-stone-50">Enviar para mesa</button>
+                        )}
+                        {isFinalizado && !jaEncerrado && (
+                          <>
+                            <button type="button" onClick={() => handleAbrirImprimirConta(p)} className="rounded border border-stone-300 px-2 py-1 text-stone-600 hover:bg-stone-50">Imprimir conta</button>
+                            <button type="button" onClick={() => abrirEncerrar(p)} className="rounded border border-amber-400 bg-amber-100 px-2 py-1 text-amber-700 font-medium hover:bg-amber-200">Encerrar pedido</button>
+                          </>
                         )}
                       </div>
                       {!jaEncerrado && (p.status === 'novo_pedido' || p.status === 'em_preparacao') && pedidoTemItemParaCozinha(p) && (
@@ -294,6 +383,48 @@ export default function AdminPedidosOnline() {
           );
         })}
       </div>
+
+      {popupImprimirConta && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl border border-stone-200">
+            <h3 className="font-semibold text-stone-800 mb-4">Imprimir conta - Pedido #{popupImprimirConta.numero}</h3>
+            <p className="text-sm text-stone-500 mb-3">{popupImprimirConta.cliente_nome}</p>
+            <label className="block text-sm font-medium text-stone-600 mb-1">Cupom de desconto</label>
+            <select
+              value={cupomDesconto}
+              onChange={(e) => setCupomDesconto(e.target.value)}
+              className="w-full rounded-lg border border-stone-300 px-3 py-2 mb-3"
+            >
+              <option value="">Nenhum</option>
+              {cupons.map((c) => (
+                <option key={c.id} value={c.id}>{c.codigo} ({c.porcentagem}%)</option>
+              ))}
+            </select>
+            <label className="block text-sm font-medium text-stone-600 mb-1">Desconto (R$)</label>
+            <input
+              type="number"
+              min={0}
+              step={0.5}
+              value={descontoManual}
+              onChange={(e) => setDescontoManual(e.target.value)}
+              placeholder="0,00"
+              className="w-full rounded-lg border border-stone-300 px-3 py-2 mb-3"
+            />
+            {contaItensPedido && (valorCupomPrint > 0 || valorManualPrint > 0) && (
+              <p className="text-sm text-stone-500 mb-2">
+                Desconto: R$ {valorDescontoPrint.toFixed(2)} — Total: R$ {totalComDescontoPrint.toFixed(2)}
+              </p>
+            )}
+            {contaItensPedido && valorCupomPrint === 0 && valorManualPrint === 0 && (
+              <p className="text-sm font-medium text-amber-700 mb-3">Total: R$ {contaItensPedido.total.toFixed(2)}</p>
+            )}
+            <div className="flex gap-2 mt-4">
+              <button onClick={handleImprimirConta} disabled={!contaItensPedido} className="flex-1 rounded-lg bg-amber-600 py-2 text-white hover:bg-amber-700 disabled:opacity-50">Imprimir</button>
+              <button onClick={() => { setPopupImprimirConta(null); setCupomDesconto(''); setDescontoManual(''); }} className="rounded-lg border border-stone-300 px-4 py-2 text-stone-600">Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {popupEnviarParaMesa && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
