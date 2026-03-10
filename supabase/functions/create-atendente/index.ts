@@ -1,4 +1,8 @@
-import { createClient } from '@supabase/supabase-js';
+// Import para Edge Functions (Deno) usando o registry npm:
+// o Supabase CLI entende "npm:" na hora de empacotar a função.
+// Ferramentas TypeScript do projeto podem não resolver esse import,
+// mas isso não impede o deploy nem a execução da função no Supabase.
+import { createClient } from 'npm:@supabase/supabase-js@2';
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, content-type' };
 
