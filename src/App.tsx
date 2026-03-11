@@ -16,6 +16,7 @@ import AdminPedidosOnline from './pages/admin/PedidosOnline';
 import AdminCozinha from './pages/admin/Cozinha';
 import AdminRelatorioFinanceiro from './pages/admin/RelatorioFinanceiro';
 import AdminRelatorioCancelamentos from './pages/admin/RelatorioCancelamentos';
+import AdminProdutividade from './pages/admin/Produtividade';
 import CozinhaLayout from './layouts/CozinhaLayout';
 import CozinhaKanban from './pages/cozinha/CozinhaKanban';
 
@@ -63,6 +64,7 @@ export default function App() {
         <Route path="cupons" element={<AdminCupons />} />
         <Route path="taxa-entrega" element={<AdminTaxaEntrega />} />
         <Route path="relatorio-financeiro" element={<AdminRelatorioFinanceiro />} />
+        <Route path="produtividade" element={<AdminProdutividade />} />
         <Route path="relatorio-cancelamentos" element={<AdminRelatorioCancelamentos />} />
       </Route>
 

@@ -14,6 +14,7 @@ import {
   Bike,
   LogOut,
   BarChart3,
+  TrendingUp,
   FileX,
   Menu,
   X,
@@ -33,6 +34,7 @@ const nav = [
   { to: '/admin/cupons', label: 'Cupons', icon: Ticket },
   { to: '/admin/taxa-entrega', label: 'Taxa Entrega', icon: Bike },
   { to: '/admin/relatorio-financeiro', label: 'Rel. Financeiro', icon: BarChart3 },
+  { to: '/admin/produtividade', label: 'Produtividade', icon: TrendingUp },
   { to: '/admin/relatorio-cancelamentos', label: 'Rel. Cancelamentos', icon: FileX },
   { label: 'Configurações', icon: Settings, isModal: true as const },
 ];

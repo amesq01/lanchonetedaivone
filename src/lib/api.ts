@@ -1087,7 +1087,7 @@ export async function getRelatorioFinanceiro(desde: string, ate: string) {
   }
 
   for (const p of online) {
-    (p as any).mesa = '-';
+    (p as any).mesa = 'online';
     (p as any).atendente_nome = 'Online';
   }
 
@@ -1186,6 +1186,70 @@ export async function getRelatorioFinanceiro(desde: string, ate: string) {
     }
   }
   return { pedidos: resultado, totalGeral, totalPorFormaPagamento };
+}
+
+export type ProdutividadePorCategoria = {
+  categoriaId: string;
+  categoriaNome: string;
+  ordem: number;
+  produtos: { produtoId: string; nome: string; quantidade: number }[];
+};
+
+export async function getProdutividade(desde: string, ate: string): Promise<{
+  totalPedidos: number;
+  porCategoria: ProdutividadePorCategoria[];
+}> {
+  const { data: pedidosData } = await supabase
+    .from('pedidos')
+    .select('id')
+    .eq('status', 'finalizado')
+    .gte('encerrado_em', desde)
+    .lte('encerrado_em', ate);
+  const pedidos = (pedidosData ?? []) as { id: string }[];
+  const totalPedidos = pedidos.length;
+  if (!pedidos.length) {
+    const { data: categoriasData } = await supabase.from('categorias').select('id, nome, ordem').order('ordem');
+    const categorias = (categoriasData ?? []) as { id: string; nome: string; ordem: number }[];
+    return {
+      totalPedidos: 0,
+      porCategoria: categorias.map((c) => ({ categoriaId: c.id, categoriaNome: c.nome, ordem: c.ordem, produtos: [] })),
+    };
+  }
+  const pedidoIds = pedidos.map((p) => p.id);
+  const { data: itensData } = await supabase
+    .from('pedido_itens')
+    .select('produto_id, quantidade')
+    .in('pedido_id', pedidoIds);
+  const itens = (itensData ?? []) as { produto_id: string; quantidade: number }[];
+  const qtdPorProduto: Record<string, number> = {};
+  for (const i of itens) {
+    qtdPorProduto[i.produto_id] = (qtdPorProduto[i.produto_id] ?? 0) + i.quantidade;
+  }
+  const { data: categoriasData } = await supabase.from('categorias').select('id, nome, ordem').order('ordem');
+  const categorias = (categoriasData ?? []) as { id: string; nome: string; ordem: number }[];
+  const { data: produtosData } = await supabase
+    .from('produtos')
+    .select('id, nome, descricao, categoria_id, produto_categorias(categoria_id)');
+  const produtos = (produtosData ?? []) as any[];
+  const produtoPorId: Record<string, { nome: string; categoriaIds: string[] }> = {};
+  for (const p of produtos) {
+    const cats = p.produto_categorias ?? [];
+    let categoriaIds = cats.map((c: any) => c.categoria_id).filter(Boolean);
+    if (categoriaIds.length === 0 && p.categoria_id) categoriaIds = [p.categoria_id];
+    produtoPorId[p.id] = { nome: p.nome ?? p.descricao ?? '-', categoriaIds };
+  }
+  const porCategoria: ProdutividadePorCategoria[] = categorias.map((c) => {
+    const produtosNaCategoria: { produtoId: string; nome: string; quantidade: number }[] = [];
+    for (const [produtoId, info] of Object.entries(produtoPorId)) {
+      if (info.categoriaIds.includes(c.id)) {
+        const qtd = qtdPorProduto[produtoId] ?? 0;
+        if (qtd > 0) produtosNaCategoria.push({ produtoId, nome: info.nome, quantidade: qtd });
+      }
+    }
+    produtosNaCategoria.sort((a, b) => b.quantidade - a.quantidade);
+    return { categoriaId: c.id, categoriaNome: c.nome, ordem: c.ordem, produtos: produtosNaCategoria };
+  });
+  return { totalPedidos, porCategoria };
 }
 
 /** Aplica desconto nos pedidos da comanda (cupom and/or manual). cupomId pode ser null para só desconto manual. */
