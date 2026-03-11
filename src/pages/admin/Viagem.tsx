@@ -86,6 +86,8 @@ export default function AdminViagem() {
   useEffect(() => {
     load();
     getProdutos(true).then(setProdutos);
+    const t = setInterval(load, 3000);
+    return () => clearInterval(t);
   }, []);
 
   const atendentes = useMemo(() => {
