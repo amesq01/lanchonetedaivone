@@ -313,6 +313,24 @@ export default function RelatorioFinanceiro() {
         <p className="text-stone-500">Carregando...</p>
       ) : (
         <>
+          <div className="text-lg font-semibold text-stone-800 mb-4 text-right">
+            Total do período: R$ {totalGeral.toFixed(2)}
+          </div>
+          {Object.keys(totalPorFormaPagamento).length > 0 && (
+            <div className="rounded-xl bg-stone-50 border border-stone-200 p-4 mb-4">
+              <h3 className="font-semibold text-stone-700 mb-2">Total por forma de pagamento</h3>
+              <ul className="space-y-1 text-sm">
+                {Object.entries(totalPorFormaPagamento)
+                  .sort(([, a], [, b]) => b - a)
+                  .map(([forma, valor]) => (
+                    <li key={forma} className="flex justify-between">
+                      <span className="text-stone-600">{forma}</span>
+                      <span className="font-medium text-stone-800">R$ {valor.toFixed(2)}</span>
+                    </li>
+                  ))}
+              </ul>
+            </div>
+          )}
           <div className="rounded-xl bg-white shadow-sm overflow-hidden mb-4">
             <table className="w-full">
               <thead className="bg-stone-50 border-b border-stone-200">
@@ -349,24 +367,6 @@ export default function RelatorioFinanceiro() {
               </tbody>
             </table>
           </div>
-          <div className="text-lg font-semibold text-stone-800 mb-4">
-            Total do período: R$ {totalGeral.toFixed(2)}
-          </div>
-          {Object.keys(totalPorFormaPagamento).length > 0 && (
-            <div className="rounded-xl bg-stone-50 border border-stone-200 p-4 mb-4">
-              <h3 className="font-semibold text-stone-700 mb-2">Total por forma de pagamento</h3>
-              <ul className="space-y-1 text-sm">
-                {Object.entries(totalPorFormaPagamento)
-                  .sort(([, a], [, b]) => b - a)
-                  .map(([forma, valor]) => (
-                    <li key={forma} className="flex justify-between">
-                      <span className="text-stone-600">{forma}</span>
-                      <span className="font-medium text-stone-800">R$ {valor.toFixed(2)}</span>
-                    </li>
-                  ))}
-              </ul>
-            </div>
-          )}
         </>
       )}
     </div>
