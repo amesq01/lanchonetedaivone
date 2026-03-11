@@ -305,6 +305,14 @@ export default function AdminPedidosOnline() {
 
   const pedidosOnline = [...pendentes, ...todos, ...encerradosHoje];
 
+  const descricaoPagamento = (p: any) => {
+    let pag = p.forma_pagamento ?? '-';
+    if (p.forma_pagamento && String(p.forma_pagamento).toLowerCase().includes('dinheiro') && p.troco_para != null) {
+      pag += ` – Troco R$ ${Number(p.troco_para).toFixed(2)}`;
+    }
+    return pag;
+  };
+
   const textoCardPedido = (p: any) => {
     const linhas: string[] = [];
     linhas.push(`#${p.numero} – ${p.tipo_entrega === 'retirada' ? 'RETIRADA' : 'ENTREGA'}`);
@@ -313,10 +321,8 @@ export default function AdminPedidosOnline() {
     if (p.tipo_entrega === 'entrega') {
       if (p.cliente_endereco) linhas.push(p.cliente_endereco);
       if (p.ponto_referencia) linhas.push(`Ref.: ${p.ponto_referencia}`);
-      let pag = p.forma_pagamento ?? '-';
-      if (p.forma_pagamento && String(p.forma_pagamento).toLowerCase().includes('dinheiro') && p.troco_para != null) pag += ` – Troco R$ ${Number(p.troco_para).toFixed(2)}`;
-      linhas.push(`Pagamento: ${pag}`);
     }
+    linhas.push(`Pagamento: ${descricaoPagamento(p)}`);
     const itens = (p.pedido_itens ?? []).map((i: any) => `${i.quantidade}x ${i.produtos?.nome || i.produtos?.descricao}`).join('\n');
     if (itens) linhas.push(itens);
     return linhas.join('\n');
@@ -383,20 +389,45 @@ export default function AdminPedidosOnline() {
                         </div>
                         <p className="text-xs font-medium text-amber-700">R$ {totalPedido(p).toFixed(2)}</p>
                         <span className="text-xs text-stone-600 inline-flex items-center gap-1">
-                          {p.cliente_nome} – {p.cliente_whatsapp}
-                          {isAguardando && (
-                            <button type="button" onClick={() => copiarClipboard(p.cliente_whatsapp ?? '')} className="p-0.5 rounded text-stone-400 hover:text-stone-600 hover:bg-stone-100" title="Copiar telefone">
-                              <Copy className="w-3.5 h-3.5" />
-                            </button>
+                          {p.cliente_nome} –{' '}
+                          {p.cliente_whatsapp ? (
+                            <>
+                              {isAguardando ? (
+                                <>
+                                  {p.cliente_whatsapp}
+                                  <button
+                                    type="button"
+                                    onClick={() => copiarClipboard(p.cliente_whatsapp ?? '')}
+                                    className="p-0.5 rounded text-stone-400 hover:text-stone-600 hover:bg-stone-100"
+                                    title="Copiar telefone"
+                                  >
+                                    <Copy className="w-3.5 h-3.5" />
+                                  </button>
+                                </>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => copiarClipboard(p.cliente_whatsapp ?? '')}
+                                  className="underline decoration-dotted underline-offset-2 hover:text-stone-800"
+                                  title="Copiar telefone"
+                                >
+                                  {p.cliente_whatsapp}
+                                </button>
+                              )}
+                            </>
+                          ) : (
+                            <span className="text-stone-400">sem telefone</span>
                           )}
                         </span>
-                        {p.tipo_entrega === 'entrega' && (
-                          <div className="mt-1 flex flex-col gap-0.5 text-xs text-stone-600">
-                            {p.cliente_endereco && <span>{p.cliente_endereco}</span>}
-                            {p.ponto_referencia && <span>Ref.: {p.ponto_referencia}</span>}
-                            <span>Pagamento: {p.forma_pagamento ?? '-'}{p.forma_pagamento && String(p.forma_pagamento).toLowerCase().includes('dinheiro') && p.troco_para != null ? ` – Troco R$ ${Number(p.troco_para).toFixed(2)}` : ''}</span>
-                          </div>
-                        )}
+                        <div className="mt-1 flex flex-col gap-0.5 text-xs text-stone-600">
+                          {p.tipo_entrega === 'entrega' && (
+                            <>
+                              {p.cliente_endereco && <span>{p.cliente_endereco}</span>}
+                              {p.ponto_referencia && <span>Ref.: {p.ponto_referencia}</span>}
+                            </>
+                          )}
+                          <span>Pagamento: {descricaoPagamento(p)}</span>
+                        </div>
                         {!isAguardando && <span className={`ml-1 text-xs px-1.5 py-0.5 rounded ${jaEncerrado ? 'bg-green-200 text-green-800 font-medium' : 'bg-stone-100 text-stone-600'}`}>{jaEncerrado ? 'Entregue' : (statusLabel[p.status] ?? p.status)}</span>}
                         <ul className="mt-1 text-xs text-stone-600 line-clamp-2">
                           {(p.pedido_itens ?? []).map((i: any) => (
