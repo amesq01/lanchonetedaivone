@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
-import { getProdutividade } from '../../lib/api';
+import { getProdutividade, getRelatorioFinanceiro } from '../../lib/api';
 import type { ProdutividadePorCategoria } from '../../lib/api';
 
 const TIMEZONE_BR = 'America/Sao_Paulo';
@@ -50,6 +50,8 @@ export default function AdminProdutividade() {
   const [accordionAbertos, setAccordionAbertos] = useState<Set<string>>(new Set());
   const [totalPedidos2, setTotalPedidos2] = useState<number | null>(null);
   const [compararLoading, setCompararLoading] = useState(false);
+  const [pedidosParaRanking, setPedidosParaRanking] = useState<any[]>([]);
+  const [filtroAtendente, setFiltroAtendente] = useState<string>('');
 
   const categoriasVisiveis = useMemo(
     () => porCategoria.filter((cat) => cat.categoriaNome.toUpperCase() !== 'PROMOÇÕES'),
@@ -67,6 +69,7 @@ export default function AdminProdutividade() {
 
   useEffect(() => {
     setTotalPedidos2(null);
+    setPedidosParaRanking([]);
   }, [desdeDateTime, ateDateTime]);
 
   const handleComparar = () => {
@@ -85,11 +88,13 @@ export default function AdminProdutividade() {
     Promise.all([
       getProdutividade(desde, ate),
       getProdutividade(desde2, ate2),
+      getRelatorioFinanceiro(desde, ate),
     ])
-      .then(([r1, r2]) => {
+      .then(([r1, r2, rFinanceiro]) => {
         setTotalPedidos(r1.totalPedidos);
         setPorCategoria(r1.porCategoria);
         setTotalPedidos2(r2.totalPedidos);
+        setPedidosParaRanking(rFinanceiro.pedidos ?? []);
       })
       .finally(() => {
         setLoading(false);
@@ -108,6 +113,34 @@ export default function AdminProdutividade() {
     totalPedidos2 != null && totalPedidos2 > 0
       ? ((totalPedidos - totalPedidos2) / totalPedidos2) * 100
       : null;
+
+  const pedidosFiltradosParaRanking = useMemo(
+    () => (filtroAtendente ? pedidosParaRanking.filter((p) => p.atendente_nome === filtroAtendente) : pedidosParaRanking),
+    [pedidosParaRanking, filtroAtendente],
+  );
+
+  const atendentesDisponiveis = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          pedidosParaRanking
+            .map((p) => p.atendente_nome as string | null)
+            .filter((n): n is string => !!n && n.trim().length > 0),
+        ),
+      ).sort((a, b) => a.localeCompare(b)),
+    [pedidosParaRanking],
+  );
+
+  const rankingAtendentes = useMemo(() => {
+    const porAtendente: Record<string, number> = {};
+    for (const p of pedidosFiltradosParaRanking) {
+      const nome = (p.atendente_nome ?? '-').trim() || '-';
+      porAtendente[nome] = (porAtendente[nome] ?? 0) + Number(p.total ?? 0);
+    }
+    return Object.entries(porAtendente)
+      .map(([nome, valor]) => ({ nome, valor }))
+      .sort((a, b) => b.valor - a.valor);
+  }, [pedidosFiltradosParaRanking]);
 
   return (
     <div className="min-w-0">
@@ -167,6 +200,21 @@ export default function AdminProdutividade() {
               onChange={(e) => setAteDateTime(e.target.value)}
               className="rounded-lg border border-stone-300 px-3 py-2 text-sm"
             />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-stone-600 mb-1">Atendente</label>
+            <select
+              value={filtroAtendente}
+              onChange={(e) => setFiltroAtendente(e.target.value)}
+              className="rounded-lg border border-stone-300 px-3 py-2 min-w-[180px]"
+            >
+              <option value="">Todos</option>
+              {atendentesDisponiveis.map((nome) => (
+                <option key={nome} value={nome}>
+                  {nome}
+                </option>
+              ))}
+            </select>
           </div>
           <button
             type="button"
@@ -272,6 +320,26 @@ export default function AdminProdutividade() {
               );
             })}
           </div>
+
+          {pedidosParaRanking.length > 0 && (
+            <div className="mt-8 rounded-xl bg-stone-50 border border-stone-200 p-4">
+              <h3 className="font-semibold text-stone-700 mb-3">Ranking por atendente</h3>
+              {rankingAtendentes.length > 0 ? (
+                <ul className="space-y-1 text-sm">
+                  {rankingAtendentes.map((item, i) => (
+                    <li key={item.nome} className="flex justify-between items-center">
+                      <span className="text-stone-600">
+                        {i + 1}º {item.nome}
+                      </span>
+                      <span className="font-medium text-stone-800">R$ {item.valor.toFixed(2)}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-stone-500">Nenhum atendente no período selecionado.</p>
+              )}
+            </div>
+          )}
         </>
       )}
     </div>

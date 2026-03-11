@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { getRelatorioFinanceiro } from '../../lib/api';
@@ -50,51 +50,6 @@ function formatarDataBR(iso: string | null): string {
   });
 }
 
-function agregarPorFormaPagamento(pedidos: any[]): Record<string, number> {
-  const mapa: Record<string, number> = {};
-  const normalizarForma = (s: string): string => {
-    const t = s.toLowerCase().trim();
-    if (t.startsWith('pix')) return 'pix';
-    if (t.startsWith('dinheiro')) return 'dinheiro';
-    if (t.startsWith('cartão crédito') || t.startsWith('cartao credito')) return 'cartão crédito';
-    if (t.startsWith('cartão débito') || t.startsWith('cartao debito')) return 'cartão débito';
-    return s.trim() || '-';
-  };
-  for (const p of pedidos) {
-    const fpRaw = String(p.forma_pagamento ?? '').trim();
-    const totalPedido = Number(p.total ?? 0);
-    if (!fpRaw) {
-      mapa['-'] = (mapa['-'] ?? 0) + totalPedido;
-      continue;
-    }
-    const partes = fpRaw.split(','); // pode ter múltiplas formas no mesmo texto
-    let teveValorFracionado = false;
-    for (const parteRaw of partes) {
-      const parte = parteRaw.trim();
-      if (!parte) continue;
-      const valorMatch = parte.match(/R\$\s*([\d.,]+)/);
-      if (!valorMatch) continue;
-      // Os valores que geramos não têm separador de milhar, apenas ponto como decimal (ex.: 209.93)
-      // Então basta trocar vírgula por ponto e fazer Number.
-      const valor = Number(valorMatch[1].replace(',', '.'));
-      if (!Number.isFinite(valor)) continue;
-      teveValorFracionado = true;
-      // forma é o trecho antes de "R$"
-      const idx = parte.toLowerCase().indexOf('r$');
-      const formaTexto = idx > 0 ? parte.slice(0, idx).trim() : parte;
-      const forma = normalizarForma(formaTexto);
-      mapa[forma] = (mapa[forma] ?? 0) + valor;
-    }
-    // Caso antigo: coluna pagamento só tem o nome da forma (ex.: "pix") sem valores "R$".
-    // Nesse caso, consideramos que o valor total do pedido foi pago naquela forma única.
-    if (!teveValorFracionado) {
-      const forma = normalizarForma(fpRaw);
-      mapa[forma] = (mapa[forma] ?? 0) + totalPedido;
-    }
-  }
-  return mapa;
-}
-
 export default function RelatorioFinanceiro() {
   const [desdeDateTime, setDesdeDateTime] = useState(() => presetDia().desde);
   const [ateDateTime, setAteDateTime] = useState(() => presetDia().ate);
@@ -102,7 +57,6 @@ export default function RelatorioFinanceiro() {
   const [totalGeral, setTotalGeral] = useState(0);
   const [totalPorFormaPagamento, setTotalPorFormaPagamento] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(false);
-  const [filtroAtendente, setFiltroAtendente] = useState<string>('');
   const [compararDados, setCompararDados] = useState<{ totalGeral: number; totalPedidos: number } | null>(null);
   const [compararLoading, setCompararLoading] = useState(false);
 
@@ -153,57 +107,15 @@ export default function RelatorioFinanceiro() {
       ? ((pedidos.length - compararDados.totalPedidos) / compararDados.totalPedidos) * 100
       : null;
 
-  const pedidosFiltrados = useMemo(
-    () => (filtroAtendente ? pedidos.filter((p) => p.atendente_nome === filtroAtendente) : pedidos),
-    [pedidos, filtroAtendente],
-  );
-
-  const totalGeralView = useMemo(
-    () => (pedidosFiltrados.length ? pedidosFiltrados.reduce((s, p) => s + Number(p.total ?? 0), 0) : totalGeral),
-    [pedidosFiltrados, totalGeral],
-  );
-
-  const totalPorFormaPagamentoView = useMemo(() => {
-    // Sem filtro de atendente: usa o agregado confiável vindo do backend
-    if (!filtroAtendente) return totalPorFormaPagamento;
-    // Com filtro de atendente: re-agrega a partir das descrições de forma_pagamento
-    return agregarPorFormaPagamento(pedidosFiltrados);
-  }, [filtroAtendente, pedidosFiltrados, totalPorFormaPagamento]);
-
-  const atendentesDisponiveis = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          pedidos
-            .map((p) => p.atendente_nome as string | null)
-            .filter((n): n is string => !!n && n.trim().length > 0),
-        ),
-      ).sort((a, b) => a.localeCompare(b)),
-    [pedidos],
-  );
-
-  const rankingAtendentes = useMemo(() => {
-    const porAtendente: Record<string, number> = {};
-    for (const p of pedidosFiltrados) {
-      const nome = (p.atendente_nome ?? '-').trim() || '-';
-      porAtendente[nome] = (porAtendente[nome] ?? 0) + Number(p.total ?? 0);
-    }
-    return Object.entries(porAtendente)
-      .map(([nome, valor]) => ({ nome, valor }))
-      .sort((a, b) => b.valor - a.valor);
-  }, [pedidosFiltrados]);
-
   const handleGerarPdf = () => {
     const doc = new jsPDF();
     const titulo = `Relatório financeiro - ${tituloPeriodo}`;
     doc.setFontSize(14);
     doc.text(titulo, 105, 15, { align: 'center' });
     doc.setFontSize(10);
-    let subtitulo = 'Período em horário de Brasília';
-    if (filtroAtendente) subtitulo += ` | Atendente: ${filtroAtendente}`;
-    doc.text(subtitulo, 105, 22, { align: 'center' });
+    doc.text('Período em horário de Brasília', 105, 22, { align: 'center' });
 
-    const corpo = pedidosFiltrados.length ? pedidosFiltrados : pedidos;
+    const corpo = pedidos;
     autoTable(doc, {
       startY: 28,
       head: [
@@ -228,9 +140,9 @@ export default function RelatorioFinanceiro() {
 
     let y = (doc as any).lastAutoTable.finalY + 6;
     doc.setFontSize(11);
-    doc.text(`Total do período: R$ ${totalGeralView.toFixed(2)}`, 14, y);
+    doc.text(`Total do período: R$ ${totalGeral.toFixed(2)}`, 14, y);
     y += 6;
-    const formasEntries = Object.entries(totalPorFormaPagamentoView);
+    const formasEntries = Object.entries(totalPorFormaPagamento);
     if (formasEntries.length) {
       doc.setFontSize(10);
       doc.text('Total por forma de pagamento:', 14, y);
@@ -241,16 +153,6 @@ export default function RelatorioFinanceiro() {
           doc.text(`${forma}: R$ ${valor.toFixed(2)}`, 18, y);
           y += 4;
         });
-      y += 4;
-    }
-    if (rankingAtendentes.length > 0) {
-      doc.setFontSize(10);
-      doc.text('Ranking por atendente:', 14, y);
-      y += 5;
-      rankingAtendentes.forEach((item, i) => {
-        doc.text(`${i + 1}º ${item.nome}: R$ ${item.valor.toFixed(2)}`, 18, y);
-        y += 4;
-      });
     }
 
     doc.save(`relatorio-financeiro-${new Date().toISOString().slice(0, 10)}.pdf`);
@@ -313,21 +215,6 @@ export default function RelatorioFinanceiro() {
               onChange={(e) => setAteDateTime(e.target.value)}
               className="rounded-lg border border-stone-300 px-3 py-2 text-sm"
             />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-stone-600 mb-1">Atendente</label>
-            <select
-              value={filtroAtendente}
-              onChange={(e) => setFiltroAtendente(e.target.value)}
-              className="rounded-lg border border-stone-300 px-3 py-2 min-w-[180px]"
-            >
-              <option value="">Todos</option>
-              {atendentesDisponiveis.map((nome) => (
-                <option key={nome} value={nome}>
-                  {nome}
-                </option>
-              ))}
-            </select>
           </div>
           <button
             type="button"
@@ -402,7 +289,7 @@ export default function RelatorioFinanceiro() {
                 </tr>
               </thead>
               <tbody>
-                {pedidosFiltrados.map((p) => (
+                {pedidos.map((p) => (
                   <tr key={p.id} className="border-b border-stone-100">
                     <td className="px-4 py-2 text-sm">{formatarDataBR(p.encerrado_em)}</td>
                     <td className="px-4 py-2">{p.numero}</td>
@@ -421,13 +308,13 @@ export default function RelatorioFinanceiro() {
             </table>
           </div>
           <div className="text-lg font-semibold text-stone-800 mb-4">
-            Total do período: R$ {totalGeralView.toFixed(2)}
+            Total do período: R$ {totalGeral.toFixed(2)}
           </div>
-          {Object.keys(totalPorFormaPagamentoView).length > 0 && (
+          {Object.keys(totalPorFormaPagamento).length > 0 && (
             <div className="rounded-xl bg-stone-50 border border-stone-200 p-4 mb-4">
               <h3 className="font-semibold text-stone-700 mb-2">Total por forma de pagamento</h3>
               <ul className="space-y-1 text-sm">
-                {Object.entries(totalPorFormaPagamentoView)
+                {Object.entries(totalPorFormaPagamento)
                   .sort(([, a], [, b]) => b - a)
                   .map(([forma, valor]) => (
                     <li key={forma} className="flex justify-between">
@@ -435,21 +322,6 @@ export default function RelatorioFinanceiro() {
                       <span className="font-medium text-stone-800">R$ {valor.toFixed(2)}</span>
                     </li>
                   ))}
-              </ul>
-            </div>
-          )}
-          {rankingAtendentes.length > 0 && (
-            <div className="rounded-xl bg-stone-50 border border-stone-200 p-4">
-              <h3 className="font-semibold text-stone-700 mb-2">Ranking por atendente</h3>
-              <ul className="space-y-1 text-sm">
-                {rankingAtendentes.map((item, i) => (
-                  <li key={item.nome} className="flex justify-between items-center">
-                    <span className="text-stone-600">
-                      {i + 1}º {item.nome}
-                    </span>
-                    <span className="font-medium text-stone-800">R$ {item.valor.toFixed(2)}</span>
-                  </li>
-                ))}
               </ul>
             </div>
           )}
