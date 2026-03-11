@@ -72,6 +72,21 @@ export default function AdminProdutividade() {
     setPedidosParaRanking([]);
   }, [desdeDateTime, ateDateTime]);
 
+  const carregarPeriodo = (desdeDt: string, ateDt: string) => {
+    const desde = datetimeLocalBrToUTC(desdeDt);
+    const ate = datetimeLocalBrToUTC(ateDt);
+    if (!desde || !ate) return;
+    setLoading(true);
+    setTotalPedidos2(null);
+    Promise.all([getProdutividade(desde, ate), getRelatorioFinanceiro(desde, ate)])
+      .then(([r1, rFinanceiro]) => {
+        setTotalPedidos(r1.totalPedidos);
+        setPorCategoria(r1.porCategoria);
+        setPedidosParaRanking(rFinanceiro.pedidos ?? []);
+      })
+      .finally(() => setLoading(false));
+  };
+
   const handleComparar = () => {
     const desde = datetimeLocalBrToUTC(desdeDateTime);
     const ate = datetimeLocalBrToUTC(ateDateTime);
@@ -155,6 +170,7 @@ export default function AdminProdutividade() {
                 const { desde, ate } = presetDia();
                 setDesdeDateTime(desde);
                 setAteDateTime(ate);
+                carregarPeriodo(desde, ate);
               }}
               className="rounded-lg border border-stone-200 px-4 py-2 text-sm font-medium text-stone-600 hover:bg-stone-50"
             >
@@ -166,6 +182,7 @@ export default function AdminProdutividade() {
                 const { desde, ate } = presetMes();
                 setDesdeDateTime(desde);
                 setAteDateTime(ate);
+                carregarPeriodo(desde, ate);
               }}
               className="rounded-lg border border-stone-200 px-4 py-2 text-sm font-medium text-stone-600 hover:bg-stone-50"
             >
@@ -177,6 +194,7 @@ export default function AdminProdutividade() {
                 const { desde, ate } = presetAno();
                 setDesdeDateTime(desde);
                 setAteDateTime(ate);
+                carregarPeriodo(desde, ate);
               }}
               className="rounded-lg border border-stone-200 px-4 py-2 text-sm font-medium text-stone-600 hover:bg-stone-50"
             >

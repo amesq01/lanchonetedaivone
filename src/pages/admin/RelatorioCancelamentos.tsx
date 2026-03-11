@@ -47,6 +47,17 @@ export default function RelatorioCancelamentos() {
     setTotalComparar(null);
   }, [desdeDateTime, ateDateTime]);
 
+  const carregarPeriodo = (desdeDt: string, ateDt: string) => {
+    const desde = datetimeLocalBrToUTCISO(desdeDt);
+    const ate = datetimeLocalBrToUTCISO(ateDt);
+    if (!desde || !ate) return;
+    setLoading(true);
+    setTotalComparar(null);
+    getRelatorioCancelamentos(desde, ate)
+      .then((r) => setItens(r.itens))
+      .finally(() => setLoading(false));
+  };
+
   const handleComparar = () => {
     const desde = datetimeLocalBrToUTCISO(desdeDateTime);
     const ate = datetimeLocalBrToUTCISO(ateDateTime);
@@ -98,6 +109,7 @@ export default function RelatorioCancelamentos() {
                 const { desde, ate } = presetDia();
                 setDesdeDateTime(desde);
                 setAteDateTime(ate);
+                carregarPeriodo(desde, ate);
               }}
               className="rounded-lg border border-stone-200 px-4 py-2 text-sm font-medium text-stone-600 hover:bg-stone-50"
             >
@@ -109,6 +121,7 @@ export default function RelatorioCancelamentos() {
                 const { desde, ate } = presetMes();
                 setDesdeDateTime(desde);
                 setAteDateTime(ate);
+                carregarPeriodo(desde, ate);
               }}
               className="rounded-lg border border-stone-200 px-4 py-2 text-sm font-medium text-stone-600 hover:bg-stone-50"
             >
@@ -120,6 +133,7 @@ export default function RelatorioCancelamentos() {
                 const { desde, ate } = presetAno();
                 setDesdeDateTime(desde);
                 setAteDateTime(ate);
+                carregarPeriodo(desde, ate);
               }}
               className="rounded-lg border border-stone-200 px-4 py-2 text-sm font-medium text-stone-600 hover:bg-stone-50"
             >
