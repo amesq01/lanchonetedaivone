@@ -8,6 +8,19 @@ import { useAuth } from '../../contexts/AuthContext';
 import type { Produto } from '../../types/database';
 import { precoVenda, imagensProduto } from '../../types/database';
 
+function haXTempo(iso: string | null | undefined): string {
+  if (!iso) return '';
+  const min = Math.floor((Date.now() - new Date(iso).getTime()) / 60_000);
+  if (min < 1) return 'há <1 min';
+  if (min === 1) return 'há 1 min';
+  if (min < 60) return `há ${min} min`;
+  const h = Math.floor(min / 60);
+  if (h === 1) return 'há 1 h';
+  if (h < 24) return `há ${h} h`;
+  const d = Math.floor(h / 24);
+  return d === 1 ? 'há 1 dia' : `há ${d} dias`;
+}
+
 export default function AdminPedidosOnline() {
   const { profile } = useAuth();
   const [pendentes, setPendentes] = useState<any[]>([]);
@@ -380,12 +393,13 @@ export default function AdminPedidosOnline() {
                     <div key={p.id} className={`rounded-lg border bg-white p-3 flex flex-col gap-2 ${isFinalizado && !jaEncerrado ? 'border-amber-400 border-l-4' : ''}`}>
                       <div className="flex-1 min-w-0">
                         <div className="font-semibold text-stone-800 text-sm flex items-center gap-1">
-                          #{p.numero} – {p.tipo_entrega === 'retirada' ? 'RETIRADA' : 'ENTREGA'}
+                          <span className="min-w-0">#{p.numero} – {p.tipo_entrega === 'retirada' ? 'RETIRADA' : 'ENTREGA'}</span>
                           {isAguardando && (
                             <button type="button" onClick={() => copiarClipboard(textoCardPedido(p))} className="p-0.5 rounded text-stone-400 hover:text-stone-600 hover:bg-stone-100" title="Copiar dados do card">
                               <Copy className="w-3.5 h-3.5" />
                             </button>
                           )}
+                          {p.created_at && <span className="text-stone-500 font-normal text-xs ml-auto shrink-0">{haXTempo(p.created_at)}</span>}
                         </div>
                         <p className="text-xs font-medium text-amber-700">R$ {totalPedido(p).toFixed(2)}</p>
                         <span className="text-xs text-stone-600 inline-flex items-center gap-1">
