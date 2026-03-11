@@ -1124,6 +1124,14 @@ export async function getRelatorioFinanceiro(desde: string, ate: string) {
     });
   }
   const totalPorFormaPagamento: Record<string, number> = {};
+  const normalizarForma = (s: string): string => {
+    const t = String(s ?? '').toLowerCase().trim();
+    if (t.startsWith('pix')) return 'pix';
+    if (t.startsWith('dinheiro')) return 'dinheiro';
+    if (t.startsWith('cartão crédito') || t.startsWith('cartao credito')) return 'cartão crédito';
+    if (t.startsWith('cartão débito') || t.startsWith('cartao debito')) return 'cartão débito';
+    return t || '-';
+  };
   const fmtPagamento = (lista: { valor: number; forma_pagamento: string; nome_quem_pagou?: string | null }[]) =>
     lista.length ? lista.map((x) => `${x.forma_pagamento} R$ ${x.valor.toFixed(2)}${x.nome_quem_pagou ? ` (${x.nome_quem_pagou})` : ''}`).join(', ') : null;
   for (const row of resultado) {
@@ -1135,8 +1143,17 @@ export async function getRelatorioFinanceiro(desde: string, ate: string) {
     }
     const list = row.comanda_id ? pagamentosByComanda[row.comanda_id] : row.origem === 'online' ? pagamentosByPedido[row.id] : null;
     if (list && list.length) {
-      for (const x of list) {
-        totalPorFormaPagamento[x.forma_pagamento] = (totalPorFormaPagamento[x.forma_pagamento] ?? 0) + x.valor;
+      const rowTotal = Number(row.total ?? 0);
+      const sumPagamentos = list.reduce((s, x) => s + x.valor, 0);
+      if (sumPagamentos > 0) {
+        for (const x of list) {
+          const forma = normalizarForma(x.forma_pagamento);
+          const proporcao = x.valor / sumPagamentos;
+          totalPorFormaPagamento[forma] = (totalPorFormaPagamento[forma] ?? 0) + proporcao * rowTotal;
+        }
+      } else {
+        const forma = normalizarForma(list[0].forma_pagamento);
+        totalPorFormaPagamento[forma] = (totalPorFormaPagamento[forma] ?? 0) + rowTotal;
       }
     } else {
       // Dados legados: não há registros na tabela pagamentos, apenas o campo forma_pagamento na linha.
@@ -1146,14 +1163,6 @@ export async function getRelatorioFinanceiro(desde: string, ate: string) {
         totalPorFormaPagamento['-'] = (totalPorFormaPagamento['-'] ?? 0) + total;
         continue;
       }
-      const normalizarForma = (s: string): string => {
-        const t = s.toLowerCase().trim();
-        if (t.startsWith('pix')) return 'pix';
-        if (t.startsWith('dinheiro')) return 'dinheiro';
-        if (t.startsWith('cartão crédito') || t.startsWith('cartao credito')) return 'cartão crédito';
-        if (t.startsWith('cartão débito') || t.startsWith('cartao debito')) return 'cartão débito';
-        return s.trim() || '-';
-      };
       const partes = fpRaw.split(',');
       let teveValorFracionado = false;
       for (const parteRaw of partes) {
