@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { getPedidosViagemAbertos, getPedidosViagemEncerradosHoje, getTotalComanda, getTotalAPagarComanda, closeComanda, getCuponsAtivos, applyDescontoComanda, clearDescontoComanda, getProdutos, updatePedidoItens, updatePedidoStatus, getMesasParaTransferencia, openComanda, movePedidosParaOutraComanda, createPedidoViagem } from '../../lib/api';
 import type { FraçãoPagamento } from '../../lib/api';
 import { printContaViagem, printPedido, printPedidosUnificados } from '../../lib/printPdf';
@@ -69,6 +69,8 @@ export default function AdminViagem() {
   const [carrinhoNovo, setCarrinhoNovo] = useState<ItemCarrinho[]>([]);
   const [enviandoNovo, setEnviandoNovo] = useState(false);
   const [mostrarNovoPedido, setMostrarNovoPedido] = useState(false);
+  const [erroNomeClienteNovo, setErroNomeClienteNovo] = useState(false);
+  const nomeClienteNovoRef = useRef<HTMLInputElement | null>(null);
   const [searchPedidos, setSearchPedidos] = useState('');
   const [atendenteIdFiltro, setAtendenteIdFiltro] = useState<string | null>(null);
   const [, setTick] = useState(0);
@@ -213,8 +215,14 @@ export default function AdminViagem() {
     setCarrinhoNovo((c) => c.map((item, i) => (i === index ? { ...item, observacao: value } : item)));
   };
   const finalizarNovoPedidoViagem = async () => {
-    if (!nomeClienteNovo.trim() || carrinhoNovo.length === 0 || !profile?.id) {
-      alert('Informe o nome do cliente e adicione ao menos um item.');
+    if (!profile?.id) return;
+    if (!nomeClienteNovo.trim()) {
+      setErroNomeClienteNovo(true);
+      nomeClienteNovoRef.current?.focus();
+      return;
+    }
+    if (carrinhoNovo.length === 0) {
+      alert('Adicione ao menos um item.');
       return;
     }
     setEnviandoNovo(true);
@@ -230,6 +238,7 @@ export default function AdminViagem() {
       setTelefoneNovo('');
       setCarrinhoNovo([]);
       setSearchNovo('');
+      setErroNomeClienteNovo(false);
       setMostrarNovoPedido(false);
       load();
     } catch (e) {
@@ -441,9 +450,29 @@ export default function AdminViagem() {
           </div>
           <p className="text-sm text-stone-500 mb-3">Informe o cliente, busque os produtos e finalize. O pedido será exibido como &quot;lançada pelo admin&quot;.</p>
           <div className="flex flex-wrap gap-4 items-end mb-3">
-            <div className="min-w-[180px]">
+            <div className="w-full sm:w-[340px]">
               <label className="block text-sm font-medium text-stone-600 mb-1">Nome do cliente</label>
-              <input type="text" value={nomeClienteNovo} onChange={(e) => setNomeClienteNovo(e.target.value)} placeholder="Ex: Maria" className="w-full rounded-lg border border-stone-300 px-3 py-2" />
+              <div className="relative">
+                <input
+                  ref={nomeClienteNovoRef}
+                  type="text"
+                  value={nomeClienteNovo}
+                  onFocus={() => {
+                    if (erroNomeClienteNovo) setErroNomeClienteNovo(false);
+                  }}
+                  onChange={(e) => {
+                    setNomeClienteNovo(e.target.value);
+                    if (erroNomeClienteNovo && e.target.value.trim()) setErroNomeClienteNovo(false);
+                  }}
+                  placeholder="Ex: Maria"
+                  className={`w-full rounded-lg border px-3 py-2 ${erroNomeClienteNovo ? 'border-red-400 focus:border-red-500 focus:ring-red-200' : 'border-stone-300'}`}
+                />
+                {erroNomeClienteNovo && !nomeClienteNovo.trim() && (
+                  <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-red-600">
+                    Campo obrigatório
+                  </span>
+                )}
+              </div>
             </div>
             <div className="min-w-[180px]">
               <label className="block text-sm font-medium text-stone-600 mb-1">Telefone (opcional)</label>
@@ -497,18 +526,10 @@ export default function AdminViagem() {
                 <button
                   type="button"
                   onClick={finalizarNovoPedidoViagem}
-                  disabled={enviandoNovo || !nomeClienteNovo.trim() || carrinhoNovo.length === 0}
+                  disabled={enviandoNovo}
                   className="w-full rounded-lg bg-amber-600 py-2 font-medium text-white hover:bg-amber-700 disabled:opacity-50"
                 >
-                  {enviandoNovo
-                    ? 'Enviando...'
-                    : !nomeClienteNovo.trim() && carrinhoNovo.length === 0
-                      ? 'Informe o nome do cliente e adicione itens'
-                      : !nomeClienteNovo.trim()
-                        ? 'Informe o nome do cliente'
-                        : carrinhoNovo.length === 0
-                          ? 'Adicione itens ao pedido'
-                          : 'Finalizar pedido viagem'}
+                  {enviandoNovo ? 'Enviando...' : 'Finalizar pedido viagem'}
                 </button>
               </div>
             </div>
