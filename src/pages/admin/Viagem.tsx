@@ -68,6 +68,7 @@ export default function AdminViagem() {
   const [searchNovo, setSearchNovo] = useState('');
   const [carrinhoNovo, setCarrinhoNovo] = useState<ItemCarrinho[]>([]);
   const [enviandoNovo, setEnviandoNovo] = useState(false);
+  const [mostrarNovoPedido, setMostrarNovoPedido] = useState(false);
   const [searchPedidos, setSearchPedidos] = useState('');
   const [atendenteIdFiltro, setAtendenteIdFiltro] = useState<string | null>(null);
   const [, setTick] = useState(0);
@@ -228,6 +229,8 @@ export default function AdminViagem() {
       setNomeClienteNovo('');
       setTelefoneNovo('');
       setCarrinhoNovo([]);
+      setSearchNovo('');
+      setMostrarNovoPedido(false);
       load();
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Erro ao lançar pedido.');
@@ -384,96 +387,133 @@ export default function AdminViagem() {
           <h1 className="text-xl sm:text-2xl font-bold text-stone-800">Mesa VIAGEM</h1>
           <p className="text-stone-600 text-sm sm:text-base">Pedidos para viagem. Marque os pedidos e use &quot;Mover selecionados&quot; para enviar a uma mesa local (aberta ou livre).</p>
         </div>
-        {pedidosSelecionadosViagem.size > 0 && (
-          <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={() => { const sel = pedidos.filter((p) => pedidosSelecionadosViagem.has(p.id)); printPedidosUnificados(sel, 'Viagem'); }} className="rounded-lg border border-stone-400 px-4 py-2 text-stone-700 hover:bg-stone-50">
-              Imprimir selecionados ({pedidosSelecionadosViagem.size})
-            </button>
-            <button onClick={abrirMoverSelecionadosViagem} className="rounded-lg border border-amber-400 px-4 py-2 text-amber-700 hover:bg-amber-50 text-sm sm:text-base">
-              Mover selecionados para mesa local ({pedidosSelecionadosViagem.size})
-            </button>
-          </div>
-        )}
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setMostrarNovoPedido(true);
+              setNomeClienteNovo('');
+              setTelefoneNovo('');
+              setSearchNovo('');
+              setCarrinhoNovo([]);
+            }}
+            className="rounded-lg border border-amber-400 bg-amber-100 px-4 py-2 text-amber-700 font-medium hover:bg-amber-200 text-sm sm:text-base"
+          >
+            Adicionar pedido
+          </button>
+          {pedidosSelecionadosViagem.size > 0 && (
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  const sel = pedidos.filter((p) => pedidosSelecionadosViagem.has(p.id));
+                  printPedidosUnificados(sel, 'Viagem');
+                }}
+                className="rounded-lg border border-stone-400 px-4 py-2 text-stone-700 hover:bg-stone-50"
+              >
+                Imprimir selecionados ({pedidosSelecionadosViagem.size})
+              </button>
+              <button
+                onClick={abrirMoverSelecionadosViagem}
+                className="rounded-lg border border-amber-400 px-4 py-2 text-amber-700 hover:bg-amber-50 text-sm sm:text-base"
+              >
+                Mover selecionados para mesa local ({pedidosSelecionadosViagem.size})
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
-      <div className="rounded-xl bg-white p-3 sm:p-4 shadow-sm mb-4 sm:mb-6">
-        <h3 className="font-semibold text-stone-800 mb-3 text-base sm:text-lg">Novo pedido viagem</h3>
-        <p className="text-sm text-stone-500 mb-3">Informe o cliente, busque os produtos e finalize. O pedido será exibido como &quot;lançada pelo admin&quot;.</p>
-        <div className="flex flex-wrap gap-4 items-end mb-3">
-          <div className="min-w-[180px]">
-            <label className="block text-sm font-medium text-stone-600 mb-1">Nome do cliente</label>
-            <input type="text" value={nomeClienteNovo} onChange={(e) => setNomeClienteNovo(e.target.value)} placeholder="Ex: Maria" className="w-full rounded-lg border border-stone-300 px-3 py-2" />
+      {mostrarNovoPedido && (
+        <div className="rounded-xl bg-white p-3 sm:p-4 shadow-sm mb-4 sm:mb-6">
+          <div className="flex items-start justify-between gap-3 mb-3">
+            <h3 className="font-semibold text-stone-800 text-base sm:text-lg">Novo pedido viagem</h3>
+            <button
+              type="button"
+              onClick={() => {
+                setMostrarNovoPedido(false);
+                setSearchNovo('');
+              }}
+              className="rounded-lg border border-stone-300 px-3 py-1.5 text-sm text-stone-600 hover:bg-stone-50"
+            >
+              Fechar
+            </button>
           </div>
-          <div className="min-w-[180px]">
-            <label className="block text-sm font-medium text-stone-600 mb-1">Telefone (opcional)</label>
-            <input type="tel" value={telefoneNovo} onChange={(e) => setTelefoneNovo(formatarTelefone(e.target.value))} placeholder="(11) 99999-9999" className="w-full rounded-lg border border-stone-300 px-3 py-2" />
+          <p className="text-sm text-stone-500 mb-3">Informe o cliente, busque os produtos e finalize. O pedido será exibido como &quot;lançada pelo admin&quot;.</p>
+          <div className="flex flex-wrap gap-4 items-end mb-3">
+            <div className="min-w-[180px]">
+              <label className="block text-sm font-medium text-stone-600 mb-1">Nome do cliente</label>
+              <input type="text" value={nomeClienteNovo} onChange={(e) => setNomeClienteNovo(e.target.value)} placeholder="Ex: Maria" className="w-full rounded-lg border border-stone-300 px-3 py-2" />
+            </div>
+            <div className="min-w-[180px]">
+              <label className="block text-sm font-medium text-stone-600 mb-1">Telefone (opcional)</label>
+              <input type="tel" value={telefoneNovo} onChange={(e) => setTelefoneNovo(formatarTelefone(e.target.value))} placeholder="(11) 99999-9999" className="w-full rounded-lg border border-stone-300 px-3 py-2" />
+            </div>
+            <div className="flex-1 min-w-[200px] relative">
+              <label className="block text-sm font-medium text-stone-600 mb-1">Buscar produto</label>
+              <input type="text" value={searchNovo} onChange={(e) => setSearchNovo(e.target.value)} placeholder="Nome ou código..." className="w-full rounded-lg border border-stone-300 px-3 py-2" />
+              {sNovo && filtradosNovo.length > 0 && (
+                <ul className="absolute z-10 mt-1 w-full max-h-[50vh] overflow-y-auto rounded-lg border border-stone-200 bg-white shadow-lg divide-y divide-stone-100">
+                  {filtradosNovo.slice(0, 30).map((p) => (
+                    <li key={p.id}>
+                      <button type="button" onClick={() => addItemNovo(p)} className="flex w-full min-h-[3.25rem] items-center gap-2 px-3 py-2.5 text-left hover:bg-stone-50">
+                        <div className="w-10 h-10 flex-shrink-0 rounded-lg bg-stone-100 overflow-hidden flex items-center justify-center">
+                          {imagensProduto(p)[0] ? <img src={imagensProduto(p)[0]} alt="" className="w-full h-full object-cover" /> : <span className="text-stone-400 text-xs">IMG</span>}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <span className="text-sm font-medium text-stone-500">#{p.codigo}</span>
+                          <span className="ml-2 text-stone-800 truncate text-sm">{p.nome || p.descricao}</span>
+                        </div>
+                        <div className="flex-shrink-0 text-amber-600 font-medium text-sm">R$ {precoVenda(p).toFixed(2)}</div>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </div>
-          <div className="flex-1 min-w-[200px] relative">
-            <label className="block text-sm font-medium text-stone-600 mb-1">Buscar produto</label>
-            <input type="text" value={searchNovo} onChange={(e) => setSearchNovo(e.target.value)} placeholder="Nome ou código..." className="w-full rounded-lg border border-stone-300 px-3 py-2" />
-            {sNovo && filtradosNovo.length > 0 && (
-              <ul className="absolute z-10 mt-1 w-full max-h-[50vh] overflow-y-auto rounded-lg border border-stone-200 bg-white shadow-lg divide-y divide-stone-100">
-                {filtradosNovo.slice(0, 30).map((p) => (
-                  <li key={p.id}>
-                    <button type="button" onClick={() => addItemNovo(p)} className="flex w-full min-h-[3.25rem] items-center gap-2 px-3 py-2.5 text-left hover:bg-stone-50">
-                      <div className="w-10 h-10 flex-shrink-0 rounded-lg bg-stone-100 overflow-hidden flex items-center justify-center">
-                        {imagensProduto(p)[0] ? <img src={imagensProduto(p)[0]} alt="" className="w-full h-full object-cover" /> : <span className="text-stone-400 text-xs">IMG</span>}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <span className="text-sm font-medium text-stone-500">#{p.codigo}</span>
-                        <span className="ml-2 text-stone-800 truncate text-sm">{p.nome || p.descricao}</span>
-                      </div>
-                      <div className="flex-shrink-0 text-amber-600 font-medium text-sm">R$ {precoVenda(p).toFixed(2)}</div>
-                    </button>
+          {carrinhoNovo.length > 0 && (
+            <div className="rounded-lg border border-stone-200 overflow-hidden mb-3">
+              <div className="p-2 border-b border-stone-100 font-medium text-stone-700 text-sm">Itens do pedido</div>
+              <ul className="divide-y divide-stone-100">
+                {carrinhoNovo.map((item, i) => (
+                  <li key={i} className="flex flex-wrap items-center gap-2 p-2">
+                    <div className="w-10 h-10 rounded bg-stone-100 flex-shrink-0 overflow-hidden flex items-center justify-center">
+                      {imagensProduto(item.produto)[0] ? <img src={imagensProduto(item.produto)[0]} alt="" className="w-full h-full object-cover" /> : <span className="text-stone-400 text-xs">IMG</span>}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-stone-800 text-sm">{item.produto.codigo} – {item.produto.nome || item.produto.descricao}</div>
+                      <input type="text" value={item.observacao} onChange={(e) => setObsNovo(i, e.target.value)} placeholder="Observação" className="mt-0.5 w-full text-sm rounded border border-stone-200 px-2 py-1" />
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button type="button" onClick={() => updateQtdNovo(i, -1)} className="w-8 h-8 rounded border border-stone-300 text-stone-600">−</button>
+                      <span className="w-8 text-center font-medium text-sm">{item.quantidade}</span>
+                      <button type="button" onClick={() => updateQtdNovo(i, 1)} className="w-8 h-8 rounded border border-stone-300 text-stone-600">+</button>
+                    </div>
                   </li>
                 ))}
               </ul>
-            )}
-          </div>
-        </div>
-        {carrinhoNovo.length > 0 && (
-          <div className="rounded-lg border border-stone-200 overflow-hidden mb-3">
-            <div className="p-2 border-b border-stone-100 font-medium text-stone-700 text-sm">Itens do pedido</div>
-            <ul className="divide-y divide-stone-100">
-              {carrinhoNovo.map((item, i) => (
-                <li key={i} className="flex flex-wrap items-center gap-2 p-2">
-                  <div className="w-10 h-10 rounded bg-stone-100 flex-shrink-0 overflow-hidden flex items-center justify-center">
-                    {imagensProduto(item.produto)[0] ? <img src={imagensProduto(item.produto)[0]} alt="" className="w-full h-full object-cover" /> : <span className="text-stone-400 text-xs">IMG</span>}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="font-medium text-stone-800 text-sm">{item.produto.codigo} – {item.produto.nome || item.produto.descricao}</div>
-                    <input type="text" value={item.observacao} onChange={(e) => setObsNovo(i, e.target.value)} placeholder="Observação" className="mt-0.5 w-full text-sm rounded border border-stone-200 px-2 py-1" />
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <button type="button" onClick={() => updateQtdNovo(i, -1)} className="w-8 h-8 rounded border border-stone-300 text-stone-600">−</button>
-                    <span className="w-8 text-center font-medium text-sm">{item.quantidade}</span>
-                    <button type="button" onClick={() => updateQtdNovo(i, 1)} className="w-8 h-8 rounded border border-stone-300 text-stone-600">+</button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-            <div className="p-2 border-t border-stone-100">
-              <button type="button" onClick={finalizarNovoPedidoViagem} disabled={enviandoNovo} className="w-full rounded-lg bg-amber-600 py-2 font-medium text-white hover:bg-amber-700 disabled:opacity-50">
-                {enviandoNovo ? 'Enviando...' : 'Finalizar pedido viagem'}
-              </button>
+              <div className="p-2 border-t border-stone-100">
+                <button type="button" onClick={finalizarNovoPedidoViagem} disabled={enviandoNovo} className="w-full rounded-lg bg-amber-600 py-2 font-medium text-white hover:bg-amber-700 disabled:opacity-50">
+                  {enviandoNovo ? 'Enviando...' : 'Finalizar pedido viagem'}
+                </button>
+              </div>
             </div>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
 
-      <div className="mb-3 flex flex-wrap items-end gap-2">
+      <div className="mb-3 flex flex-wrap items-end gap-2 justify-between">
         <div className="w-[250px]">
-          <label className="block text-base font-medium text-stone-600 mb-1">Buscar pedido</label>
           <input
             type="text"
             value={searchPedidos}
             onChange={(e) => setSearchPedidos(e.target.value)}
-            placeholder="Nome do cliente ou número do pedido..."
+            placeholder="Buscar cliente ou pedido"
             className="w-full rounded-lg border border-stone-300 px-3 py-2 text-base"
           />
         </div>
-        <div className="flex flex-wrap gap-1.5 items-center">
-          <span className="text-sm font-medium text-stone-600">Atendente:</span>
+        <div className="flex flex-wrap gap-1.5 items-center justify-end">
           <button
             type="button"
             onClick={() => setAtendenteIdFiltro(null)}

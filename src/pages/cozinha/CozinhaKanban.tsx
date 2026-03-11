@@ -110,11 +110,11 @@ export default function CozinhaKanban() {
 
   return (
     <div className="h-full flex flex-col min-h-0">
-      <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-4 min-h-0">
+      <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-3 min-h-0">
       {COLUNAS.map((col) => {
         const Icon = col.icon;
         return (
-        <div key={col.key} className="rounded-xl bg-stone-100 p-4 flex flex-col min-h-0">
+        <div key={col.key} className="rounded-xl bg-stone-100 border border-stone-200 p-4 flex flex-col min-h-0">
           <h3 className={`font-semibold mb-3 flex-shrink-0 flex items-center gap-2 rounded-lg border px-3 py-2 ${col.className}`}>
             <Icon className="h-5 w-5 flex-shrink-0" />
             {col.label}
