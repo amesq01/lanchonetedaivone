@@ -162,7 +162,8 @@ export default function LojaOnline() {
     }
     return produtos.filter((p) => {
       const ids = (p.produto_categorias ?? []).map((pc) => pc.categoria_id);
-      if (categoriaId === null) return ids.length === 0;
+      if (ids.length === 0) return false; // ignora produtos sem categoria
+      if (categoriaId === null) return true; // "Todos" = todas as categorias (exceto promoções tratadas acima)
       return ids.includes(categoriaId);
     });
   };
@@ -171,10 +172,6 @@ export default function LojaOnline() {
     if (c.nome.toUpperCase() === 'PROMOÇÕES') return produtos.some((p) => p.em_promocao === true);
     return byCategoria(c.id).length > 0;
   });
-  const produtosSemCategoria = byCategoria(null).filter((p) => !p.em_promocao);
-  const semCategoria = produtosSemCategoria.length > 0;
-
-  const exibirSemCategoria = categoriaSelecionada === null && semCategoria;
   const exibirCategoria = (cat: Categoria) =>
     categoriaSelecionada === cat.id || (categoriaSelecionada === null && cat.nome.toUpperCase() !== 'PROMOÇÕES');
   const categoriaVazia =
@@ -265,16 +262,6 @@ export default function LojaOnline() {
         </div>
       </header>
       <main className="mx-auto max-w-4xl px-2 py-4 sm:px-4 sm:py-6">
-        {exibirSemCategoria && (
-          <section className="mb-4 sm:mb-8">
-            <h2 className="mb-2 sm:mb-4 text-lg font-semibold text-stone-800">Cardápio</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-4 items-stretch">
-              {produtosSemCategoria.map((p) => (
-                <CardProduto key={p.id} produto={p} qty={qtyByProd[p.id] ?? 0} onOpenModal={() => openModal(p)} onRemove={() => removeFromCart(p)} />
-              ))}
-            </div>
-          </section>
-        )}
         {categoriasComProdutos.filter(exibirCategoria).map((cat) => (
           <section key={cat.id} className="mb-4 sm:mb-8">
             <h2 className="mb-2 sm:mb-4 text-lg font-semibold text-stone-800">{cat.nome}</h2>

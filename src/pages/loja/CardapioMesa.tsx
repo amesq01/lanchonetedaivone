@@ -211,7 +211,8 @@ export default function CardapioMesa() {
     }
     return produtos.filter((p) => {
       const ids = getCategoriaIds(p);
-      if (categoriaId === null) return ids.length === 0;
+      if (ids.length === 0) return false; // ignora produtos sem categoria
+      if (categoriaId === null) return true;
       return ids.includes(categoriaId);
     });
   };
@@ -220,10 +221,6 @@ export default function CardapioMesa() {
     if (c.nome.toUpperCase() === 'PROMOÇÕES') return produtos.some((p) => p.em_promocao === true);
     return byCategoria(c.id).length > 0;
   });
-  const produtosSemCategoriaLista = byCategoria(null).filter((p) => !p.em_promocao);
-  const semCategoria = produtosSemCategoriaLista.length > 0;
-
-  const exibirSemCategoria = categoriaSelecionada === null && semCategoria;
   const exibirCategoria = (cat: Categoria) =>
     categoriaSelecionada === cat.id || (categoriaSelecionada === null && cat.nome.toUpperCase() !== 'PROMOÇÕES');
   const categoriaVazia = categoriaSelecionada !== null && byCategoria(categoriaSelecionada).length === 0;
@@ -249,7 +246,6 @@ export default function CardapioMesa() {
   const produtosSushi = catSushi ? produtosDeOutraCat(catSushi.id) : [];
   const produtosLanches = catLanches ? produtosDeOutraCat(catLanches.id) : [];
   const produtosBebidas = catBebidas ? produtosDeOutraCat(catBebidas.id) : [];
-  const produtosSemCategoria = produtosSemCategoriaLista;
 
   return (
     <div className="print-cardapio-a4 min-h-screen bg-stone-50">
@@ -303,16 +299,6 @@ export default function CardapioMesa() {
 
       {/* Tela: lista filtrada por categoria, mesma disposição dos cards (um por linha) */}
       <main className="mx-auto max-w-6xl px-4 py-6 print:hidden">
-        {exibirSemCategoria && (
-          <section className="mb-8">
-            <h2 className="mb-4 text-lg font-semibold text-stone-800">Cardápio</h2>
-            <div className="space-y-2">
-              {produtosSemCategoria.map((p) => (
-                <CardItem key={p.id} produto={p} onClick={() => setModalProduto(p)} />
-              ))}
-            </div>
-          </section>
-        )}
         {categoriasComProdutos.filter(exibirCategoria).map((cat) => (
           <section key={cat.id} className="mb-8">
             <h2 className="mb-4 text-lg font-semibold text-stone-800">{cat.nome}</h2>
@@ -376,14 +362,6 @@ export default function CardapioMesa() {
             </React.Fragment>
           );
         })}
-        {produtosSemCategoria.length > 0 && (
-          <>
-            <tr className="cardapio-section-row bg-amber-50/80 print:bg-transparent"><td className="pt-4 pb-2 pl-2 sm:pl-4 print:pt-4 print:pb-2 print:pl-0 border-l-4 border-amber-500 print:border-l-0"><h2 className="text-lg font-semibold text-stone-800 print:text-sm print:font-bold print:uppercase print:border-b-2 print:border-stone-800 print:pb-1">Cardápio</h2></td></tr>
-            {produtosSemCategoria.map((p) => (
-              <tr key={p.id}><td className="py-1 print:py-1 overflow-hidden"><CardItem produto={p} /></td></tr>
-            ))}
-          </>
-        )}
         </tbody>
       </table>
       {produtos.length === 0 && <p className="mx-auto max-w-6xl px-4 py-6 text-stone-500">Nenhum produto disponível.</p>}
