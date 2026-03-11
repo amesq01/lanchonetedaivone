@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { getProdutividade, getRelatorioFinanceiro } from '../../lib/api';
 import type { ProdutividadePorCategoria } from '../../lib/api';
 
@@ -24,6 +26,19 @@ function getHojeBr(): string {
 function presetDia(): { desde: string; ate: string } {
   const hoje = getHojeBr();
   return { desde: hoje + 'T00:00', ate: hoje + 'T23:59' };
+}
+
+/** Preseta desde/até para a semana atual (seg 00:00 até dom 23:59 em BR). */
+function presetSemana(): { desde: string; ate: string } {
+  const hoje = getHojeBr(); // YYYY-MM-DD em BR
+  const base = new Date(`${hoje}T00:00:00-03:00`);
+  const day = base.getDay(); // 0 dom .. 6 sáb
+  const diffToMonday = (day + 6) % 7; // 0 se segunda
+  const monday = new Date(base.getTime() - diffToMonday * 24 * 60 * 60 * 1000);
+  const sunday = new Date(monday.getTime() + 6 * 24 * 60 * 60 * 1000);
+  const mondayStr = monday.toLocaleDateString('en-CA', { timeZone: TIMEZONE_BR });
+  const sundayStr = sunday.toLocaleDateString('en-CA', { timeZone: TIMEZONE_BR });
+  return { desde: `${mondayStr}T00:00`, ate: `${sundayStr}T23:59` };
 }
 
 /** Preseta desde/até para o mês atual em BR. */
@@ -157,9 +172,69 @@ export default function AdminProdutividade() {
       .sort((a, b) => b.valor - a.valor);
   }, [pedidosFiltradosParaRanking]);
 
+  const handleGerarPdf = () => {
+    const doc = new jsPDF();
+    const titulo = `Produtividade - ${tituloPeriodo}`;
+    doc.setFontSize(14);
+    doc.text(titulo, 105, 15, { align: 'center' });
+    doc.setFontSize(10);
+    doc.text('Período em horário de Brasília', 105, 22, { align: 'center' });
+
+    let y = 30;
+    doc.setFontSize(11);
+    doc.text(`Total de pedidos: ${totalPedidos}`, 14, y);
+    y += 6;
+    if (totalPedidos2 != null) {
+      doc.text(`Intervalo anterior: ${totalPedidos2} | Variação: ${variacaoPedidos != null ? `${variacaoPedidos.toFixed(1)}%` : '-'}`, 14, y);
+      y += 6;
+    }
+
+    const linhasProdutos: Array<[string, string, string]> = [];
+    for (const cat of categoriasVisiveis) {
+      for (const prod of cat.produtos) {
+        linhasProdutos.push([cat.categoriaNome, prod.nome, String(prod.quantidade)]);
+      }
+      if (cat.produtos.length === 0) {
+        linhasProdutos.push([cat.categoriaNome, '—', '0']);
+      }
+    }
+
+    if (linhasProdutos.length) {
+      autoTable(doc, {
+        startY: y,
+        head: [['Categoria', 'Produto', 'Qtd.']],
+        body: linhasProdutos,
+        styles: { fontSize: 8 },
+        headStyles: { fillColor: [245, 245, 245], textColor: 20 },
+      });
+      y = (doc as any).lastAutoTable.finalY + 8;
+    }
+
+    if (rankingAtendentes.length) {
+      autoTable(doc, {
+        startY: y,
+        head: [['Posição', 'Atendente', 'Total (R$)']],
+        body: rankingAtendentes.map((r, i) => [`${i + 1}º`, r.nome, `R$ ${r.valor.toFixed(2)}`]),
+        styles: { fontSize: 8 },
+        headStyles: { fillColor: [245, 245, 245], textColor: 20 },
+      });
+    }
+
+    doc.save(`produtividade-${new Date().toISOString().slice(0, 10)}.pdf`);
+  };
+
   return (
     <div className="min-w-0">
-      <h1 className="mb-4 text-xl sm:text-2xl font-bold text-stone-800">Produtividade</h1>
+      <div className="mb-4 flex items-center justify-between gap-4">
+        <h1 className="text-xl sm:text-2xl font-bold text-stone-800">Produtividade</h1>
+        <button
+          type="button"
+          onClick={handleGerarPdf}
+          className="inline-flex items-center rounded-lg border border-stone-300 bg-white px-4 py-2 text-sm font-medium text-stone-700 hover:bg-stone-50"
+        >
+          Gerar PDF
+        </button>
+      </div>
 
       <div className="mb-6 space-y-4">
         <div className="flex flex-wrap items-end gap-4">
@@ -174,7 +249,19 @@ export default function AdminProdutividade() {
               }}
               className="rounded-lg border border-stone-200 px-4 py-2 text-sm font-medium text-stone-600 hover:bg-stone-50"
             >
-              Dia
+              Diário
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const { desde, ate } = presetSemana();
+                setDesdeDateTime(desde);
+                setAteDateTime(ate);
+                carregarPeriodo(desde, ate);
+              }}
+              className="rounded-lg border border-stone-200 px-4 py-2 text-sm font-medium text-stone-600 hover:bg-stone-50"
+            >
+              Semanal
             </button>
             <button
               type="button"
@@ -186,7 +273,7 @@ export default function AdminProdutividade() {
               }}
               className="rounded-lg border border-stone-200 px-4 py-2 text-sm font-medium text-stone-600 hover:bg-stone-50"
             >
-              Mês
+              Mensal
             </button>
             <button
               type="button"
@@ -198,7 +285,7 @@ export default function AdminProdutividade() {
               }}
               className="rounded-lg border border-stone-200 px-4 py-2 text-sm font-medium text-stone-600 hover:bg-stone-50"
             >
-              Ano
+              Anual
             </button>
           </div>
           <div>

@@ -25,6 +25,18 @@ function presetDia(): { desde: string; ate: string } {
   return { desde: hoje + 'T00:00', ate: hoje + 'T23:59' };
 }
 
+function presetSemana(): { desde: string; ate: string } {
+  const hoje = getHojeBr(); // YYYY-MM-DD em BR
+  const base = new Date(`${hoje}T00:00:00-03:00`);
+  const day = base.getDay(); // 0 dom .. 6 sáb
+  const diffToMonday = (day + 6) % 7; // 0 se segunda
+  const monday = new Date(base.getTime() - diffToMonday * 24 * 60 * 60 * 1000);
+  const sunday = new Date(monday.getTime() + 6 * 24 * 60 * 60 * 1000);
+  const mondayStr = monday.toLocaleDateString('en-CA', { timeZone: TIMEZONE_BR });
+  const sundayStr = sunday.toLocaleDateString('en-CA', { timeZone: TIMEZONE_BR });
+  return { desde: `${mondayStr}T00:00`, ate: `${sundayStr}T23:59` };
+}
+
 function presetMes(): { desde: string; ate: string } {
   const hoje = getHojeBr();
   const [y, m] = hoje.slice(0, 7).split('-').map(Number);
@@ -175,7 +187,16 @@ export default function RelatorioFinanceiro() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-stone-800 mb-4">Relatório financeiro</h1>
+      <div className="mb-4 flex items-center justify-between gap-4">
+        <h1 className="text-2xl font-bold text-stone-800">Relatório financeiro</h1>
+        <button
+          type="button"
+          onClick={handleGerarPdf}
+          className="inline-flex items-center rounded-lg border border-stone-300 bg-white px-4 py-2 text-sm font-medium text-stone-700 hover:bg-stone-50"
+        >
+          Gerar PDF
+        </button>
+      </div>
       <div className="mb-6 space-y-4">
         <div className="flex flex-wrap items-end gap-4">
           <div className="flex gap-2">
@@ -190,6 +211,18 @@ export default function RelatorioFinanceiro() {
               className="rounded-lg border border-stone-200 px-4 py-2 text-sm font-medium text-stone-600 hover:bg-stone-50"
             >
               Diário
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const { desde, ate } = presetSemana();
+                setDesdeDateTime(desde);
+                setAteDateTime(ate);
+                carregarPeriodo(desde, ate);
+              }}
+              className="rounded-lg border border-stone-200 px-4 py-2 text-sm font-medium text-stone-600 hover:bg-stone-50"
+            >
+              Semanal
             </button>
             <button
               type="button"
@@ -241,15 +274,6 @@ export default function RelatorioFinanceiro() {
             className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-800 hover:bg-amber-100 disabled:opacity-50"
           >
             {compararLoading ? 'Buscando...' : 'Comparar'}
-          </button>
-        </div>
-        <div className="flex flex-wrap items-end gap-4">
-          <button
-            type="button"
-            onClick={handleGerarPdf}
-            className="ml-auto inline-flex items-center rounded-lg border border-stone-300 bg-white px-4 py-2 text-sm font-medium text-stone-700 hover:bg-stone-50"
-          >
-            Gerar PDF
           </button>
         </div>
       </div>
