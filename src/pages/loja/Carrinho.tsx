@@ -56,7 +56,7 @@ export default function LojaCarrinho() {
   const [cupomLoading, setCupomLoading] = useState(false);
   const [taxaEntrega, setTaxaEntrega] = useState<number | null>(null);
   const [lanchoneteAberta, setLanchoneteAberta] = useState<boolean | null>(null);
-  const [soRetirada, setSoRetirada] = useState(false);
+  const [soRetirada, setSoRetirada] = useState<boolean | null>(null);
   const [mensagemAbertura, setMensagemAbertura] = useState<string | null>(null);
 
   useEffect(() => {
@@ -122,7 +122,8 @@ export default function LojaCarrinho() {
 
   const rawSubtotal = itens.reduce((s, i) => s + i.quantidade * precoVenda(i.produto), 0);
   const subtotal = Number.isFinite(rawSubtotal) ? rawSubtotal : 0;
-  const taxa = taxaEntrega !== null && Number.isFinite(taxaEntrega) ? taxaEntrega : 0;
+  // Taxa só quando não for "só retirada" (quando null/loading, não cobrar taxa até definir)
+  const taxa = soRetirada === true ? 0 : (soRetirada === false && taxaEntrega !== null && Number.isFinite(taxaEntrega) ? taxaEntrega : 0);
   let rawDesconto = cupomAplicado ? (subtotal * Number(cupomAplicado.porcentagem)) / 100 : 0;
   if (cupomAplicado?.valorMaximo != null) rawDesconto = Math.min(rawDesconto, cupomAplicado.valorMaximo);
   const desconto = Number.isFinite(rawDesconto) ? rawDesconto : 0;
@@ -241,10 +242,12 @@ export default function LojaCarrinho() {
                   <span>Subtotal</span>
                   <span>R$ {subtotal.toFixed(2)}</span>
                 </div>
-                <div className="flex justify-between text-sm text-stone-600">
-                  <span>Taxa de entrega</span>
-                  <span>R$ {(Number.isFinite(taxa) ? taxa : 0).toFixed(2)}</span>
-                </div>
+                {taxa > 0 && (
+                  <div className="flex justify-between text-sm text-stone-600">
+                    <span>Taxa de entrega</span>
+                    <span>R$ {taxa.toFixed(2)}</span>
+                  </div>
+                )}
                 {desconto > 0 && (
                   <div className="flex justify-between text-sm text-amber-700">
                     <span>Desconto (cupom)</span>
