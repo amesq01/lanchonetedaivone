@@ -78,7 +78,7 @@ export default function AdminProdutividade() {
     const desdeMs = new Date(desde.replace(' ', 'T') + 'Z').getTime();
     const ateMs = new Date(ate.replace(' ', 'T') + 'Z').getTime();
     const duracaoMs = ateMs - desdeMs;
-    const ate2Ms = desdeMs - 1;
+    const ate2Ms = desdeMs - 1000;
     const desde2Ms = ate2Ms - duracaoMs;
     const desde2 = new Date(desde2Ms).toISOString().slice(0, 19).replace('T', ' ');
     const ate2 = new Date(ate2Ms).toISOString().slice(0, 19).replace('T', ' ');
@@ -102,7 +102,7 @@ export default function AdminProdutividade() {
       ? `${new Date(desdeDateTime.slice(0, 10) + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })} ${desdeDateTime.slice(11, 16)} – ${new Date(ateDateTime.slice(0, 10) + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })} ${ateDateTime.slice(11, 16)}`
       : '—';
 
-  const tituloPeriodoAnterior = totalPedidos2 != null ? 'Período anterior (mesma duração)' : '—';
+  const tituloPeriodoAnterior = totalPedidos2 != null ? 'Intervalo anterior (mesma duração)' : '—';
 
   const variacaoPedidos =
     totalPedidos2 != null && totalPedidos2 > 0
@@ -193,7 +193,7 @@ export default function AdminProdutividade() {
                   <p className="text-lg font-bold text-stone-800">{totalPedidos} pedidos</p>
                 </div>
                 <div>
-                  <p className="text-stone-500">Período anterior (mesma duração)</p>
+                  <p className="text-stone-500">Intervalo anterior (mesma duração)</p>
                   <p className="font-semibold text-stone-800">{tituloPeriodoAnterior}</p>
                   <p className="text-lg font-bold text-stone-800">{totalPedidos2} pedidos</p>
                 </div>

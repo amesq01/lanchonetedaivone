@@ -119,7 +119,7 @@ export default function RelatorioFinanceiro() {
     const desdeMs = new Date(desde.replace(' ', 'T') + 'Z').getTime();
     const ateMs = new Date(ate.replace(' ', 'T') + 'Z').getTime();
     const duracaoMs = ateMs - desdeMs;
-    const ate2Ms = desdeMs - 1;
+    const ate2Ms = desdeMs - 1000;
     const desde2Ms = ate2Ms - duracaoMs;
     const desde2 = new Date(desde2Ms).toISOString().slice(0, 19).replace('T', ' ');
     const ate2 = new Date(ate2Ms).toISOString().slice(0, 19).replace('T', ' ');
@@ -358,7 +358,7 @@ export default function RelatorioFinanceiro() {
               <p className="text-stone-700">{pedidos.length} pedidos · R$ {totalGeral.toFixed(2)}</p>
             </div>
             <div>
-              <p className="text-stone-500">Período anterior (mesma duração)</p>
+              <p className="text-stone-500">Intervalo anterior (mesma duração)</p>
               <p className="text-stone-700">{compararDados.totalPedidos} pedidos · R$ {compararDados.totalGeral.toFixed(2)}</p>
             </div>
             <div>

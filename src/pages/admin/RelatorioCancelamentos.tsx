@@ -56,7 +56,7 @@ export default function RelatorioCancelamentos() {
     const desdeMs = new Date(desde).getTime();
     const ateMs = new Date(ate).getTime();
     const duracaoMs = ateMs - desdeMs;
-    const ate2Ms = desdeMs - 1;
+    const ate2Ms = desdeMs - 1000;
     const desde2Ms = ate2Ms - duracaoMs;
     const desde2 = new Date(desde2Ms).toISOString();
     const ate2 = new Date(ate2Ms).toISOString();
@@ -164,7 +164,7 @@ export default function RelatorioCancelamentos() {
               <p className="text-stone-700">{itens.length} cancelamentos</p>
             </div>
             <div>
-              <p className="text-stone-500">Período anterior (mesma duração)</p>
+              <p className="text-stone-500">Intervalo anterior (mesma duração)</p>
               <p className="text-stone-700">{totalComparar} cancelamentos</p>
             </div>
             <div>
