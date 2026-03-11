@@ -1,119 +1,183 @@
 import { useEffect, useState } from 'react';
 import { getRelatorioCancelamentos } from '../../lib/api';
 
-/** Brasília = UTC-3: 00:00 BRT = 03:00 UTC, 23:59:59 BRT = próximo dia 02:59:59 UTC */
-function rangeBrasilia(tipo: 'dia' | 'mes' | 'ano', value: string): { desde: string; ate: string } {
-  if (tipo === 'dia') {
-    const [y, m, d] = value.split('-').map(Number);
-    const desde = new Date(Date.UTC(y, m - 1, d, 3, 0, 0, 0)).toISOString();
-    const ate = new Date(Date.UTC(y, m - 1, d + 1, 2, 59, 59, 999)).toISOString();
-    return { desde, ate };
-  }
-  if (tipo === 'mes') {
-    const [y, m] = value.split('-').map(Number);
-    const desde = new Date(Date.UTC(y, m - 1, 1, 3, 0, 0, 0)).toISOString();
-    const ultimoDia = new Date(y, m, 0).getDate();
-    const ate = new Date(Date.UTC(y, m - 1, ultimoDia + 1, 2, 59, 59, 999)).toISOString();
-    return { desde, ate };
-  }
-  const y = Number(value);
-  const desde = new Date(Date.UTC(y, 0, 1, 3, 0, 0, 0)).toISOString();
-  const ate = new Date(Date.UTC(y, 11, 31 + 1, 2, 59, 59, 999)).toISOString();
-  return { desde, ate };
+const TIMEZONE_BR = 'America/Sao_Paulo';
+
+/** Converte "YYYY-MM-DDTHH:mm" (Brasília) para UTC ISO. */
+function datetimeLocalBrToUTCISO(dt: string): string {
+  if (!dt || dt.length < 16) return '';
+  const [datePart, timePart] = dt.split('T');
+  const [y, m, d] = datePart.slice(0, 10).split('-').map(Number);
+  const [hh = 0, mm = 0] = (timePart || '00:00').split(':').map(Number);
+  const brAsUTC = new Date(Date.UTC(y, m - 1, d, hh, mm, 0, 0));
+  return new Date(brAsUTC.getTime() + 3 * 60 * 60 * 1000).toISOString();
 }
 
-const hojeBR = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
-const diaAtual = hojeBR;
-const mesAtual = hojeBR.slice(0, 7);
-const anoAtual = hojeBR.slice(0, 4);
+function getHojeBr(): string {
+  return new Date().toLocaleDateString('en-CA', { timeZone: TIMEZONE_BR });
+}
+
+function presetDia(): { desde: string; ate: string } {
+  const hoje = getHojeBr();
+  return { desde: hoje + 'T00:00', ate: hoje + 'T23:59' };
+}
+
+function presetMes(): { desde: string; ate: string } {
+  const hoje = getHojeBr();
+  const [y, m] = hoje.slice(0, 7).split('-').map(Number);
+  const lastDay = new Date(y, m, 0).getDate();
+  const lastStr = `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+  return { desde: `${hoje.slice(0, 7)}-01T00:00`, ate: `${lastStr}T23:59` };
+}
+
+function presetAno(): { desde: string; ate: string } {
+  const y = new Date().getFullYear();
+  return { desde: `${y}-01-01T00:00`, ate: `${y}-12-31T23:59` };
+}
 
 export default function RelatorioCancelamentos() {
-  const [tipo, setTipo] = useState<'dia' | 'mes' | 'ano'>('dia');
-  const [dataRef, setDataRef] = useState(diaAtual);
-  const [mesRef, setMesRef] = useState(mesAtual);
-  const [anoRef, setAnoRef] = useState(anoAtual);
+  const [desdeDateTime, setDesdeDateTime] = useState(() => presetDia().desde);
+  const [ateDateTime, setAteDateTime] = useState(() => presetDia().ate);
   const [itens, setItens] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-
-  const valor = tipo === 'dia' ? dataRef : tipo === 'mes' ? mesRef : anoRef;
+  const [totalComparar, setTotalComparar] = useState<number | null>(null);
+  const [compararLoading, setCompararLoading] = useState(false);
 
   useEffect(() => {
-    const { desde, ate } = rangeBrasilia(tipo, valor);
+    setTotalComparar(null);
+  }, [desdeDateTime, ateDateTime]);
+
+  const handleComparar = () => {
+    const desde = datetimeLocalBrToUTCISO(desdeDateTime);
+    const ate = datetimeLocalBrToUTCISO(ateDateTime);
+    if (!desde || !ate) return;
     setLoading(true);
-    getRelatorioCancelamentos(desde, ate)
-      .then((r) => setItens(r.itens))
-      .finally(() => setLoading(false));
-  }, [tipo, valor]);
+    setCompararLoading(true);
+    const desdeMs = new Date(desde).getTime();
+    const ateMs = new Date(ate).getTime();
+    const duracaoMs = ateMs - desdeMs;
+    const ate2Ms = desdeMs - 1;
+    const desde2Ms = ate2Ms - duracaoMs;
+    const desde2 = new Date(desde2Ms).toISOString();
+    const ate2 = new Date(ate2Ms).toISOString();
+    Promise.all([
+      getRelatorioCancelamentos(desde, ate),
+      getRelatorioCancelamentos(desde2, ate2),
+    ])
+      .then(([r1, r2]) => {
+        setItens(r1.itens);
+        setTotalComparar(r2.itens.length);
+      })
+      .finally(() => {
+        setLoading(false);
+        setCompararLoading(false);
+      });
+  };
 
   const tituloPeriodo =
-    tipo === 'dia'
-      ? new Date(dataRef + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })
-      : tipo === 'mes'
-        ? new Date(mesRef + '-01T12:00:00').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
-        : anoRef;
+    desdeDateTime && ateDateTime
+      ? `${new Date(desdeDateTime.slice(0, 10) + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })} ${desdeDateTime.slice(11, 16)} – ${new Date(ateDateTime.slice(0, 10) + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })} ${ateDateTime.slice(11, 16)}`
+      : '—';
+
+  const variacaoCancelamentos =
+    totalComparar != null && totalComparar > 0
+      ? ((itens.length - totalComparar) / totalComparar) * 100
+      : totalComparar === 0 && itens.length > 0
+        ? 100
+        : null;
 
   return (
     <div>
       <h1 className="text-2xl font-bold text-stone-800 mb-4">Relatório de cancelamentos</h1>
-      <div className="mb-6 flex flex-wrap items-end gap-6">
-        <div className="flex gap-2">
-          {(['dia', 'mes', 'ano'] as const).map((t) => (
+      <div className="mb-6 space-y-4">
+        <div className="flex flex-wrap items-end gap-4">
+          <div className="flex gap-2">
             <button
-              key={t}
+              type="button"
               onClick={() => {
-                if (t === 'mes') {
-                  if (tipo === 'dia') setMesRef(dataRef.slice(0, 7));
-                  else if (tipo === 'ano') setMesRef(anoRef + '-01');
-                } else if (t === 'ano') {
-                  if (tipo === 'dia') setAnoRef(dataRef.slice(0, 4));
-                  else if (tipo === 'mes') setAnoRef(mesRef.slice(0, 4));
-                }
-                setTipo(t);
+                const { desde, ate } = presetDia();
+                setDesdeDateTime(desde);
+                setAteDateTime(ate);
               }}
-              className={`rounded-lg border px-4 py-2 text-sm font-medium ${
-                tipo === t ? 'border-amber-500 bg-amber-50 text-amber-800' : 'border-stone-200 bg-white text-stone-600 hover:bg-stone-50'
-              }`}
+              className="rounded-lg border border-stone-200 px-4 py-2 text-sm font-medium text-stone-600 hover:bg-stone-50"
             >
-              {t === 'dia' ? 'Diário' : t === 'mes' ? 'Mensal' : 'Anual'}
+              Diário
             </button>
-          ))}
+            <button
+              type="button"
+              onClick={() => {
+                const { desde, ate } = presetMes();
+                setDesdeDateTime(desde);
+                setAteDateTime(ate);
+              }}
+              className="rounded-lg border border-stone-200 px-4 py-2 text-sm font-medium text-stone-600 hover:bg-stone-50"
+            >
+              Mensal
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const { desde, ate } = presetAno();
+                setDesdeDateTime(desde);
+                setAteDateTime(ate);
+              }}
+              className="rounded-lg border border-stone-200 px-4 py-2 text-sm font-medium text-stone-600 hover:bg-stone-50"
+            >
+              Anual
+            </button>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-stone-600 mb-1">De</label>
+            <input
+              type="datetime-local"
+              value={desdeDateTime}
+              onChange={(e) => setDesdeDateTime(e.target.value)}
+              className="rounded-lg border border-stone-300 px-3 py-2 text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-stone-600 mb-1">Até</label>
+            <input
+              type="datetime-local"
+              value={ateDateTime}
+              onChange={(e) => setAteDateTime(e.target.value)}
+              className="rounded-lg border border-stone-300 px-3 py-2 text-sm"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={handleComparar}
+            disabled={compararLoading}
+            className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-800 hover:bg-amber-100 disabled:opacity-50"
+          >
+            {compararLoading ? 'Buscando...' : 'Comparar'}
+          </button>
         </div>
-        {tipo === 'dia' && (
-          <div>
-            <label className="block text-sm font-medium text-stone-600">Data</label>
-            <input
-              type="date"
-              value={dataRef}
-              onChange={(e) => setDataRef(e.target.value)}
-              className="mt-1 rounded-lg border border-stone-300 px-3 py-2"
-            />
-          </div>
-        )}
-        {tipo === 'mes' && (
-          <div>
-            <label className="block text-sm font-medium text-stone-600">Mês</label>
-            <input
-              type="month"
-              value={mesRef}
-              onChange={(e) => setMesRef(e.target.value)}
-              className="mt-1 rounded-lg border border-stone-300 px-3 py-2"
-            />
-          </div>
-        )}
-        {tipo === 'ano' && (
-          <div>
-            <label className="block text-sm font-medium text-stone-600">Ano</label>
-            <input
-              type="number"
-              min={2020}
-              max={2030}
-              value={anoRef}
-              onChange={(e) => setAnoRef(e.target.value)}
-              className="mt-1 w-24 rounded-lg border border-stone-300 px-3 py-2"
-            />
-          </div>
-        )}
       </div>
+      {totalComparar != null && (
+        <div className="mb-4 rounded-xl bg-amber-50 border border-amber-200 p-4 shadow-sm">
+          <h2 className="text-sm font-medium text-amber-800 mb-3">Comparação com período anterior</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
+            <div>
+              <p className="text-stone-500">Período selecionado</p>
+              <p className="font-semibold text-stone-800">{tituloPeriodo}</p>
+              <p className="text-stone-700">{itens.length} cancelamentos</p>
+            </div>
+            <div>
+              <p className="text-stone-500">Período anterior (mesma duração)</p>
+              <p className="text-stone-700">{totalComparar} cancelamentos</p>
+            </div>
+            <div>
+              <p className="text-stone-500">Variação</p>
+              {variacaoCancelamentos != null && (
+                <p className={`font-medium ${variacaoCancelamentos >= 0 ? 'text-red-700' : 'text-green-700'}`}>
+                  {variacaoCancelamentos >= 0 ? '+' : ''}{variacaoCancelamentos.toFixed(1)}%
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
       <p className="text-sm text-stone-500 mb-4">
         Período: <strong>{tituloPeriodo}</strong> (horário de Brasília)
       </p>

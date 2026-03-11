@@ -5,25 +5,37 @@ import { getRelatorioFinanceiro } from '../../lib/api';
 
 const TIMEZONE_BR = 'America/Sao_Paulo';
 
-/** Retorna início e fim do período em UTC (meia-noite a meia-noite em Brasília, UTC-3). Formato para o backend: "YYYY-MM-DD HH:mm:ss". */
-function periodoParaUTC(periodo: 'dia' | 'mes' | 'ano', dataRef: string): { desde: string; ate: string } {
-  const fmt = (d: Date) => d.toISOString().slice(0, 19).replace('T', ' ');
-  if (periodo === 'dia') {
-    const [y, m, d] = dataRef.slice(0, 10).split('-').map(Number);
-    const desde = fmt(new Date(Date.UTC(y, m - 1, d, 3, 0, 0, 0)));
-    const ate = fmt(new Date(Date.UTC(y, m - 1, d + 1, 3, 0, 0, 0)));
-    return { desde, ate };
-  }
-  if (periodo === 'mes') {
-    const [y, m] = dataRef.slice(0, 7).split('-').map(Number);
-    const desde = fmt(new Date(Date.UTC(y, m - 1, 1, 3, 0, 0, 0)));
-    const ate = fmt(new Date(Date.UTC(y, m, 1, 3, 0, 0, 0)));
-    return { desde, ate };
-  }
-  const y = Number(dataRef.slice(0, 4));
-  const desde = fmt(new Date(Date.UTC(y, 0, 1, 3, 0, 0, 0)));
-  const ate = fmt(new Date(Date.UTC(y + 1, 0, 1, 3, 0, 0, 0)));
-  return { desde, ate };
+/** Converte "YYYY-MM-DDTHH:mm" (Brasília) para UTC "YYYY-MM-DD HH:mm:ss". */
+function datetimeLocalBrToUTC(dt: string): string {
+  if (!dt || dt.length < 16) return '';
+  const [datePart, timePart] = dt.split('T');
+  const [y, m, d] = datePart.slice(0, 10).split('-').map(Number);
+  const [hh = 0, mm = 0] = (timePart || '00:00').split(':').map(Number);
+  const brAsUTC = new Date(Date.UTC(y, m - 1, d, hh, mm, 0, 0));
+  const utc = new Date(brAsUTC.getTime() + 3 * 60 * 60 * 1000);
+  return utc.toISOString().slice(0, 19).replace('T', ' ');
+}
+
+function getHojeBr(): string {
+  return new Date().toLocaleDateString('en-CA', { timeZone: TIMEZONE_BR });
+}
+
+function presetDia(): { desde: string; ate: string } {
+  const hoje = getHojeBr();
+  return { desde: hoje + 'T00:00', ate: hoje + 'T23:59' };
+}
+
+function presetMes(): { desde: string; ate: string } {
+  const hoje = getHojeBr();
+  const [y, m] = hoje.slice(0, 7).split('-').map(Number);
+  const lastDay = new Date(y, m, 0).getDate();
+  const lastStr = `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+  return { desde: `${hoje.slice(0, 7)}-01T00:00`, ate: `${lastStr}T23:59` };
+}
+
+function presetAno(): { desde: string; ate: string } {
+  const y = new Date().getFullYear();
+  return { desde: `${y}-01-01T00:00`, ate: `${y}-12-31T23:59` };
 }
 
 function formatarDataBR(iso: string | null): string {
@@ -37,8 +49,6 @@ function formatarDataBR(iso: string | null): string {
     minute: '2-digit',
   });
 }
-
-type Periodo = 'dia' | 'mes' | 'ano';
 
 function agregarPorFormaPagamento(pedidos: any[]): Record<string, number> {
   const mapa: Record<string, number> = {};
@@ -86,34 +96,62 @@ function agregarPorFormaPagamento(pedidos: any[]): Record<string, number> {
 }
 
 export default function RelatorioFinanceiro() {
-  const [periodo, setPeriodo] = useState<Periodo>('dia');
-  const [dataRef, setDataRef] = useState(() =>
-    new Date().toLocaleDateString('en-CA', { timeZone: TIMEZONE_BR })
-  );
+  const [desdeDateTime, setDesdeDateTime] = useState(() => presetDia().desde);
+  const [ateDateTime, setAteDateTime] = useState(() => presetDia().ate);
   const [pedidos, setPedidos] = useState<any[]>([]);
   const [totalGeral, setTotalGeral] = useState(0);
   const [totalPorFormaPagamento, setTotalPorFormaPagamento] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(false);
   const [filtroAtendente, setFiltroAtendente] = useState<string>('');
+  const [compararDados, setCompararDados] = useState<{ totalGeral: number; totalPedidos: number } | null>(null);
+  const [compararLoading, setCompararLoading] = useState(false);
 
   useEffect(() => {
-    const { desde, ate } = periodoParaUTC(periodo, dataRef);
+    setCompararDados(null);
+  }, [desdeDateTime, ateDateTime]);
+
+  const handleComparar = () => {
+    const desde = datetimeLocalBrToUTC(desdeDateTime);
+    const ate = datetimeLocalBrToUTC(ateDateTime);
+    if (!desde || !ate) return;
     setLoading(true);
-    getRelatorioFinanceiro(desde, ate)
-      .then((r) => {
-        setPedidos(r.pedidos);
-        setTotalGeral(r.totalGeral);
-        setTotalPorFormaPagamento(r.totalPorFormaPagamento ?? {});
+    setCompararLoading(true);
+    const desdeMs = new Date(desde.replace(' ', 'T') + 'Z').getTime();
+    const ateMs = new Date(ate.replace(' ', 'T') + 'Z').getTime();
+    const duracaoMs = ateMs - desdeMs;
+    const ate2Ms = desdeMs - 1;
+    const desde2Ms = ate2Ms - duracaoMs;
+    const desde2 = new Date(desde2Ms).toISOString().slice(0, 19).replace('T', ' ');
+    const ate2 = new Date(ate2Ms).toISOString().slice(0, 19).replace('T', ' ');
+    Promise.all([
+      getRelatorioFinanceiro(desde, ate),
+      getRelatorioFinanceiro(desde2, ate2),
+    ])
+      .then(([r1, r2]) => {
+        setPedidos(r1.pedidos);
+        setTotalGeral(r1.totalGeral);
+        setTotalPorFormaPagamento(r1.totalPorFormaPagamento ?? {});
+        setCompararDados({ totalGeral: r2.totalGeral, totalPedidos: r2.pedidos.length });
       })
-      .finally(() => setLoading(false));
-  }, [periodo, dataRef]);
+      .finally(() => {
+        setLoading(false);
+        setCompararLoading(false);
+      });
+  };
 
   const tituloPeriodo =
-    periodo === 'dia'
-      ? new Date(dataRef.slice(0, 10) + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })
-      : periodo === 'mes'
-        ? new Date(dataRef.slice(0, 7) + '-01T12:00:00').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
-        : dataRef.slice(0, 4);
+    desdeDateTime && ateDateTime
+      ? `${new Date(desdeDateTime.slice(0, 10) + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })} ${desdeDateTime.slice(11, 16)} – ${new Date(ateDateTime.slice(0, 10) + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })} ${ateDateTime.slice(11, 16)}`
+      : '—';
+
+  const variacaoTotal =
+    compararDados && compararDados.totalGeral > 0
+      ? ((totalGeral - compararDados.totalGeral) / compararDados.totalGeral) * 100
+      : null;
+  const variacaoPedidos =
+    compararDados && compararDados.totalPedidos > 0
+      ? ((pedidos.length - compararDados.totalPedidos) / compararDados.totalPedidos) * 100
+      : null;
 
   const pedidosFiltrados = useMemo(
     () => (filtroAtendente ? pedidos.filter((p) => p.atendente_nome === filtroAtendente) : pedidos),
@@ -221,78 +259,124 @@ export default function RelatorioFinanceiro() {
   return (
     <div>
       <h1 className="text-2xl font-bold text-stone-800 mb-4">Relatório financeiro</h1>
-      <div className="mb-6 flex flex-wrap items-end gap-6">
-        <div className="flex gap-2">
-          {(['dia', 'mes', 'ano'] as const).map((t) => (
+      <div className="mb-6 space-y-4">
+        <div className="flex flex-wrap items-end gap-4">
+          <div className="flex gap-2">
             <button
-              key={t}
-              onClick={() => setPeriodo(t)}
-              className={`rounded-lg border px-4 py-2 text-sm font-medium ${
-                periodo === t ? 'border-amber-500 bg-amber-50 text-amber-800' : 'border-stone-200 bg-white text-stone-600 hover:bg-stone-50'
-              }`}
+              type="button"
+              onClick={() => {
+                const { desde, ate } = presetDia();
+                setDesdeDateTime(desde);
+                setAteDateTime(ate);
+              }}
+              className="rounded-lg border border-stone-200 px-4 py-2 text-sm font-medium text-stone-600 hover:bg-stone-50"
             >
-              {t === 'dia' ? 'Diário' : t === 'mes' ? 'Mensal' : 'Anual'}
+              Diário
             </button>
-          ))}
-        </div>
-        {periodo === 'dia' && (
+            <button
+              type="button"
+              onClick={() => {
+                const { desde, ate } = presetMes();
+                setDesdeDateTime(desde);
+                setAteDateTime(ate);
+              }}
+              className="rounded-lg border border-stone-200 px-4 py-2 text-sm font-medium text-stone-600 hover:bg-stone-50"
+            >
+              Mensal
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const { desde, ate } = presetAno();
+                setDesdeDateTime(desde);
+                setAteDateTime(ate);
+              }}
+              className="rounded-lg border border-stone-200 px-4 py-2 text-sm font-medium text-stone-600 hover:bg-stone-50"
+            >
+              Anual
+            </button>
+          </div>
           <div>
-            <label className="block text-sm font-medium text-stone-600">Data</label>
+            <label className="block text-sm font-medium text-stone-600 mb-1">De</label>
             <input
-              type="date"
-              value={dataRef.slice(0, 10)}
-              onChange={(e) => setDataRef(e.target.value)}
-              className="mt-1 rounded-lg border border-stone-300 px-3 py-2"
+              type="datetime-local"
+              value={desdeDateTime}
+              onChange={(e) => setDesdeDateTime(e.target.value)}
+              className="rounded-lg border border-stone-300 px-3 py-2 text-sm"
             />
           </div>
-        )}
-        {periodo === 'mes' && (
           <div>
-            <label className="block text-sm font-medium text-stone-600">Mês</label>
+            <label className="block text-sm font-medium text-stone-600 mb-1">Até</label>
             <input
-              type="month"
-              value={dataRef.slice(0, 7)}
-              onChange={(e) => setDataRef(e.target.value + '-01')}
-              className="mt-1 rounded-lg border border-stone-300 px-3 py-2"
+              type="datetime-local"
+              value={ateDateTime}
+              onChange={(e) => setAteDateTime(e.target.value)}
+              className="rounded-lg border border-stone-300 px-3 py-2 text-sm"
             />
           </div>
-        )}
-        {periodo === 'ano' && (
           <div>
-            <label className="block text-sm font-medium text-stone-600">Ano</label>
-            <input
-              type="number"
-              min={2020}
-              max={2030}
-              value={dataRef.slice(0, 4)}
-              onChange={(e) => setDataRef(e.target.value + '-01-01')}
-              className="mt-1 w-24 rounded-lg border border-stone-300 px-3 py-2"
-            />
+            <label className="block text-sm font-medium text-stone-600 mb-1">Atendente</label>
+            <select
+              value={filtroAtendente}
+              onChange={(e) => setFiltroAtendente(e.target.value)}
+              className="rounded-lg border border-stone-300 px-3 py-2 min-w-[180px]"
+            >
+              <option value="">Todos</option>
+              {atendentesDisponiveis.map((nome) => (
+                <option key={nome} value={nome}>
+                  {nome}
+                </option>
+              ))}
+            </select>
           </div>
-        )}
-        <div>
-          <label className="block text-sm font-medium text-stone-600">Atendente</label>
-          <select
-            value={filtroAtendente}
-            onChange={(e) => setFiltroAtendente(e.target.value)}
-            className="mt-1 rounded-lg border border-stone-300 px-3 py-2 min-w-[180px]"
+          <button
+            type="button"
+            onClick={handleComparar}
+            disabled={compararLoading}
+            className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-800 hover:bg-amber-100 disabled:opacity-50"
           >
-            <option value="">Todos</option>
-            {atendentesDisponiveis.map((nome) => (
-              <option key={nome} value={nome}>
-                {nome}
-              </option>
-            ))}
-          </select>
+            {compararLoading ? 'Buscando...' : 'Comparar'}
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={handleGerarPdf}
-          className="ml-auto inline-flex items-center rounded-lg border border-stone-300 bg-white px-4 py-2 text-sm font-medium text-stone-700 hover:bg-stone-50"
-        >
-          Gerar PDF
-        </button>
+        <div className="flex flex-wrap items-end gap-4">
+          <button
+            type="button"
+            onClick={handleGerarPdf}
+            className="ml-auto inline-flex items-center rounded-lg border border-stone-300 bg-white px-4 py-2 text-sm font-medium text-stone-700 hover:bg-stone-50"
+          >
+            Gerar PDF
+          </button>
+        </div>
       </div>
+      {compararDados && (
+        <div className="mb-4 rounded-xl bg-amber-50 border border-amber-200 p-4 shadow-sm">
+          <h2 className="text-sm font-medium text-amber-800 mb-3">Comparação com período anterior</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
+            <div>
+              <p className="text-stone-500">Período selecionado</p>
+              <p className="font-semibold text-stone-800">{tituloPeriodo}</p>
+              <p className="text-stone-700">{pedidos.length} pedidos · R$ {totalGeral.toFixed(2)}</p>
+            </div>
+            <div>
+              <p className="text-stone-500">Período anterior (mesma duração)</p>
+              <p className="text-stone-700">{compararDados.totalPedidos} pedidos · R$ {compararDados.totalGeral.toFixed(2)}</p>
+            </div>
+            <div>
+              <p className="text-stone-500">Variação</p>
+              {variacaoPedidos != null && (
+                <p className={`font-medium ${variacaoPedidos >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                  Pedidos: {variacaoPedidos >= 0 ? '+' : ''}{variacaoPedidos.toFixed(1)}%
+                </p>
+              )}
+              {variacaoTotal != null && (
+                <p className={`font-medium ${variacaoTotal >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                  Total: {variacaoTotal >= 0 ? '+' : ''}{variacaoTotal.toFixed(1)}%
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
       <p className="text-sm text-stone-500 mb-4">
         Período: <strong>{tituloPeriodo}</strong> (horário de Brasília)
       </p>
