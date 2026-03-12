@@ -68,7 +68,7 @@ export default function AdminLayout() {
       getAdminSidebarCounts().then(setCounts);
     }
     load();
-    const t = setInterval(load, 10000);
+    const t = setInterval(load, 20000);
     return () => clearInterval(t);
   }, []);
 

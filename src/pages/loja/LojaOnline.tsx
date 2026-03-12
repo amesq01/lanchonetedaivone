@@ -1,11 +1,12 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, ShoppingCart, Trash2, X } from 'lucide-react';
-import { getProdutos, getCategorias, getLanchoneteAberta, getLojaOnlineSoRetirada, getLojaOnlineMensagemAbertura } from '../../lib/api';
+import { getProdutos, getCategorias } from '../../lib/api';
 import type { ProdutoWithCategorias } from '../../types/database';
 import type { Categoria } from '../../types/database';
 import { precoVenda, imagensProduto } from '../../types/database';
 import { getCart, type SavedItem } from './Carrinho';
+import { useLojaConfig } from '../../contexts/LojaConfigContext';
 
 const CART_KEY = 'lanchonete_cart';
 
@@ -70,6 +71,7 @@ function saveCart(items: SavedItem[]) {
 }
 
 export default function LojaOnline() {
+  const { lanchoneteAberta, soRetirada, mensagemAbertura } = useLojaConfig();
   const [produtos, setProdutos] = useState<ProdutoWithCategorias[]>([]);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [loading, setLoading] = useState(true);
@@ -77,9 +79,6 @@ export default function LojaOnline() {
   const [cartCount, setCartCount] = useState(0);
   const [qtyByProd, setQtyByProd] = useState<Record<string, number>>({});
   const [categoriaSelecionada, setCategoriaSelecionada] = useState<string | null>(null);
-  const [lanchoneteAberta, setLanchoneteAberta] = useState<boolean | null>(null);
-  const [soRetirada, setSoRetirada] = useState<boolean>(false);
-  const [mensagemAbertura, setMensagemAbertura] = useState<string | null>(null);
   const [modalProduto, setModalProduto] = useState<ProdutoWithCategorias | null>(null);
 
   const refreshCartCount = useCallback(() => {
@@ -90,11 +89,6 @@ export default function LojaOnline() {
   const carregarCardapio = useCallback(() => {
     setErro(null);
     setLoading(true);
-    Promise.all([getLanchoneteAberta(), getLojaOnlineSoRetirada(), getLojaOnlineMensagemAbertura()]).then(([aberta, soRet, mensagem]) => {
-      setLanchoneteAberta(aberta);
-      setSoRetirada(soRet);
-      setMensagemAbertura(mensagem);
-    });
     Promise.all([getCategorias(), getProdutos(true)])
       .then(([cats, list]) => {
         setCategorias(cats);

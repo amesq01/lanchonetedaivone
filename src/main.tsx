@@ -25,12 +25,14 @@ async function init() {
       { BrowserRouter },
       { ErrorBoundary },
       { AuthProvider },
+      { LojaConfigProvider },
       { default: App },
     ] = await Promise.all([
       import('./index.css'),
       import('react-router-dom'),
       import('./ErrorBoundary'),
       import('./contexts/AuthContext'),
+      import('./contexts/LojaConfigContext'),
       import('./App'),
     ]);
 
@@ -39,7 +41,9 @@ async function init() {
         <ErrorBoundary>
           <BrowserRouter>
             <AuthProvider>
-              <App />
+              <LojaConfigProvider>
+                <App />
+              </LojaConfigProvider>
             </AuthProvider>
           </BrowserRouter>
         </ErrorBoundary>

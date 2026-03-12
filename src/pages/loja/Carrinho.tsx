@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Trash2 } from 'lucide-react';
-import { getConfig, getProdutos, validarCupom, getLanchoneteAberta, getLojaOnlineSoRetirada, getLojaOnlineMensagemAbertura } from '../../lib/api';
+import { getProdutos, validarCupom } from '../../lib/api';
 import type { Produto } from '../../types/database';
 import { precoVenda, imagensProduto } from '../../types/database';
+import { useLojaConfig } from '../../contexts/LojaConfigContext';
 
 type Item = { produto: Produto; quantidade: number; observacao: string };
 
@@ -45,6 +46,7 @@ function saveCart(items: Item[]) {
 }
 
 export default function LojaCarrinho() {
+  const { taxaEntrega, lanchoneteAberta, soRetirada, mensagemAbertura } = useLojaConfig();
   const [searchParams] = useSearchParams();
   const addId = searchParams.get('add');
   const [, setProdutos] = useState<Record<string, Produto>>({});
@@ -54,17 +56,7 @@ export default function LojaCarrinho() {
   const [cupomAplicado, setCupomAplicado] = useState<{ codigo: string; porcentagem: number; valorMaximo?: number } | null>(() => getCupomAplicado());
   const [cupomErro, setCupomErro] = useState('');
   const [cupomLoading, setCupomLoading] = useState(false);
-  const [taxaEntrega, setTaxaEntrega] = useState<number | null>(null);
-  const [lanchoneteAberta, setLanchoneteAberta] = useState<boolean | null>(null);
-  const [soRetirada, setSoRetirada] = useState<boolean | null>(null);
-  const [mensagemAbertura, setMensagemAbertura] = useState<string | null>(null);
-
-  useEffect(() => {
-    getConfig('taxa_entrega').then(setTaxaEntrega);
-    getLanchoneteAberta().then(setLanchoneteAberta);
-    getLojaOnlineSoRetirada().then(setSoRetirada);
-    getLojaOnlineMensagemAbertura().then(setMensagemAbertura);
-  }, []);
+  const [taxaEntregaLocal] = useState<number | null>(null);
 
   useEffect(() => {
     getProdutos(true).then((list) => {
@@ -123,7 +115,8 @@ export default function LojaCarrinho() {
   const rawSubtotal = itens.reduce((s, i) => s + i.quantidade * precoVenda(i.produto), 0);
   const subtotal = Number.isFinite(rawSubtotal) ? rawSubtotal : 0;
   // Taxa só quando não for "só retirada" (quando null/loading, não cobrar taxa até definir)
-  const taxa = soRetirada === true ? 0 : (soRetirada === false && taxaEntrega !== null && Number.isFinite(taxaEntrega) ? taxaEntrega : 0);
+  const taxaBase = taxaEntregaLocal ?? taxaEntrega;
+  const taxa = soRetirada === true ? 0 : (soRetirada === false && taxaBase !== null && Number.isFinite(taxaBase) ? taxaBase : 0);
   let rawDesconto = cupomAplicado ? (subtotal * Number(cupomAplicado.porcentagem)) / 100 : 0;
   if (cupomAplicado?.valorMaximo != null) rawDesconto = Math.min(rawDesconto, cupomAplicado.valorMaximo);
   const desconto = Number.isFinite(rawDesconto) ? rawDesconto : 0;

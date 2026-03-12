@@ -60,8 +60,6 @@ export default function LojaCheckout() {
       if (v) setTipoEntrega('retirada');
     });
     getLojaOnlineFormasPagamento().then(setFormasPagamento);
-    const t = setInterval(() => getLojaOnlineFormasPagamento().then(setFormasPagamento), 10000);
-    return () => clearInterval(t);
   }, []);
 
   useEffect(() => {
