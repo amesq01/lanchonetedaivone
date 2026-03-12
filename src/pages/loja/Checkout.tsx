@@ -6,6 +6,26 @@ import type { SavedItem } from './Carrinho';
 import { getCupomAplicado } from './Carrinho';
 
 const CART_KEY = 'lanchonete_cart';
+const CLIENTE_KEY = 'lanchonete_cliente';
+
+type SavedCliente = {
+  nome?: string;
+  whatsapp?: string;
+  endereco?: string;
+  pontoReferencia?: string;
+};
+
+function getSavedCliente(): SavedCliente | null {
+  try {
+    const raw = localStorage.getItem(CLIENTE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object') return parsed as SavedCliente;
+    return null;
+  } catch {
+    return null;
+  }
+}
 
 function mascaraWhatsApp(valor: string): string {
   const digitos = valor.replace(/\D/g, '').slice(0, 11);
@@ -50,6 +70,13 @@ export default function LojaCheckout() {
 
   const cart = getCart();
   useEffect(() => {
+    const saved = getSavedCliente();
+    if (saved) {
+      if (saved.nome) setNome(saved.nome);
+      if (saved.whatsapp) setWhatsapp(saved.whatsapp);
+      if (saved.endereco) setEndereco(saved.endereco);
+      if (saved.pontoReferencia) setPontoReferencia(saved.pontoReferencia);
+    }
     getConfig('taxa_entrega').then(setTaxaEntrega);
     getProdutos(true).then((list) => setProdutos(list.map((p) => ({ id: p.id, valor: precoVenda(p) }))));
     canPlaceOrderOnline().then((r) => {
@@ -159,6 +186,15 @@ export default function LojaCheckout() {
         cupom_codigo: cupomValidado ? cupomValidado.codigo : undefined,
         itens,
       });
+      localStorage.setItem(
+        CLIENTE_KEY,
+        JSON.stringify({
+          nome,
+          whatsapp,
+          endereco: tipoEntrega === 'entrega' ? endereco : '',
+          pontoReferencia,
+        } satisfies SavedCliente),
+      );
       localStorage.removeItem(CART_KEY);
       navigate('/obrigado');
     } catch (err: any) {
