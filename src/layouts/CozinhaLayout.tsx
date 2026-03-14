@@ -1,11 +1,19 @@
+import { useEffect } from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../contexts/AuthContext';
 import { CozinhaSoundProvider, CozinhaSoundToggle } from '../contexts/CozinhaSoundContext';
+import { subscribePedidosAndComandasRealtime } from '../lib/supabaseRealtime';
 import { LogOut } from 'lucide-react';
 
 export default function CozinhaLayout() {
   const { profile, signOut } = useAuth();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    return subscribePedidosAndComandasRealtime(queryClient);
+  }, [queryClient]);
 
   const handleSignOut = async () => {
     try {

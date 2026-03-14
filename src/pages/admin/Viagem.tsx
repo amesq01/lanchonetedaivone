@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getPedidosViagemAbertos, getPedidosViagemEncerradosHoje, getTotalComanda, getTotalAPagarComanda, closeComanda, getCuponsAtivos, applyDescontoComanda, clearDescontoComanda, getProdutos, updatePedidoItens, updatePedidoStatus, getMesasParaTransferencia, openComanda, movePedidosParaOutraComanda, createPedidoViagem } from '../../lib/api';
+import { queryKeys } from '../../lib/queryClient';
 import type { FraçãoPagamento } from '../../lib/api';
 import { printContaViagem, printPedido, printPedidosUnificados } from '../../lib/printPdf';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
-import type { Cupom } from '../../types/database';
 import type { Produto } from '../../types/database';
 import { precoVenda, imagensProduto } from '../../types/database';
 import { formatarTelefone } from '../../lib/mascaraTelefone';
+import { X } from 'lucide-react';
 
 function haXmin(fromAt: string): string {
   const min = Math.floor((Date.now() - new Date(fromAt).getTime()) / 60_000);
@@ -34,9 +36,18 @@ function encerradoHa(fromAt: string): string {
   return `Encerr. há ${h}h`;
 }
 
+async function fetchPedidosViagem() {
+  const [abertos, encerrados] = await Promise.all([getPedidosViagemAbertos(), getPedidosViagemEncerradosHoje()]);
+  return [...abertos, ...encerrados];
+}
+
 export default function AdminViagem() {
-  const [pedidos, setPedidos] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const { data: pedidos = [], isLoading: loading } = useQuery({
+    queryKey: queryKeys.pedidosViagem,
+    queryFn: fetchPedidosViagem,
+    staleTime: 30 * 1000,
+  });
   const [popupPagamento, setPopupPagamento] = useState<{ pedidoId: string; comandaId: string } | null>(null);
   const [totalContaEncerramento, setTotalContaEncerramento] = useState(0);
   const [fracoesPagamento, setFracoesPagamento] = useState<FraçãoPagamento[]>([]);
@@ -46,9 +57,18 @@ export default function AdminViagem() {
   const [contaItensPedido, setContaItensPedido] = useState<{ itens: { codigo: string; descricao: string; quantidade: number; valor: number }[]; total: number } | null>(null);
   const [cupomDesconto, setCupomDesconto] = useState('');
   const [descontoManual, setDescontoManual] = useState('');
-  const [cupons, setCupons] = useState<Cupom[]>([]);
-  const [produtos, setProdutos] = useState<Produto[]>([]);
   const [popupEditar, setPopupEditar] = useState<any | null>(null);
+
+  const { data: produtos = [] } = useQuery({
+    queryKey: queryKeys.produtos(true),
+    queryFn: () => getProdutos(true),
+    staleTime: 60 * 1000,
+  });
+  const { data: cupons = [] } = useQuery({
+    queryKey: queryKeys.cuponsAtivos,
+    queryFn: getCuponsAtivos,
+    staleTime: Infinity,
+  });
   const [carrinhoEdicao, setCarrinhoEdicao] = useState<{ produto: Produto; quantidade: number; observacao: string }[]>([]);
   const [searchEdicao, setSearchEdicao] = useState('');
   const [enviandoEdicao, setEnviandoEdicao] = useState(false);
@@ -83,12 +103,10 @@ export default function AdminViagem() {
   }, []);
   const STATUS_EDITAVEL = ['novo_pedido', 'aguardando_aceite'];
 
-  useEffect(() => {
-    load();
-    getProdutos(true).then(setProdutos);
-    const t = setInterval(load, 3000);
-    return () => clearInterval(t);
-  }, []);
+  const invalidateViagem = () => {
+    queryClient.invalidateQueries({ queryKey: queryKeys.pedidosViagem });
+    queryClient.invalidateQueries({ queryKey: queryKeys.adminSidebarCounts });
+  };
 
   const atendentes = useMemo(() => {
     const map = new Map<string, string>();
@@ -100,16 +118,6 @@ export default function AdminViagem() {
     }
     return Array.from(map.entries()).map(([id, nome]) => ({ id, nome })).sort((a, b) => a.nome.localeCompare(b.nome));
   }, [pedidos]);
-
-  async function load() {
-    const [abertos, encerrados] = await Promise.all([getPedidosViagemAbertos(), getPedidosViagemEncerradosHoje()]);
-    setPedidos([...abertos, ...encerrados]);
-    setLoading(false);
-  }
-
-  useEffect(() => {
-    getCuponsAtivos().then(setCupons);
-  }, []);
 
   async function getTotalPedido(pedidoId: string) {
     const { data: ped } = await supabase.from('pedidos').select('comanda_id').eq('id', pedidoId).single();
@@ -195,7 +203,7 @@ export default function AdminViagem() {
       await closeComanda(popupPagamento.comandaId, contaZeradaViagem ? [] : fracoesPagamento);
       setPopupPagamento(null);
       setFracoesPagamento([]);
-      load();
+      invalidateViagem();
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Erro ao encerrar.');
     }
@@ -242,7 +250,7 @@ export default function AdminViagem() {
       setSearchNovo('');
       setErroNomeClienteNovo(false);
       setMostrarNovoPedido(false);
-      load();
+      invalidateViagem();
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Erro ao lançar pedido.');
     } finally {
@@ -280,7 +288,7 @@ export default function AdminViagem() {
       }));
       await updatePedidoItens(popupEditar.id, itens, { adminOverride: true });
       setPopupEditar(null);
-      load();
+      invalidateViagem();
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Erro ao atualizar pedido.');
     } finally {
@@ -305,7 +313,7 @@ export default function AdminViagem() {
       });
       setPopupCancelar(null);
       setMotivoCancelamento('');
-      load();
+      invalidateViagem();
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Erro ao cancelar.');
     }
@@ -381,7 +389,7 @@ export default function AdminViagem() {
       await movePedidosParaOutraComanda(ids, comandaDestinoId, { fecharComandasOrigemIds });
       setPopupMoverSelecionadosViagem(false);
       setPedidosSelecionadosViagem(new Set());
-      load();
+      invalidateViagem();
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Erro ao transferir.');
     } finally {
@@ -540,14 +548,26 @@ export default function AdminViagem() {
       )}
 
       <div className="mb-3 flex flex-wrap items-end gap-2 justify-between">
-        <div className="w-[250px]">
+        <div className="relative w-[250px]">
           <input
             type="text"
             value={searchPedidos}
             onChange={(e) => setSearchPedidos(e.target.value)}
+            onKeyDown={(e) => e.key === 'Escape' && setSearchPedidos('')}
             placeholder="Buscar cliente ou pedido"
-            className="w-full rounded-lg border border-stone-300 px-3 py-2 text-base"
+            className="w-full rounded-lg border border-stone-300 px-3 py-2 pr-9 text-base"
           />
+          {searchPedidos.trim() ? (
+            <button
+              type="button"
+              onClick={() => setSearchPedidos('')}
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded text-stone-400 hover:text-stone-600 hover:bg-stone-100"
+              title="Limpar busca"
+              aria-label="Limpar busca"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          ) : null}
         </div>
         <div className="flex flex-wrap gap-1.5 items-center justify-end">
           <button

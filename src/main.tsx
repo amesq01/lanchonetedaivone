@@ -26,6 +26,8 @@ async function init() {
       { ErrorBoundary },
       { AuthProvider },
       { LojaConfigProvider },
+      { QueryClientProvider },
+      { queryClient },
       { default: App },
     ] = await Promise.all([
       import('./index.css'),
@@ -33,6 +35,8 @@ async function init() {
       import('./ErrorBoundary'),
       import('./contexts/AuthContext'),
       import('./contexts/LojaConfigContext'),
+      import('@tanstack/react-query'),
+      import('./lib/queryClient'),
       import('./App'),
     ]);
 
@@ -40,11 +44,13 @@ async function init() {
       <StrictMode>
         <ErrorBoundary>
           <BrowserRouter>
-            <AuthProvider>
-              <LojaConfigProvider>
-                <App />
-              </LojaConfigProvider>
-            </AuthProvider>
+            <QueryClientProvider client={queryClient}>
+              <AuthProvider>
+                <LojaConfigProvider>
+                  <App />
+                </LojaConfigProvider>
+              </AuthProvider>
+            </QueryClientProvider>
           </BrowserRouter>
         </ErrorBoundary>
       </StrictMode>

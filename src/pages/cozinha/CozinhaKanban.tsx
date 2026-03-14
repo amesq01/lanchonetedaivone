@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Inbox, ChefHat, CheckCircle } from 'lucide-react';
 import { getPedidosCozinha, updatePedidoStatus } from '../../lib/api';
 import { playSomNovoPedido, cozinhaSomInitOnFirstClick } from '../../lib/cozinhaSound';
+import { queryKeys } from '../../lib/queryClient';
 
 const COLUNAS = [
   { key: 'novo_pedido', label: 'Novo pedido', icon: Inbox, className: 'bg-amber-100 border-amber-200 text-amber-900' },
@@ -52,17 +54,33 @@ function nomeClienteEMesa(p: any) {
 type ConfirmacaoAcao = { tipo: 'em_preparacao' | 'finalizado'; pedido: any };
 
 export default function CozinhaKanban() {
-  const [pedidos, setPedidos] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [, setTick] = useState(0);
   const [confirmacao, setConfirmacao] = useState<ConfirmacaoAcao | null>(null);
   const idsNovoPedidoRef = useRef<Set<string> | null>(null);
 
+  const { data: pedidos = [], isLoading: loading } = useQuery({
+    queryKey: queryKeys.pedidosCozinha,
+    queryFn: getPedidosCozinha,
+    staleTime: 30 * 1000,
+  });
+
   useEffect(() => {
-    load();
-    const t = setInterval(load, 5000);
-    return () => clearInterval(t);
-  }, []);
+    const idsNovoAgora = new Set((pedidos || []).filter((p) => p.status === 'novo_pedido').map((p) => p.id));
+    if (idsNovoPedidoRef.current !== null) {
+      const temNovo = [...idsNovoAgora].some((id) => !idsNovoPedidoRef.current!.has(id));
+      if (temNovo) playSomNovoPedido();
+    }
+    idsNovoPedidoRef.current = idsNovoAgora;
+  }, [pedidos]);
+
+  const mutationMover = useMutation({
+    mutationFn: ({ pedidoId, novoStatus }: { pedidoId: string; novoStatus: 'em_preparacao' | 'finalizado' }) => updatePedidoStatus(pedidoId, novoStatus),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.pedidosCozinha });
+      queryClient.invalidateQueries({ queryKey: queryKeys.adminSidebarCounts });
+    },
+  });
 
   // No primeiro clique (som ativado por padrão), cria o contexto de áudio para o bip poder tocar
   useEffect(() => {
@@ -77,22 +95,9 @@ export default function CozinhaKanban() {
     return () => clearInterval(t);
   }, []);
 
-  async function load() {
-    const data = await getPedidosCozinha();
-    const idsNovoAgora = new Set((data || []).filter((p) => p.status === 'novo_pedido').map((p) => p.id));
-    if (idsNovoPedidoRef.current !== null) {
-      const temNovo = [...idsNovoAgora].some((id) => !idsNovoPedidoRef.current!.has(id));
-      if (temNovo) playSomNovoPedido();
-    }
-    idsNovoPedidoRef.current = idsNovoAgora;
-    setPedidos(data);
-    setLoading(false);
-  }
-
-  async function mover(pedidoId: string, novoStatus: 'em_preparacao' | 'finalizado') {
+  function mover(pedidoId: string, novoStatus: 'em_preparacao' | 'finalizado') {
     setConfirmacao(null);
-    await updatePedidoStatus(pedidoId, novoStatus);
-    load();
+    mutationMover.mutate({ pedidoId, novoStatus });
   }
 
   const hoje = new Date().toDateString();

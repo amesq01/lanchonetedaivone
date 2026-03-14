@@ -1,11 +1,22 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
+import { queryKeys } from '../../lib/queryClient';
 import type { Profile } from '../../types/database';
 import { formatarTelefone } from '../../lib/mascaraTelefone';
 
+async function loadAtendentes(): Promise<Profile[]> {
+  const { data } = await supabase.from('profiles').select('*').eq('role', 'atendente').order('nome');
+  return (data ?? []) as Profile[];
+}
+
 export default function AdminAtendentes() {
-  const [list, setList] = useState<Profile[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const { data: list = [], isLoading: loading } = useQuery({
+    queryKey: queryKeys.atendentes,
+    queryFn: loadAtendentes,
+    staleTime: 60 * 1000,
+  });
   const [open, setOpen] = useState(false);
   const [nome, setNome] = useState('');
   const [codigo, setCodigo] = useState('');
@@ -21,16 +32,6 @@ export default function AdminAtendentes() {
   const [savingEdit, setSavingEdit] = useState(false);
   const [deleting, setDeleting] = useState<Profile | null>(null);
   const [deletingLoading, setDeletingLoading] = useState(false);
-
-  useEffect(() => {
-    load();
-  }, []);
-
-  async function load() {
-    const { data } = await supabase.from('profiles').select('*').eq('role', 'atendente').order('nome');
-    setList((data ?? []) as Profile[]);
-    setLoading(false);
-  }
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -74,7 +75,7 @@ export default function AdminAtendentes() {
       setEmail('');
       setTelefone('');
       setSenha('');
-      load();
+      queryClient.invalidateQueries({ queryKey: queryKeys.atendentes });
     } catch (err: any) {
       setError(err.message || 'Erro ao cadastrar.');
     } finally {
@@ -109,7 +110,7 @@ export default function AdminAtendentes() {
         return;
       }
       setEditing(null);
-      await load();
+      queryClient.invalidateQueries({ queryKey: queryKeys.atendentes });
     } catch (err: any) {
       setError(err.message || 'Erro ao salvar edição.');
     } finally {
@@ -128,7 +129,7 @@ export default function AdminAtendentes() {
         return;
       }
       setDeleting(null);
-      await load();
+      queryClient.invalidateQueries({ queryKey: queryKeys.atendentes });
     } catch (err: any) {
       setError(err.message || 'Erro ao excluir atendente.');
     } finally {

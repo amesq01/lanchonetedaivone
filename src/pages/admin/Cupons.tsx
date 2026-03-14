@@ -1,11 +1,22 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
+import { queryKeys } from '../../lib/queryClient';
 import { reporUsosCupom, deleteCupom } from '../../lib/api';
 import type { Cupom } from '../../types/database';
 
+async function loadCupons(): Promise<Cupom[]> {
+  const { data } = await supabase.from('cupons').select('*').order('created_at', { ascending: false });
+  return (data ?? []) as Cupom[];
+}
+
 export default function AdminCupons() {
-  const [list, setList] = useState<Cupom[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const { data: list = [], isLoading: loading } = useQuery({
+    queryKey: queryKeys.cupons,
+    queryFn: loadCupons,
+    staleTime: Infinity,
+  });
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Cupom | null>(null);
   const [codigo, setCodigo] = useState('');
@@ -18,15 +29,10 @@ export default function AdminCupons() {
   const [submitting, setSubmitting] = useState(false);
   const [excluindo, setExcluindo] = useState<Cupom | null>(null);
 
-  useEffect(() => {
-    load();
-  }, []);
-
-  async function load() {
-    const { data } = await supabase.from('cupons').select('*').order('created_at', { ascending: false });
-    setList((data ?? []) as Cupom[]);
-    setLoading(false);
-  }
+  const invalidateCupons = () => {
+    queryClient.invalidateQueries({ queryKey: queryKeys.cupons });
+    queryClient.invalidateQueries({ queryKey: queryKeys.cuponsAtivos });
+  };
 
   function openForm(c?: Cupom) {
     if (c) {
@@ -78,7 +84,7 @@ export default function AdminCupons() {
         });
       }
       setOpen(false);
-      load();
+      invalidateCupons();
     } finally {
       setSubmitting(false);
     }
@@ -86,7 +92,7 @@ export default function AdminCupons() {
 
   async function handleReporUsos(c: Cupom) {
     await reporUsosCupom(c.id);
-    load();
+    invalidateCupons();
   }
 
   async function handleExcluir(c: Cupom) {
@@ -94,7 +100,7 @@ export default function AdminCupons() {
     setExcluindo(c);
     try {
       await deleteCupom(c.id);
-      load();
+      invalidateCupons();
     } finally {
       setExcluindo(null);
     }

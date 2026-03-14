@@ -1,9 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { createPedidoOnline, getConfig, getProdutos, validarCupom, canPlaceOrderOnline, getLojaOnlineSoRetirada, getLojaOnlineFormasPagamento } from '../../lib/api';
+import { useQuery } from '@tanstack/react-query';
+import { createPedidoOnline, getProdutos, validarCupom } from '../../lib/api';
+import { queryKeys } from '../../lib/queryClient';
 import { precoVenda } from '../../types/database';
 import type { SavedItem } from './Carrinho';
 import { getCupomAplicado } from './Carrinho';
+import { useLojaConfig } from '../../contexts/LojaConfigContext';
 
 const CART_KEY = 'lanchonete_cart';
 const CLIENTE_KEY = 'lanchonete_cliente';
@@ -46,6 +49,7 @@ function getCart(): SavedItem[] {
 
 export default function LojaCheckout() {
   const navigate = useNavigate();
+  const { loading: configLoading, lanchoneteAberta, soRetirada, formasPagamento, taxaEntrega, mensagemAbertura } = useLojaConfig();
   const [nome, setNome] = useState('');
   const [whatsapp, setWhatsapp] = useState('');
   const [tipoEntrega, setTipoEntrega] = useState<'entrega' | 'retirada'>('entrega');
@@ -61,14 +65,16 @@ export default function LojaCheckout() {
   const [cupomLoading, setCupomLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
-  const [taxaEntrega, setTaxaEntrega] = useState<number | null>(null);
-  const [produtos, setProdutos] = useState<{ id: string; valor: number }[]>([]);
-  const [bloqueado, setBloqueado] = useState<{ motivo: string } | null>(null);
-  const [soRetirada, setSoRetirada] = useState(false);
-  const [formasPagamento, setFormasPagamento] = useState<string[]>(['PIX', 'Cartão crédito', 'Cartão débito', 'Dinheiro']);
   const cupomDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const produtosQuery = useQuery({ queryKey: queryKeys.produtos(true), queryFn: () => getProdutos(true) });
+  const produtos = (produtosQuery.data ?? []).map((p) => ({ id: p.id, valor: precoVenda(p) }));
+
   const cart = getCart();
+  const bloqueado = !configLoading && lanchoneteAberta === false
+    ? { motivo: mensagemAbertura ? `A lanchonete está fechada para pedidos online. ${mensagemAbertura.charAt(0).toLowerCase() + mensagemAbertura.slice(1)}.` : 'A lanchonete está fechada para pedidos online no momento. Tente novamente mais tarde.' }
+    : null;
+
   useEffect(() => {
     const saved = getSavedCliente();
     if (saved) {
@@ -77,17 +83,11 @@ export default function LojaCheckout() {
       if (saved.endereco) setEndereco(saved.endereco);
       if (saved.pontoReferencia) setPontoReferencia(saved.pontoReferencia);
     }
-    getConfig('taxa_entrega').then(setTaxaEntrega);
-    getProdutos(true).then((list) => setProdutos(list.map((p) => ({ id: p.id, valor: precoVenda(p) }))));
-    canPlaceOrderOnline().then((r) => {
-      if (!r.allowed && r.message) setBloqueado({ motivo: r.message });
-    });
-    getLojaOnlineSoRetirada().then((v) => {
-      setSoRetirada(v);
-      if (v) setTipoEntrega('retirada');
-    });
-    getLojaOnlineFormasPagamento().then(setFormasPagamento);
   }, []);
+
+  useEffect(() => {
+    if (soRetirada) setTipoEntrega('retirada');
+  }, [soRetirada]);
 
   useEffect(() => {
     const codigo = cupom.trim();
@@ -127,9 +127,17 @@ export default function LojaCheckout() {
   let rawDesconto = cupomValidado ? (subtotal * Number(cupomValidado.porcentagem)) / 100 : 0;
   if (cupomValidado?.valorMaximo != null) rawDesconto = Math.min(rawDesconto, cupomValidado.valorMaximo);
   const desconto = Number.isFinite(rawDesconto) ? rawDesconto : 0;
-  const taxaNum = tipoEntrega === 'entrega' ? Number(taxaEntrega) : 0;
+  const taxaNum = tipoEntrega === 'entrega' && taxaEntrega != null ? Number(taxaEntrega) : 0;
   const taxa = Number.isFinite(taxaNum) ? taxaNum : 0;
   const totalPedido = Math.max(0, (subtotal - desconto + taxa)) || 0;
+
+  if (configLoading) {
+    return (
+      <div className="min-h-screen bg-stone-50 flex items-center justify-center p-4">
+        <p className="text-stone-500">Carregando...</p>
+      </div>
+    );
+  }
   if (cart.length === 0 && !submitting) {
     return (
       <div className="min-h-screen bg-stone-50 flex items-center justify-center p-4">
@@ -156,17 +164,14 @@ export default function LojaCheckout() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    const { allowed, message } = await canPlaceOrderOnline();
-    if (!allowed) {
-      setError(message ?? 'A lanchonete está fechada para pedidos online.');
+    if (lanchoneteAberta !== true) {
+      setError(mensagemAbertura ? `A lanchonete está fechada para pedidos online. ${mensagemAbertura.charAt(0).toLowerCase() + mensagemAbertura.slice(1)}.` : 'A lanchonete está fechada para pedidos online.');
       return;
     }
     setSubmitting(true);
     try {
-      const { getProdutos } = await import('../../lib/api');
-      const produtosList = await getProdutos(true);
       const byId: Record<string, number> = {};
-      produtosList.forEach((p) => { byId[p.id] = precoVenda(p); });
+      produtos.forEach((p) => { byId[p.id] = Number.isFinite(Number(p.valor)) ? Number(p.valor) : 0; });
       const itens = cart.filter((i) => byId[i.produto_id] != null).map((i) => ({
         produto_id: i.produto_id,
         quantidade: i.quantidade,
@@ -174,18 +179,21 @@ export default function LojaCheckout() {
         observacao: i.observacao || undefined,
       }));
       if (itens.length === 0) throw new Error('Nenhum item válido no carrinho.');
-      await createPedidoOnline({
-        cliente_nome: nome,
-        cliente_whatsapp: whatsapp,
-        cliente_endereco: tipoEntrega === 'entrega' ? endereco : 'Retirada no local',
-        ponto_referencia: tipoEntrega === 'entrega' && pontoReferencia ? pontoReferencia : undefined,
-        forma_pagamento: formaPagamento,
-        tipo_entrega: tipoEntrega,
-        troco_para: formaPagamento === 'Dinheiro' && precisaTroco && trocoPara ? Number(trocoPara) : undefined,
-        observacoes: observacoes || undefined,
-        cupom_codigo: cupomValidado ? cupomValidado.codigo : undefined,
-        itens,
-      });
+      await createPedidoOnline(
+        {
+          cliente_nome: nome,
+          cliente_whatsapp: whatsapp,
+          cliente_endereco: tipoEntrega === 'entrega' ? endereco : 'Retirada no local',
+          ponto_referencia: tipoEntrega === 'entrega' && pontoReferencia ? pontoReferencia : undefined,
+          forma_pagamento: formaPagamento,
+          tipo_entrega: tipoEntrega,
+          troco_para: formaPagamento === 'Dinheiro' && precisaTroco && trocoPara ? Number(trocoPara) : undefined,
+          observacoes: observacoes || undefined,
+          cupom_codigo: cupomValidado ? cupomValidado.codigo : undefined,
+          itens,
+        },
+        { allowed: true, taxaEntrega: taxaEntrega ?? undefined },
+      );
       localStorage.setItem(
         CLIENTE_KEY,
         JSON.stringify({

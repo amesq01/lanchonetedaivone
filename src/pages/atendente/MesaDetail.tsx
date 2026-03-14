@@ -1,11 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { getMesas, getComandaByMesaComAtendente, getProdutos, createPedidoPresencial, getPedidosByComanda, getPedidoStatus, updatePedidoStatus, updatePedidoItens, closeComanda } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
 import type { Produto } from '../../types/database';
 import { imagensProduto, precoVenda } from '../../types/database';
+import { queryKeys } from '../../lib/queryClient';
 
 type ItemCarrinho = { produto: Produto; quantidade: number; observacao: string };
 
@@ -13,14 +15,9 @@ export default function AtendenteMesaDetail() {
   const { mesaId } = useParams();
   const navigate = useNavigate();
   const { profile } = useAuth();
-  const [mesaNome, setMesaNome] = useState('');
-  const [clienteNome, setClienteNome] = useState('');
-  const [comandaId, setComandaId] = useState<string | null>(null);
-  const [pedidos, setPedidos] = useState<any[]>([]);
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [search, setSearch] = useState('');
   const [carrinho, setCarrinho] = useState<ItemCarrinho[]>([]);
-  const [loading, setLoading] = useState(true);
   const [pedidoExpandido, setPedidoExpandido] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
   const [popupFecharMesa, setPopupFecharMesa] = useState(false);
@@ -35,8 +32,6 @@ export default function AtendenteMesaDetail() {
   const [comandaInvalidada, setComandaInvalidada] = useState(false);
   /** Mesa foi aberta por outro atendente; só quem abriu pode lançar pedidos. */
   const [mesaAbertaPorOutro, setMesaAbertaPorOutro] = useState<{ atendente_nome: string } | null>(null);
-  /** Nome do atendente que abriu a mesa (para exibir "aberta por X"). */
-  const [atendenteQueAbriu, setAtendenteQueAbriu] = useState<string>('');
   const inputRef = useRef<HTMLInputElement>(null);
   const [dropdownRect, setDropdownRect] = useState<{ top: number; left: number; width: number } | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -47,63 +42,56 @@ export default function AtendenteMesaDetail() {
     return () => clearTimeout(t);
   }, [toast]);
 
-  const revalidarComanda = useCallback(() => {
-    if (!mesaId || !comandaId) return;
-    getComandaByMesaComAtendente(mesaId).then((r) => {
-      if (!r) {
-        setComandaInvalidada(true);
-        setMesaAbertaPorOutro(null);
-        setAtendenteQueAbriu('');
-        return;
-      }
-      if (r.comanda.id !== comandaId) setComandaInvalidada(true);
-      setAtendenteQueAbriu(r.atendente_nome);
-      if (r.comanda.atendente_id !== profile?.id) setMesaAbertaPorOutro({ atendente_nome: r.atendente_nome });
-      else setMesaAbertaPorOutro(null);
-    });
-  }, [mesaId, comandaId, profile?.id]);
+  const queryClient = useQueryClient();
+
+  const { data: mesaData, isLoading } = useQuery({
+    queryKey: queryKeys.mesaDetail(mesaId!),
+    queryFn: async () => {
+      const [mesas, r] = await Promise.all([getMesas(), getComandaByMesaComAtendente(mesaId!)]);
+      const mesaNome = mesas.find((x) => x.id === mesaId)?.nome ?? '';
+      if (!r) return { mesaNome, comanda: null, pedidos: [] as any[], needRedirect: false, atendenteNome: '' };
+      if (r.comanda.atendente_id !== profile?.id) return { mesaNome, comanda: null, pedidos: [] as any[], needRedirect: true, redirectAtendenteNome: r.atendente_nome };
+      const pedidos = await getPedidosByComanda(r.comanda.id);
+      return { mesaNome, comanda: r.comanda, pedidos, needRedirect: false, atendenteNome: r.atendente_nome };
+    },
+    enabled: !!mesaId && !!profile?.id,
+    staleTime: 30 * 1000,
+  });
+
+  const prevComandaIdRef = useRef<string | null>(null);
+  const mesaNome = mesaData?.mesaNome ?? '';
+  const comandaId = mesaData?.comanda?.id ?? null;
+  const clienteNome = mesaData?.comanda?.nome_cliente ?? '';
+  const pedidos = mesaData?.pedidos ?? [];
+  const atendenteQueAbriu = mesaData?.atendenteNome ?? '';
+  const loading = isLoading;
+
+  useEffect(() => {
+    if (mesaData?.needRedirect && mesaData?.redirectAtendenteNome) {
+      navigate('/pdv/mesas', { replace: true, state: { mesaOcupadaPorOutro: mesaData.redirectAtendenteNome } });
+    }
+  }, [mesaData?.needRedirect, mesaData?.redirectAtendenteNome, navigate]);
+
+  useEffect(() => {
+    if (mesaData && !mesaData.needRedirect) {
+      if (!mesaData.comanda) setComandaInvalidada(true);
+      else if (prevComandaIdRef.current !== null && mesaData.comanda.id !== prevComandaIdRef.current) setComandaInvalidada(true);
+      else setComandaInvalidada(false);
+      prevComandaIdRef.current = mesaData.comanda?.id ?? null;
+      setMesaAbertaPorOutro(mesaData.comanda && mesaData.comanda.atendente_id !== profile?.id ? { atendente_nome: mesaData.atendenteNome } : null);
+    }
+  }, [mesaData, profile?.id]);
+
+  useEffect(() => {
+    getProdutos(true).then(setProdutos);
+  }, []);
 
   useEffect(() => {
     if (!mesaId) return;
-    getMesas().then((mesas) => {
-      const m = mesas.find((x) => x.id === mesaId);
-      setMesaNome(m?.nome ?? '');
-    });
-    getComandaByMesaComAtendente(mesaId).then((r) => {
-      if (!r) {
-        setComandaId(null);
-        setMesaAbertaPorOutro(null);
-        setAtendenteQueAbriu('');
-        setLoading(false);
-        return;
-      }
-      if (r.comanda.atendente_id !== profile?.id) {
-        setLoading(false);
-        navigate('/pdv/mesas', { replace: true, state: { mesaOcupadaPorOutro: r.atendente_nome } });
-        return;
-      }
-      setComandaId(r.comanda.id);
-      setClienteNome(r.comanda.nome_cliente);
-      setAtendenteQueAbriu(r.atendente_nome);
-      setComandaInvalidada(false);
-      setMesaAbertaPorOutro(null);
-      getPedidosByComanda(r.comanda.id).then(setPedidos);
-      setLoading(false);
-    });
-    getProdutos(true).then(setProdutos);
-  }, [mesaId, profile?.id]);
-
-  useEffect(() => {
-    if (!mesaId || !comandaId) return;
-    const t = setInterval(revalidarComanda, 15000);
-    return () => clearInterval(t);
-  }, [mesaId, comandaId, revalidarComanda]);
-
-  useEffect(() => {
-    const onFocus = () => revalidarComanda();
+    const onFocus = () => queryClient.invalidateQueries({ queryKey: queryKeys.mesaDetail(mesaId) });
     window.addEventListener('focus', onFocus);
     return () => window.removeEventListener('focus', onFocus);
-  }, [revalidarComanda]);
+  }, [queryClient, mesaId]);
 
   const s = search.trim();
   const filtrados = s
@@ -160,7 +148,7 @@ export default function AtendenteMesaDetail() {
       }));
       await createPedidoPresencial(comandaId, itens);
       setCarrinho([]);
-      getPedidosByComanda(comandaId).then(setPedidos);
+      queryClient.invalidateQueries({ queryKey: queryKeys.mesaDetail(mesaId!) });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       if (msg.includes('encerrada') || msg.includes('encerrado') || msg.includes('não é possível')) {
@@ -215,7 +203,7 @@ export default function AtendenteMesaDetail() {
     });
     setPopupCancelar(null);
     setMotivoCancelamento('');
-    if (comandaId) getPedidosByComanda(comandaId).then(setPedidos);
+    if (comandaId) queryClient.invalidateQueries({ queryKey: queryKeys.mesaDetail(mesaId!) });
   };
 
   const addItemEdicao = (produto: Produto, qtd = 1, obs = '') => {
@@ -249,7 +237,7 @@ export default function AtendenteMesaDetail() {
       }));
       await updatePedidoItens(popupEditar.id, itens);
       setPopupEditar(null);
-      if (comandaId) getPedidosByComanda(comandaId).then(setPedidos);
+      if (comandaId) queryClient.invalidateQueries({ queryKey: queryKeys.mesaDetail(mesaId!) });
       setToast('Pedido atualizado.');
     } catch (e) {
       setToast(e instanceof Error ? e.message : 'Erro ao atualizar pedido.');

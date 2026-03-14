@@ -1,61 +1,106 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getMesas, initMesas, getConfig, getMesasIdsComPedidosAbertos, getMesasIdsComContaPendente, getViagemTemPedidosAbertos, getPedidosPresencialEncerradosHoje, getMesasComComandaAberta } from '../../lib/api';
 import type { Mesa } from '../../types/database';
-import { UtensilsCrossed, Truck } from 'lucide-react';
+import { UtensilsCrossed, Truck, Search } from 'lucide-react';
+import { queryKeys } from '../../lib/queryClient';
+
+async function fetchMesasDashboard() {
+  const [qtd, mesas, mesasComPedidosAbertos, mesasComContaPendente, viagemComPedidosAbertos, pedidosFinalizadosHoje, listaComandas] = await Promise.all([
+    getConfig('quantidade_mesas'),
+    getMesas(),
+    getMesasIdsComPedidosAbertos(),
+    getMesasIdsComContaPendente(),
+    getViagemTemPedidosAbertos(),
+    getPedidosPresencialEncerradosHoje(),
+    getMesasComComandaAberta(),
+  ]);
+  const atendentePorMesa: Record<string, string> = {};
+  const clientePorMesa: Record<string, string> = {};
+  const clienteNomesPorMesa: Record<string, string[]> = {};
+  const pedidosNumerosPorMesa: Record<string, number[]> = {};
+  (listaComandas as { mesa_id: string; atendente_nome: string; nome_cliente: string | null; pedidos_numeros: number[] }[]).forEach(({ mesa_id, atendente_nome, nome_cliente, pedidos_numeros }) => {
+    atendentePorMesa[mesa_id] = atendente_nome;
+    const nome = nome_cliente?.trim();
+    if (nome) {
+      if (!clientePorMesa[mesa_id]) clientePorMesa[mesa_id] = nome;
+      clienteNomesPorMesa[mesa_id] = [...(clienteNomesPorMesa[mesa_id] ?? []), nome];
+    }
+    if (pedidos_numeros?.length) {
+      pedidosNumerosPorMesa[mesa_id] = [...(pedidosNumerosPorMesa[mesa_id] ?? []), ...pedidos_numeros];
+    }
+  });
+  Object.keys(pedidosNumerosPorMesa).forEach((id) => {
+    pedidosNumerosPorMesa[id] = [...new Set(pedidosNumerosPorMesa[id])].sort((a, b) => a - b);
+  });
+  return {
+    qtd: Number(qtd) || 10,
+    mesas: mesas as Mesa[],
+    mesasComPedidosAbertos: mesasComPedidosAbertos as Set<string>,
+    mesasComContaPendente: mesasComContaPendente as Set<string>,
+    viagemComPedidosAbertos: Boolean(viagemComPedidosAbertos),
+    pedidosFinalizadosHoje: pedidosFinalizadosHoje as any[],
+    atendentePorMesa,
+    clientePorMesa,
+    clienteNomesPorMesa,
+    pedidosNumerosPorMesa,
+  };
+}
 
 export default function AdminMesas() {
-  const [mesas, setMesas] = useState<Mesa[]>([]);
+  const queryClient = useQueryClient();
+  const { data, isLoading } = useQuery({
+    queryKey: queryKeys.mesasDashboard,
+    queryFn: fetchMesasDashboard,
+    staleTime: 30 * 1000,
+  });
   const [qtd, setQtd] = useState(10);
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [mesasComPedidosAbertos, setMesasComPedidosAbertos] = useState<Set<string>>(new Set());
-  const [mesasComContaPendente, setMesasComContaPendente] = useState<Set<string>>(new Set());
-  const [viagemComPedidosAbertos, setViagemComPedidosAbertos] = useState(false);
-  const [pedidosFinalizadosHoje, setPedidosFinalizadosHoje] = useState<any[]>([]);
   const [accordionFinalizados, setAccordionFinalizados] = useState(false);
-  /** mesa_id -> nome do atendente que abriu a comanda */
-  const [atendentePorMesa, setAtendentePorMesa] = useState<Record<string, string>>({});
+  const [search, setSearch] = useState('');
 
-  function load() {
-    getConfig('quantidade_mesas').then(setQtd);
-    getMesas().then(setMesas);
-    getMesasIdsComPedidosAbertos().then(setMesasComPedidosAbertos);
-    getMesasIdsComContaPendente().then(setMesasComContaPendente);
-    getViagemTemPedidosAbertos().then(setViagemComPedidosAbertos);
-    getPedidosPresencialEncerradosHoje().then(setPedidosFinalizadosHoje);
-    getMesasComComandaAberta().then((lista) => {
-      const map: Record<string, string> = {};
-      lista.forEach(({ mesa_id, atendente_nome }) => { map[mesa_id] = atendente_nome; });
-      setAtendentePorMesa(map);
-    });
-  }
+  useEffect(() => {
+    if (data?.qtd != null) setQtd(data.qtd);
+  }, [data?.qtd]);
+
+  const mesas = data?.mesas ?? [];
+  const mesasComPedidosAbertos = data?.mesasComPedidosAbertos ?? new Set<string>();
+  const mesasComContaPendente = data?.mesasComContaPendente ?? new Set<string>();
+  const viagemComPedidosAbertos = data?.viagemComPedidosAbertos ?? false;
+  const pedidosFinalizadosHoje = data?.pedidosFinalizadosHoje ?? [];
+  const atendentePorMesa = data?.atendentePorMesa ?? {};
+  const clientePorMesa = data?.clientePorMesa ?? {};
+  const clienteNomesPorMesa = data?.clienteNomesPorMesa ?? {};
+  const pedidosNumerosPorMesa = data?.pedidosNumerosPorMesa ?? {};
+  const loading = isLoading;
 
   function totalPedido(p: any) {
     const sub = (p.pedido_itens ?? []).reduce((s: number, i: any) => s + (i.quantidade || 0) * Number(i.valor_unitario || 0), 0);
     return (Number.isFinite(sub) ? sub : 0);
   }
 
-  useEffect(() => {
-    load();
-    const t = setInterval(load, 3000);
-    return () => clearInterval(t);
-  }, []);
-
-  useEffect(() => {
-    setLoading(false);
-  }, [mesas]);
-
   const handleApply = async () => {
     setSaving(true);
     try {
-      const updated = await initMesas(qtd);
-      setMesas(updated);
-      load();
+      await initMesas(qtd);
+      queryClient.invalidateQueries({ queryKey: queryKeys.mesasDashboard });
+      queryClient.invalidateQueries({ queryKey: queryKeys.adminSidebarCounts });
     } finally {
       setSaving(false);
     }
   };
+
+  const searchNorm = search.trim().toLowerCase();
+  const mesasFiltradas = !searchNorm
+    ? mesas
+    : mesas.filter((m) => {
+        const nomesCliente = clienteNomesPorMesa[m.id] ?? (clientePorMesa[m.id] ? [clientePorMesa[m.id]] : []);
+        const numeros = pedidosNumerosPorMesa[m.id] ?? [];
+        const matchCliente = nomesCliente.some((n) => n.toLowerCase().includes(searchNorm));
+        const matchNumero = numeros.some((n) => String(n) === searchNorm.replace(/^#/, '') || String(n).includes(searchNorm.replace(/^#/, '')));
+        return matchCliente || matchNumero;
+      });
 
   if (loading && mesas.length === 0) return <p className="text-stone-500">Carregando...</p>;
 
@@ -72,8 +117,19 @@ export default function AdminMesas() {
         </button>
         <p className="text-sm text-stone-500">A mesa VIAGEM é criada automaticamente.</p>
       </div>
+      <div className="mb-4 flex items-center gap-2 rounded-xl bg-white p-3 shadow-sm border border-stone-200">
+        <Search className="h-5 w-5 text-stone-400 flex-shrink-0" />
+        <input
+          type="search"
+          placeholder="Buscar por nome do cliente ou número do pedido (#222)"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          onKeyDown={(e) => e.key === 'Escape' && setSearch('')}
+          className="flex-1 min-w-0 rounded-lg border border-stone-300 px-3 py-2 text-stone-800 placeholder:text-stone-400"
+        />
+      </div>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {mesas.map((m) => {
+        {mesasFiltradas.map((m) => {
           const temPedidosAbertos = m.is_viagem ? viagemComPedidosAbertos : mesasComPedidosAbertos.has(m.id);
           const temContaPendente = !m.is_viagem && mesasComContaPendente.has(m.id);
           const destacar = temPedidosAbertos || temContaPendente;
@@ -87,8 +143,16 @@ export default function AdminMesas() {
             >
               {m.is_viagem ? <Truck className="h-8 w-8 text-amber-600 flex-shrink-0" /> : <UtensilsCrossed className="h-8 w-8 text-stone-400 flex-shrink-0" />}
               <div className="min-w-0">
-                <div className="font-semibold text-stone-800">{m.nome}</div>
-                <div className="text-sm text-stone-500">{m.is_viagem ? 'Pedidos para viagem' : `Mesa ${m.numero}`}</div>
+                <div className="font-semibold text-stone-800 uppercase">{m.nome}</div>
+                {m.is_viagem && <div className="text-sm text-stone-500">Pedidos para viagem</div>}
+                {!m.is_viagem && (clientePorMesa[m.id] || pedidosNumerosPorMesa[m.id]?.length) && (
+                  <div className="text-sm mt-0.5 truncate" title={clientePorMesa[m.id] || ''}>
+                    {clientePorMesa[m.id] && <span className="font-semibold text-stone-800">{clientePorMesa[m.id]}</span>}
+                    {pedidosNumerosPorMesa[m.id]?.length ? (
+                      <span className="text-stone-600">{clientePorMesa[m.id] ? ' – ' : ''}{pedidosNumerosPorMesa[m.id].map((n) => `#${n}`).join(', ')}</span>
+                    ) : null}
+                  </div>
+                )}
                 {!m.is_viagem && atendentePorMesa[m.id] && (
                   <div className="text-xs text-stone-500 mt-0.5 truncate" title={`Aberta por ${atendentePorMesa[m.id]}`}>Aberta por {atendentePorMesa[m.id]}</div>
                 )}

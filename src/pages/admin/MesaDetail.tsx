@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getComandaByMesa, getComandaWithPedidos, getTotalComanda, getPagamentosComanda, addPagamentoParcial, deletePagamentoParcial, closeComanda, getMesas, updatePedidoStatus, updatePedidoItens, getProdutos, getCuponsAtivos, applyDescontoComanda, clearDescontoComanda, getMesasParaTransferencia, openComanda, movePedidosParaOutraComanda, createPedidoPresencial, getAtendentes, atribuirComandaParaAtendente } from '../../lib/api';
 import type { FraçãoPagamento } from '../../lib/api';
 import { printContaMesa, printPedido, printPedidosUnificados } from '../../lib/printPdf';
@@ -9,6 +10,7 @@ import type { Cupom } from '../../types/database';
 import type { Produto } from '../../types/database';
 import { precoVenda, imagensProduto } from '../../types/database';
 import { formatarTelefone } from '../../lib/mascaraTelefone';
+import { queryKeys } from '../../lib/queryClient';
 
 export default function AdminMesaDetail() {
   const { mesaId } = useParams();
@@ -72,23 +74,40 @@ export default function AdminMesaDetail() {
   const [atendenteIdAtribuir, setAtendenteIdAtribuir] = useState('');
   const [enviandoAtribuir, setEnviandoAtribuir] = useState(false);
 
-  const loadComanda = (mesa: string) => {
-    getComandaByMesa(mesa).then((c) => {
-      setComanda(c);
-      if (c) {
-        getComandaWithPedidos(c.id).then((r) => {
-          if (r) {
-            setComanda(r.comanda as Comanda);
-            setPedidos(r.pedidos);
-          } else {
-            setPedidos([]);
-          }
-          getTotalComanda(c.id).then(setContaItens);
-          getPagamentosComanda(c.id).then(setPagamentosComanda);
-        });
-      }
-      setLoading(false);
-    });
+  const queryClient = useQueryClient();
+
+  const { data: mesaData } = useQuery({
+    queryKey: queryKeys.adminMesaDetail(mesaId!),
+    queryFn: async () => {
+      const c = await getComandaByMesa(mesaId!);
+      if (!c) return { comanda: null, pedidos: [], contaItens: null, pagamentosComanda: [] };
+      const [r, total, pagamentos] = await Promise.all([
+        getComandaWithPedidos(c.id),
+        getTotalComanda(c.id),
+        getPagamentosComanda(c.id),
+      ]);
+      return {
+        comanda: (r?.comanda ?? c) as Comanda,
+        pedidos: r?.pedidos ?? [],
+        contaItens: total,
+        pagamentosComanda: pagamentos,
+      };
+    },
+    enabled: !!mesaId,
+    
+  });
+
+  useEffect(() => {
+    if (mesaData === undefined) return;
+    setComanda(mesaData.comanda);
+    setPedidos(mesaData.pedidos);
+    setContaItens(mesaData.contaItens);
+    setPagamentosComanda(mesaData.pagamentosComanda);
+    setLoading(false);
+  }, [mesaData]);
+
+  const invalidateMesa = () => {
+    if (mesaId) queryClient.invalidateQueries({ queryKey: queryKeys.adminMesaDetail(mesaId) });
   };
 
   useEffect(() => {
@@ -98,25 +117,13 @@ export default function AdminMesaDetail() {
       setMesaNome(m?.nome ?? '');
       setIsMesaViagem(m?.is_viagem ?? false);
     });
-    getComandaByMesa(mesaId).then((c) => {
-      setComanda(c);
-      if (c) {
-        getComandaWithPedidos(c.id).then((r) => {
-          if (r) {
-            setComanda(r.comanda as Comanda); // r.comanda traz profiles(nome) para exibir atendente
-            setPedidos(r.pedidos);
-          } else {
-            setPedidos([]);
-          }
-          getTotalComanda(c.id).then(setContaItens);
-          getPagamentosComanda(c.id).then(setPagamentosComanda);
-        });
-      }
-      setLoading(false);
-    });
     getCuponsAtivos().then(setCupons);
     getProdutos(true).then(setProdutos);
   }, [mesaId]);
+
+  useEffect(() => {
+    if (mesaId && mesaData === undefined) setLoading(true);
+  }, [mesaId, mesaData]);
 
   const handleAbrirImprimir = () => setPopupImprimir(true);
 
@@ -416,10 +423,7 @@ export default function AdminMesaDetail() {
       await movePedidosParaOutraComanda(Array.from(pedidosSelecionados), comandaDestinoId);
       setPopupMoverSelecionados(false);
       setPedidosSelecionados(new Set());
-      if (comanda) {
-        getComandaWithPedidos(comanda.id).then((r) => { if (r) { setComanda(r.comanda as Comanda); setPedidos(r.pedidos); } });
-        getTotalComanda(comanda.id).then(setContaItens);
-      }
+      invalidateMesa();
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Erro ao transferir.');
     } finally {
@@ -437,10 +441,7 @@ export default function AdminMesaDetail() {
       });
       setPopupCancelar(null);
       setMotivoCancelamento('');
-      if (comanda) {
-        getComandaWithPedidos(comanda.id).then((r) => setPedidos(r?.pedidos ?? []));
-        getTotalComanda(comanda.id).then(setContaItens);
-      }
+      invalidateMesa();
     } catch (e) {
       setMotivoCancelamento('');
       alert(e instanceof Error ? e.message : 'Erro ao cancelar.');
@@ -475,8 +476,7 @@ export default function AdminMesaDetail() {
       }));
       await updatePedidoItens(popupEditar.id, itens, { adminOverride: true });
       setPopupEditar(null);
-      getComandaWithPedidos(comanda.id).then((r) => { if (r) { setComanda(r.comanda as Comanda); setPedidos(r.pedidos); } });
-      getTotalComanda(comanda.id).then(setContaItens);
+      invalidateMesa();
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Erro ao atualizar pedido.');
     } finally {
@@ -505,7 +505,7 @@ export default function AdminMesaDetail() {
       await openComanda(mesaId, profile.id, nomeClienteAbrir.trim(), telefoneAbrir.trim() || undefined);
       setNomeClienteAbrir('');
       setTelefoneAbrir('');
-      loadComanda(mesaId);
+      invalidateMesa();
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Erro ao abrir comanda.');
     } finally {
@@ -540,12 +540,7 @@ export default function AdminMesaDetail() {
       }));
       await createPedidoPresencial(comanda.id, itens, { lancadoPeloAdmin: true });
       setCarrinhoNovo([]);
-      const r = await getComandaWithPedidos(comanda.id);
-      if (r) {
-        setPedidos(r.pedidos);
-        setComanda(r.comanda as Comanda);
-      }
-      getTotalComanda(comanda.id).then(setContaItens);
+      invalidateMesa();
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Erro ao lançar pedido.');
     } finally {
@@ -571,7 +566,7 @@ export default function AdminMesaDetail() {
     try {
       await atribuirComandaParaAtendente(comanda.id, atendenteIdAtribuir.trim());
       setPopupAtribuirAtendente(false);
-      loadComanda(mesaId!);
+      invalidateMesa();
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Erro ao atribuir.');
     } finally {

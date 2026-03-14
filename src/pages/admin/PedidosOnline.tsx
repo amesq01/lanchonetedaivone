@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
-import { Copy } from 'lucide-react';
-import { getPedidosOnlinePendentes, getPedidosOnlineTodos, getPedidosOnlineEncerradosHoje, acceptPedidoOnline, setImprimidoEntregaPedido, encerrarPedidoOnline, getTotalAPagarPedido, getTotalPedidoById, getCuponsAtivos, updatePedidoStatus, updatePedidoItens, getProdutos, getMesasFechadasParaTransferencia, getComandaByMesa, openComanda, movePedidosParaOutraComanda, applyDescontoPedidoOnline, clearDescontoPedidoOnline } from '../../lib/api';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Copy, X } from 'lucide-react';
+import { fetchPedidosOnlineData, acceptPedidoOnline, setImprimidoEntregaPedido, encerrarPedidoOnline, getTotalAPagarPedido, getTotalPedidoById, getCuponsAtivos, updatePedidoStatus, updatePedidoItens, getProdutos, getMesasFechadasParaTransferencia, getComandaByMesa, openComanda, movePedidosParaOutraComanda, applyDescontoPedidoOnline, clearDescontoPedidoOnline } from '../../lib/api';
 import type { FraçãoPagamento } from '../../lib/api';
-import type { Cupom } from '../../types/database';
 import { printPedido, printContaViagem } from '../../lib/printPdf';
 import { useAuth } from '../../contexts/AuthContext';
 import type { Produto } from '../../types/database';
 import { precoVenda, imagensProduto } from '../../types/database';
+import { queryKeys } from '../../lib/queryClient';
 
 function haXTempo(iso: string | null | undefined): string {
   if (!iso) return '';
@@ -23,20 +24,34 @@ function haXTempo(iso: string | null | undefined): string {
 
 export default function AdminPedidosOnline() {
   const { profile } = useAuth();
-  const [pendentes, setPendentes] = useState<any[]>([]);
-  const [todos, setTodos] = useState<any[]>([]);
-  const [encerradosHoje, setEncerradosHoje] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const { data, isLoading } = useQuery({
+    queryKey: queryKeys.pedidosOnline,
+    queryFn: fetchPedidosOnlineData,
+    staleTime: 60 * 1000,
+  });
+  const pendentes = data?.pendentes ?? [];
+  const todos = data?.todos ?? [];
+  const encerradosHoje = data?.encerradosHoje ?? [];
+  const loading = isLoading;
   const [searchPedidos, setSearchPedidos] = useState('');
   const [popupCancelar, setPopupCancelar] = useState<{ pedidoId: string; adminOverride?: boolean } | null>(null);
   const [motivoCancelamento, setMotivoCancelamento] = useState('');
   const [confirmarEdicaoAvancada, setConfirmarEdicaoAvancada] = useState<any | null>(null);
   const [confirmarAceitar, setConfirmarAceitar] = useState<any | null>(null);
-  const [produtos, setProdutos] = useState<Produto[]>([]);
+  const { data: produtos = [] } = useQuery({
+    queryKey: queryKeys.produtos(true),
+    queryFn: () => getProdutos(true),
+    staleTime: 60 * 1000,
+  });
+  const { data: cupons = [] } = useQuery({
+    queryKey: queryKeys.cuponsAtivos,
+    queryFn: getCuponsAtivos,
+    staleTime: Infinity,
+  });
   const [popupEditar, setPopupEditar] = useState<any | null>(null);
   const [carrinhoEdicao, setCarrinhoEdicao] = useState<{ produto: Produto; quantidade: number; observacao: string }[]>([]);
   const [searchEdicao, setSearchEdicao] = useState('');
-  const [enviandoEdicao, setEnviandoEdicao] = useState(false);
   const [popupEncerrar, setPopupEncerrar] = useState<{ pedido: any; total: number } | null>(null);
   const [fracoesEncerrar, setFracoesEncerrar] = useState<FraçãoPagamento[]>([]);
   const [novaFraçãoValor, setNovaFraçãoValor] = useState('');
@@ -48,7 +63,6 @@ export default function AdminPedidosOnline() {
   const [enviandoEnviar, setEnviandoEnviar] = useState(false);
   const [popupImprimirConta, setPopupImprimirConta] = useState<any | null>(null);
   const [contaItensPedido, setContaItensPedido] = useState<{ itens: { codigo: string; descricao: string; quantidade: number; valor: number }[]; total: number } | null>(null);
-  const [cupons, setCupons] = useState<Cupom[]>([]);
   const [cupomDesconto, setCupomDesconto] = useState('');
   const [descontoManual, setDescontoManual] = useState('');
 
@@ -72,39 +86,34 @@ export default function AdminPedidosOnline() {
     setPopupEditar(p);
   };
 
-  async function load() {
-    const [pend, all, encerrados] = await Promise.all([
-      getPedidosOnlinePendentes(),
-      getPedidosOnlineTodos(),
-      getPedidosOnlineEncerradosHoje(),
-    ]);
-    setPendentes(pend);
-    setTodos(all.filter((p) => p.status !== 'aguardando_aceite' && !p.encerrado_em));
-    setEncerradosHoje(encerrados);
-    setLoading(false);
-  }
+  const invalidatePedidosOnline = () => {
+    queryClient.invalidateQueries({ queryKey: queryKeys.pedidosOnline });
+    queryClient.invalidateQueries({ queryKey: queryKeys.adminSidebarCounts });
+    queryClient.invalidateQueries({ queryKey: queryKeys.pedidosCozinha });
+  };
 
-  useEffect(() => {
-    load();
-    getProdutos(true).then(setProdutos);
-  }, []);
-
-  // Polling leve para manter a lista de pedidos online atualizada automaticamente
-  useEffect(() => {
-    let active = true;
-    const interval = setInterval(() => {
-      if (!active) return;
-      load();
-    }, 5000);
-    return () => {
-      active = false;
-      clearInterval(interval);
-    };
-  }, []);
-
-  useEffect(() => {
-    getCuponsAtivos().then(setCupons);
-  }, []);
+  const mutationAceitar = useMutation({
+    mutationFn: (pedidoId: string) => acceptPedidoOnline(pedidoId),
+    onSuccess: invalidatePedidosOnline,
+  });
+  const mutationEncerrar = useMutation({
+    mutationFn: ({ pedidoId, pagamentos }: { pedidoId: string; pagamentos: FraçãoPagamento[] }) => encerrarPedidoOnline(pedidoId, pagamentos),
+    onSuccess: invalidatePedidosOnline,
+  });
+  const mutationCancelar = useMutation({
+    mutationFn: ({ pedidoId, motivo, adminOverride }: { pedidoId: string; motivo: string; adminOverride?: boolean }) =>
+      updatePedidoStatus(pedidoId, 'cancelado', { motivo_cancelamento: motivo, cancelado_por: profile?.id, adminOverride }),
+    onSuccess: invalidatePedidosOnline,
+  });
+  const mutationEditarItens = useMutation({
+    mutationFn: ({ pedidoId, itens }: { pedidoId: string; itens: { produto_id: string; quantidade: number; valor_unitario: number; observacao?: string }[] }) =>
+      updatePedidoItens(pedidoId, itens, { adminOverride: true }),
+    onSuccess: invalidatePedidosOnline,
+  });
+  const mutationImprimirEntrega = useMutation({
+    mutationFn: (pedidoId: string) => setImprimidoEntregaPedido(pedidoId),
+    onSuccess: invalidatePedidosOnline,
+  });
 
   useEffect(() => {
     if (popupImprimirConta) getTotalPedidoById(popupImprimirConta.id).then(setContaItensPedido);
@@ -154,18 +163,17 @@ export default function AdminPedidosOnline() {
     setPopupImprimirConta(null);
     setCupomDesconto('');
     setDescontoManual('');
-    load();
+    invalidatePedidosOnline();
   };
 
-  async function handleAceitar(pedidoId: string) {
-    await acceptPedidoOnline(pedidoId);
-    load();
+  function handleAceitar(pedidoId: string) {
+    mutationAceitar.mutate(pedidoId);
   }
 
   function handleImprimirPedido(p: any) {
     const titulo = p.tipo_entrega === 'retirada' ? 'Retirada' : 'Entrega';
     printPedido(p, titulo);
-    if (p.status === 'finalizado' && !p.imprimido_entrega_em) setImprimidoEntregaPedido(p.id).then(load);
+    if (p.status === 'finalizado' && !p.imprimido_entrega_em) mutationImprimirEntrega.mutate(p.id);
   }
 
   function abrirEncerrar(p: any) {
@@ -201,21 +209,23 @@ export default function AdminPedidosOnline() {
     setFracoesEncerrar((prev) => prev.filter((_, i) => i !== index));
   };
 
-  async function confirmarEncerrar() {
+  function confirmarEncerrar() {
     if (!popupEncerrar) return;
     if (totalEncerramento >= 0.01 && fracoesEncerrar.length === 0) return;
     if (totalEncerramento >= 0.01 && totalPagoEncerrar < totalEncerramento - 0.01) {
       alert(`Valor pago (R$ ${totalPagoEncerrar.toFixed(2)}) é menor que o total do pedido (R$ ${totalEncerramento.toFixed(2)}).`);
       return;
     }
-    try {
-      await encerrarPedidoOnline(popupEncerrar.pedido.id, contaZeradaOnline ? [] : fracoesEncerrar);
-      setPopupEncerrar(null);
-      setFracoesEncerrar([]);
-      load();
-    } catch (e) {
-      alert(e instanceof Error ? e.message : 'Erro ao encerrar.');
-    }
+    mutationEncerrar.mutate(
+      { pedidoId: popupEncerrar.pedido.id, pagamentos: contaZeradaOnline ? [] : fracoesEncerrar },
+      {
+        onSuccess: () => {
+          setPopupEncerrar(null);
+          setFracoesEncerrar([]);
+        },
+        onError: (e) => alert(e instanceof Error ? e.message : 'Erro ao encerrar.'),
+      }
+    );
   }
 
   function abrirEnviarParaMesa(p: any) {
@@ -237,7 +247,7 @@ export default function AdminPedidosOnline() {
       const novaComanda = await openComanda(mesaIdEnviar, profile.id, novoNomeClienteEnviar.trim());
       await movePedidosParaOutraComanda([popupEnviarParaMesa.pedido.id], novaComanda.id);
       setPopupEnviarParaMesa(null);
-      load();
+      invalidatePedidosOnline();
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Erro ao enviar para mesa.');
     } finally {
@@ -245,20 +255,18 @@ export default function AdminPedidosOnline() {
     }
   }
 
-  async function confirmarCancelarPedido() {
+  function confirmarCancelarPedido() {
     if (!popupCancelar || !motivoCancelamento.trim()) return;
-    try {
-      await updatePedidoStatus(popupCancelar.pedidoId, 'cancelado', {
-        motivo_cancelamento: motivoCancelamento.trim(),
-        cancelado_por: profile?.id,
-        adminOverride: popupCancelar.adminOverride,
-      });
-      setPopupCancelar(null);
-      setMotivoCancelamento('');
-      load();
-    } catch (e) {
-      alert(e instanceof Error ? e.message : 'Erro ao cancelar.');
-    }
+    mutationCancelar.mutate(
+      { pedidoId: popupCancelar.pedidoId, motivo: motivoCancelamento.trim(), adminOverride: popupCancelar.adminOverride },
+      {
+        onSuccess: () => {
+          setPopupCancelar(null);
+          setMotivoCancelamento('');
+        },
+        onError: (e) => alert(e instanceof Error ? e.message : 'Erro ao cancelar.'),
+      }
+    );
   }
 
   const addItemEdicao = (produto: Produto, qtd = 1, obs = '') => {
@@ -277,25 +285,22 @@ export default function AdminPedidosOnline() {
   const setObsEdicao = (index: number, value: string) => {
     setCarrinhoEdicao((c) => c.map((item, i) => (i === index ? { ...item, observacao: value } : item)));
   };
-  const salvarEdicao = async () => {
+  function salvarEdicao() {
     if (!popupEditar || carrinhoEdicao.length === 0) return;
-    setEnviandoEdicao(true);
-    try {
-      const itens = carrinhoEdicao.map((i) => ({
-        produto_id: i.produto.id,
-        quantidade: i.quantidade,
-        valor_unitario: precoVenda(i.produto),
-        observacao: i.observacao || undefined,
-      }));
-      await updatePedidoItens(popupEditar.id, itens, { adminOverride: true });
-      setPopupEditar(null);
-      load();
-    } catch (e) {
-      alert(e instanceof Error ? e.message : 'Erro ao atualizar pedido.');
-    } finally {
-      setEnviandoEdicao(false);
-    }
-  };
+    const itens = carrinhoEdicao.map((i) => ({
+      produto_id: i.produto.id,
+      quantidade: i.quantidade,
+      valor_unitario: precoVenda(i.produto),
+      observacao: i.observacao || undefined,
+    }));
+    mutationEditarItens.mutate(
+      { pedidoId: popupEditar.id, itens },
+      {
+        onSuccess: () => setPopupEditar(null),
+        onError: (e) => alert(e instanceof Error ? e.message : 'Erro ao atualizar pedido.'),
+      }
+    );
+  }
   const sEdicao = (searchEdicao || '').trim().toLowerCase();
   const filtradosEdicao = sEdicao ? produtos.filter((p) => (p.codigo?.toLowerCase().includes(sEdicao) || (p.nome ?? '').toLowerCase().includes(sEdicao) || (p.descricao ?? '').toLowerCase().includes(sEdicao))) : [];
 
@@ -353,13 +358,27 @@ export default function AdminPedidosOnline() {
 
       <div className="mb-4">
         <label className="block text-sm font-medium text-stone-600 mb-1">Buscar pedido</label>
-        <input
-          type="text"
-          value={searchPedidos}
-          onChange={(e) => setSearchPedidos(e.target.value)}
-          placeholder="Número do pedido, nome ou WhatsApp..."
-          className="w-full max-w-md rounded-lg border border-stone-300 px-3 py-2"
-        />
+        <div className="relative max-w-md">
+          <input
+            type="text"
+            value={searchPedidos}
+            onChange={(e) => setSearchPedidos(e.target.value)}
+            onKeyDown={(e) => e.key === 'Escape' && setSearchPedidos('')}
+            placeholder="Número do pedido, nome ou WhatsApp..."
+            className="w-full rounded-lg border border-stone-300 px-3 py-2 pr-9"
+          />
+          {searchPedidos.trim() ? (
+            <button
+              type="button"
+              onClick={() => setSearchPedidos('')}
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded text-stone-400 hover:text-stone-600 hover:bg-stone-100"
+              title="Limpar busca"
+              aria-label="Limpar busca"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          ) : null}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -622,7 +641,7 @@ export default function AdminPedidosOnline() {
               </ul>
             </div>
             <div className="flex gap-2">
-              <button onClick={salvarEdicao} disabled={enviandoEdicao || carrinhoEdicao.length === 0} className="flex-1 rounded-lg bg-amber-600 py-2 font-medium text-white hover:bg-amber-700 disabled:opacity-50">Salvar alterações</button>
+              <button onClick={salvarEdicao} disabled={mutationEditarItens.isPending || carrinhoEdicao.length === 0} className="flex-1 rounded-lg bg-amber-600 py-2 font-medium text-white hover:bg-amber-700 disabled:opacity-50">Salvar alterações</button>
               <button onClick={() => setPopupEditar(null)} className="rounded-lg border border-stone-300 px-4 py-2 text-stone-600">Fechar</button>
             </div>
           </div>

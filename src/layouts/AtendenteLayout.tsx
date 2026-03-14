@@ -1,6 +1,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../contexts/AuthContext';
+import { subscribePedidosAndComandasRealtime } from '../lib/supabaseRealtime';
 import { UtensilsCrossed, Truck, LogOut, CheckCircle2 } from 'lucide-react';
 import { subscribeToNotificacoesAtendente, marcarNotificacaoComoVista, getNotificacoesNaoVistas } from '../lib/api';
 
@@ -33,7 +35,12 @@ function tocarBip() {
 export default function AtendenteLayout() {
   const { user, profile, signOut } = useAuth();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [notificacoes, setNotificacoes] = useState<Notificacao[]>([]);
+
+  useEffect(() => {
+    return subscribePedidosAndComandasRealtime(queryClient);
+  }, [queryClient]);
 
   const carregarNotificacoes = useCallback(async () => {
     if (!user?.id || profile?.role !== 'atendente') return;

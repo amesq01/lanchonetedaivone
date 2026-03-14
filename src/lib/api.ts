@@ -117,9 +117,8 @@ function formatarHoraExibicao(hhmm: string): string {
   return `${hour}h${min.toString().padStart(2, '0')}`;
 }
 
-/** Mensagem para o cliente: "Abre hoje às 19h" ou "Abre segunda às 19h" etc. */
-export async function getLojaOnlineMensagemAbertura(): Promise<string | null> {
-  const agenda = await getLojaOnlineAgendaAbertura();
+/** Deriva a mensagem de abertura a partir da agenda (síncrono). "Abre hoje às 19h" ou "Abre segunda às 19h" etc. */
+export function mensagemAberturaFromAgenda(agenda: { dias: number[]; horario: string }): string | null {
   if (!agenda.horario || agenda.dias.length === 0) return null;
   const horaFmt = formatarHoraExibicao(agenda.horario);
   const hoje = new Date().getDay();
@@ -132,6 +131,12 @@ export async function getLojaOnlineMensagemAbertura(): Promise<string | null> {
     }
   }
   return `Abre ${DIAS_SEMANA[agenda.dias[0]]} às ${horaFmt}`;
+}
+
+/** Mensagem para o cliente: "Abre hoje às 19h" ou "Abre segunda às 19h" etc. */
+export async function getLojaOnlineMensagemAbertura(): Promise<string | null> {
+  const agenda = await getLojaOnlineAgendaAbertura();
+  return mensagemAberturaFromAgenda(agenda);
 }
 
 /** Retorna se o cliente pode fazer pedido online (lanchonete aberta). */
@@ -186,21 +191,34 @@ export async function getComandaByMesaComAtendente(mesaId: string): Promise<{ co
   return { comanda, atendente_nome: (profile as { nome: string } | null)?.nome ?? '-' };
 }
 
-/** Mesas (presencial) com comanda aberta, atendente_id e nome. Exclui mesa viagem. */
-export async function getMesasComComandaAberta(): Promise<{ mesa_id: string; atendente_id: string; atendente_nome: string }[]> {
+/** Mesas com comanda aberta (salão + viagem), atendente, cliente e números dos pedidos. */
+export async function getMesasComComandaAberta(): Promise<{ mesa_id: string; atendente_id: string; atendente_nome: string; nome_cliente: string | null; pedidos_numeros: number[] }[]> {
   const [comandasData, mesasData] = await Promise.all([
-    supabase.from('comandas').select('mesa_id, atendente_id').eq('aberta', true),
+    supabase.from('comandas').select('id, mesa_id, atendente_id, nome_cliente').eq('aberta', true),
     getMesas(),
   ]);
-  const comandas = (comandasData.data ?? []) as { mesa_id: string; atendente_id: string }[];
-  const mesasPresencial = new Set((mesasData ?? []).filter((m: any) => !m.is_viagem).map((m: any) => m.id));
-  const filtradas = comandas.filter((c) => mesasPresencial.has(c.mesa_id));
+  const comandas = (comandasData.data ?? []) as { id: string; mesa_id: string; atendente_id: string; nome_cliente: string | null }[];
+  const mesaIds = new Set((mesasData ?? []).map((m: any) => m.id));
+  const filtradas = comandas.filter((c) => mesaIds.has(c.mesa_id));
   if (!filtradas.length) return [];
+  const comandaIds = filtradas.map((c) => c.id);
+  const { data: pedidosData } = await supabase.from('pedidos').select('comanda_id, numero').in('comanda_id', comandaIds).neq('status', 'cancelado');
+  const pedidosPorComanda: Record<string, number[]> = {};
+  (pedidosData ?? []).forEach((p: { comanda_id: string; numero: number }) => {
+    if (!pedidosPorComanda[p.comanda_id]) pedidosPorComanda[p.comanda_id] = [];
+    pedidosPorComanda[p.comanda_id].push(Number(p.numero));
+  });
   const ids = [...new Set(filtradas.map((c) => c.atendente_id))];
   const { data: profiles } = await supabase.from('profiles').select('id, nome').in('id', ids);
   const nomes: Record<string, string> = {};
   (profiles ?? []).forEach((r: any) => { nomes[r.id] = r.nome; });
-  return filtradas.map((c) => ({ mesa_id: c.mesa_id, atendente_id: c.atendente_id, atendente_nome: nomes[c.atendente_id] ?? '-' }));
+  return filtradas.map((c) => ({
+    mesa_id: c.mesa_id,
+    atendente_id: c.atendente_id,
+    atendente_nome: nomes[c.atendente_id] ?? '-',
+    nome_cliente: c.nome_cliente ?? null,
+    pedidos_numeros: (pedidosPorComanda[c.id] ?? []).sort((a, b) => a - b),
+  }));
 }
 
 /** Mesa IDs que têm comanda aberta (uma única requisição em vez de N) */
@@ -303,13 +321,55 @@ export async function getMesasIdsComContaPendente(): Promise<Set<string>> {
   return mesaIds;
 }
 
-/** Contagens para badges da sidebar admin: mesas (conta pendente), viagem (pedidos prontos p/ encerrar), online (aguardando aceite + em andamento + finalizados p/ encerrar), cozinha (novo + em preparação). */
+/** Busca mínima para contagem viagem na sidebar: só id, status e comandas.aberta. */
+async function getPedidosViagemAbertosParaContagem(): Promise<{ id: string; status: string; comandas: { aberta?: boolean }[] | { aberta?: boolean } }[]> {
+  const { data: mesas } = await supabase.from('mesas').select('id').eq('is_viagem', true).limit(1);
+  const viagemMesaId = ((mesas ?? []) as { id: string }[])[0]?.id;
+  if (!viagemMesaId) return [];
+  const { data: comandas } = await supabase.from('comandas').select('id').eq('mesa_id', viagemMesaId).eq('aberta', true);
+  const comandaIds = (comandas ?? []).map((c: { id: string }) => c.id);
+  if (!comandaIds.length) return [];
+  const { data } = await supabase
+    .from('pedidos')
+    .select('id, status, comandas(aberta)')
+    .in('comanda_id', comandaIds)
+    .neq('status', 'cancelado');
+  return (data ?? []) as any[];
+}
+
+/** Busca mínima para contagem online na sidebar: só id, status, encerrado_em (hoje). */
+async function getPedidosOnlineParaContagem(): Promise<{ id: string; status: string; encerrado_em: string | null }[]> {
+  const { desde, ate } = hojeBrasiliaUTC();
+  const { data } = await supabase
+    .from('pedidos')
+    .select('id, status, encerrado_em')
+    .eq('origem', 'online')
+    .neq('status', 'cancelado')
+    .gte('created_at', desde)
+    .lte('created_at', ate);
+  return (data ?? []) as any[];
+}
+
+/** Busca mínima para contagem cozinha na sidebar: id, status e pedido_itens.produtos.vai_para_cozinha. */
+async function getPedidosCozinhaParaContagem(): Promise<{ id: string; status: string; pedido_itens: { produtos: { vai_para_cozinha: boolean } | null }[] }[]> {
+  const { data } = await supabase
+    .from('pedidos')
+    .select('id, status, pedido_itens(produtos(vai_para_cozinha))')
+    .in('status', ['novo_pedido', 'em_preparacao', 'finalizado']);
+  const list = (data ?? []) as any[];
+  return list.filter((p) => {
+    const itens = p.pedido_itens ?? [];
+    return itens.some((i: any) => Boolean(i.produtos?.vai_para_cozinha));
+  });
+}
+
+/** Contagens para badges da sidebar admin: mesas (conta pendente), viagem (pedidos prontos p/ encerrar), online (aguardando aceite + em andamento + finalizados p/ encerrar), cozinha (novo + em preparação). Usa queries leves (só campos necessários). */
 export async function getAdminSidebarCounts(): Promise<{ mesas: number; viagem: number; online: number; cozinha: number }> {
   const [mesasSet, viagemList, onlineList, cozinhaList] = await Promise.all([
     getMesasIdsComContaPendente(),
-    getPedidosViagemAbertos(),
-    getPedidosOnlineTodos(),
-    getPedidosCozinha(),
+    getPedidosViagemAbertosParaContagem(),
+    getPedidosOnlineParaContagem(),
+    getPedidosCozinhaParaContagem(),
   ]);
   const comandaAberta = (p: any) => (Array.isArray(p.comandas) ? p.comandas[0]?.aberta : p.comandas?.aberta) !== false;
   const viagem = (viagemList as any[]).filter((p) => p.status === 'finalizado' && comandaAberta(p)).length;
@@ -523,6 +583,25 @@ export async function saveProduto(payload: {
   if (categoria_ids.length > 0) {
     await (supabase as any).from('produto_categorias').insert(categoria_ids.map((categoria_id) => ({ produto_id: produtoId, categoria_id })));
   }
+}
+
+/** Atualiza apenas o campo ativo do produto. */
+export async function updateProdutoAtivo(produtoId: string, ativo: boolean): Promise<void> {
+  const { error } = await (supabase as any)
+    .from('produtos')
+    .update({ ativo, updated_at: new Date().toISOString() })
+    .eq('id', produtoId);
+  if (error) throw error;
+}
+
+/** Atualiza quantidade do produto. Se quantidade for 0, marca como inativo. */
+export async function updateProdutoQuantidade(produtoId: string, quantidade: number): Promise<void> {
+  const qtd = Math.max(0, Math.floor(quantidade));
+  const { error } = await (supabase as any)
+    .from('produtos')
+    .update({ quantidade: qtd, ativo: qtd > 0, updated_at: new Date().toISOString() })
+    .eq('id', produtoId);
+  if (error) throw error;
 }
 
 export async function nextPedidoNumero(): Promise<number> {
@@ -839,12 +918,28 @@ export async function getPedidosPresencialEncerradosHoje() {
 }
 
 export async function getPedidosOnlinePendentes() {
-  const { data } = await supabase.from('pedidos').select('*, pedido_itens(*, produtos(*))').eq('origem', 'online').eq('status', 'aguardando_aceite').order('created_at');
+  const { desde, ate } = hojeBrasiliaUTC();
+  const { data } = await supabase
+    .from('pedidos')
+    .select('*, pedido_itens(*, produtos(*))')
+    .eq('origem', 'online')
+    .eq('status', 'aguardando_aceite')
+    .gte('created_at', desde)
+    .lte('created_at', ate)
+    .order('created_at');
   return (data ?? []) as any[];
 }
 
 export async function getPedidosOnlineTodos() {
-  const { data } = await supabase.from('pedidos').select('*, pedido_itens(*, produtos(*))').eq('origem', 'online').neq('status', 'cancelado').order('created_at', { ascending: false });
+  const { desde, ate } = hojeBrasiliaUTC();
+  const { data } = await supabase
+    .from('pedidos')
+    .select('*, pedido_itens(*, produtos(*))')
+    .eq('origem', 'online')
+    .neq('status', 'cancelado')
+    .gte('created_at', desde)
+    .lte('created_at', ate)
+    .order('created_at', { ascending: false });
   return (data ?? []) as any[];
 }
 
@@ -852,6 +947,17 @@ export async function getPedidosOnlineEncerradosHoje() {
   const { desde, ate } = hojeBrasiliaUTC();
   const { data } = await supabase.from('pedidos').select('*, pedido_itens(*, produtos(*))').eq('origem', 'online').eq('status', 'finalizado').not('encerrado_em', 'is', null).gte('encerrado_em', desde).lte('encerrado_em', ate).order('encerrado_em', { ascending: false });
   return (data ?? []) as any[];
+}
+
+/** Retorno usado por useQuery (Pedidos Online + useNovoPedidoOnline). Realtime invalida a query. */
+export async function fetchPedidosOnlineData(): Promise<{ pendentes: any[]; todos: any[]; encerradosHoje: any[] }> {
+  const [pend, all, encerrados] = await Promise.all([
+    getPedidosOnlinePendentes(),
+    getPedidosOnlineTodos(),
+    getPedidosOnlineEncerradosHoje(),
+  ]);
+  const todos = (all as any[]).filter((p) => p.status !== 'aguardando_aceite' && !p.encerrado_em);
+  return { pendentes: pend, todos, encerradosHoje: encerrados };
 }
 
 export async function acceptPedidoOnline(pedidoId: string) {
@@ -887,23 +993,30 @@ export async function encerrarPedidoOnline(pedidoId: string, pagamentos: Fraçã
   await (supabase as any).from('pedidos').update({ encerrado_em: now, forma_pagamento: resumo, updated_at: now }).eq('id', pedidoId);
 }
 
-export async function createPedidoOnline(payload: {
-  cliente_nome: string;
-  cliente_whatsapp: string;
-  cliente_endereco: string;
-  ponto_referencia?: string;
-  forma_pagamento: string;
-  tipo_entrega?: 'entrega' | 'retirada';
-  troco_para?: number;
-  observacoes?: string;
-  cupom_codigo?: string;
-  itens: { produto_id: string; quantidade: number; valor_unitario: number; observacao?: string }[];
-}) {
-  const { allowed, message } = await canPlaceOrderOnline();
-  if (!allowed) throw new Error(message ?? 'A lanchonete está fechada para pedidos online.');
+export async function createPedidoOnline(
+  payload: {
+    cliente_nome: string;
+    cliente_whatsapp: string;
+    cliente_endereco: string;
+    ponto_referencia?: string;
+    forma_pagamento: string;
+    tipo_entrega?: 'entrega' | 'retirada';
+    troco_para?: number;
+    observacoes?: string;
+    cupom_codigo?: string;
+    itens: { produto_id: string; quantidade: number; valor_unitario: number; observacao?: string }[];
+  },
+  opts?: { allowed?: boolean; taxaEntrega?: number },
+) {
+  if (opts?.allowed === false) throw new Error('A lanchonete está fechada para pedidos online.');
+  if (opts?.allowed !== true) {
+    const { allowed, message } = await canPlaceOrderOnline();
+    if (!allowed) throw new Error(message ?? 'A lanchonete está fechada para pedidos online.');
+  }
   await decrementarEstoque(payload.itens);
   const tipoEntrega = payload.tipo_entrega ?? 'entrega';
-  const taxa = tipoEntrega === 'retirada' ? 0 : await getConfig('taxa_entrega');
+  const taxa =
+    tipoEntrega === 'retirada' ? 0 : opts?.taxaEntrega != null ? opts.taxaEntrega : await getConfig('taxa_entrega');
   const numero = await nextPedidoNumero();
   let desconto = 0;
   if (payload.cupom_codigo) {
@@ -1254,9 +1367,17 @@ export async function getProdutividade(desde: string, ate: string): Promise<{
 
 /** Aplica desconto nos pedidos da comanda (cupom and/or manual). cupomId pode ser null para só desconto manual. */
 export async function applyDescontoComanda(comandaId: string, cupomId: string | null, valorDescontoTotal: number) {
-  const { data } = await supabase.from('pedidos').select('id').eq('comanda_id', comandaId).neq('status', 'cancelado');
-  const pedidos = (data ?? []) as { id: string }[];
+  const { data } = await supabase.from('pedidos').select('id, cupom_id').eq('comanda_id', comandaId).neq('status', 'cancelado');
+  const pedidos = (data ?? []) as { id: string; cupom_id: string | null }[];
   if (!pedidos.length) return;
+  if (cupomId != null) {
+    const jaTinhaEsteCupom = pedidos.every((p) => p.cupom_id === cupomId);
+    if (!jaTinhaEsteCupom) {
+      const { data: cupomData } = await supabase.from('cupons').select('usos_restantes').eq('id', cupomId).single();
+      const atual = Number((cupomData as { usos_restantes: number } | null)?.usos_restantes ?? 0);
+      await (supabase as any).from('cupons').update({ usos_restantes: Math.max(0, atual - 1) }).eq('id', cupomId);
+    }
+  }
   const valorPorPedido = valorDescontoTotal / pedidos.length;
   for (const p of pedidos) {
     await (supabase as any).from('pedidos').update({
@@ -1282,6 +1403,15 @@ export async function clearDescontoComanda(comandaId: string) {
 
 /** Aplica desconto em pedido online (cupom e/ou manual). Persiste para que o encerramento use o total correto. */
 export async function applyDescontoPedidoOnline(pedidoId: string, cupomId: string | null, valorDesconto: number) {
+  if (cupomId != null) {
+    const { data: pedidoAtual } = await supabase.from('pedidos').select('cupom_id').eq('id', pedidoId).single();
+    const jaTinhaEsteCupom = (pedidoAtual as { cupom_id: string | null } | null)?.cupom_id === cupomId;
+    if (!jaTinhaEsteCupom) {
+      const { data: cupomData } = await supabase.from('cupons').select('usos_restantes').eq('id', cupomId).single();
+      const atual = Number((cupomData as { usos_restantes: number } | null)?.usos_restantes ?? 0);
+      await (supabase as any).from('cupons').update({ usos_restantes: Math.max(0, atual - 1) }).eq('id', cupomId);
+    }
+  }
   await (supabase as any).from('pedidos').update({
     desconto: valorDesconto,
     cupom_id: cupomId,
@@ -1346,25 +1476,16 @@ export async function getNotificacoesNaoVistas(atendenteId: string) {
   return (data ?? []) as { id: string; mensagem: string; pedido_numero: number }[];
 }
 
-/** Inscreve nas notificações do atendente (Realtime + polling). Retorna função para cancelar. O primeiro poll só preenche ids já existentes (não dispara onNotificacao). */
+/** Inscreve nas notificações do atendente (Realtime apenas). Um fetch inicial preenche ids existentes sem disparar onNotificacao; novos INSERTs vêm pelo Realtime. */
 export function subscribeToNotificacoesAtendente(
   atendenteId: string,
   onNotificacao: (notificacao: { id: string; mensagem: string; pedido_numero: number }) => void
 ) {
   const idsVistos = new Set<string>();
-  let primeiroPoll = true;
-  const poll = async () => {
+  (async () => {
     const list = await getNotificacoesNaoVistas(atendenteId);
-    for (const n of list) {
-      if (!idsVistos.has(n.id)) {
-        idsVistos.add(n.id);
-        if (!primeiroPoll) onNotificacao(n);
-      }
-    }
-    primeiroPoll = false;
-  };
-  poll();
-  const interval = setInterval(poll, 3000);
+    for (const n of list) idsVistos.add(n.id);
+  })();
   const channel = supabase
     .channel('notificacoes-atendente')
     .on(
@@ -1385,7 +1506,6 @@ export function subscribeToNotificacoesAtendente(
     )
     .subscribe();
   return () => {
-    clearInterval(interval);
     supabase.removeChannel(channel);
   };
 }

@@ -1,19 +1,27 @@
 import { useEffect, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getConfig, setConfig } from '../../lib/api';
+import { queryKeys } from '../../lib/queryClient';
 
 export default function AdminTaxaEntrega() {
+  const queryClient = useQueryClient();
+  const { data, isLoading: loading } = useQuery({
+    queryKey: queryKeys.configTaxaEntrega,
+    queryFn: () => getConfig('taxa_entrega'),
+    staleTime: Infinity,
+  });
   const [valor, setValor] = useState('0');
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-
   useEffect(() => {
-    getConfig('taxa_entrega').then((v) => setValor(String(v))).finally(() => setLoading(false));
-  }, []);
+    if (data != null) setValor(String(data));
+  }, [data]);
+  const [saving, setSaving] = useState(false);
 
   const handleSave = async () => {
     setSaving(true);
     try {
       await setConfig('taxa_entrega', Number(valor));
+      queryClient.invalidateQueries({ queryKey: queryKeys.configTaxaEntrega });
+      queryClient.invalidateQueries({ queryKey: queryKeys.lojaConfig });
     } finally {
       setSaving(false);
     }

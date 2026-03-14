@@ -1,7 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { Trash2 } from 'lucide-react';
 import { getProdutos, validarCupom } from '../../lib/api';
+import { queryKeys } from '../../lib/queryClient';
 import type { Produto } from '../../types/database';
 import { precoVenda, imagensProduto } from '../../types/database';
 import { useLojaConfig } from '../../contexts/LojaConfigContext';
@@ -49,9 +51,11 @@ export default function LojaCarrinho() {
   const { taxaEntrega, lanchoneteAberta, soRetirada, mensagemAbertura } = useLojaConfig();
   const [searchParams] = useSearchParams();
   const addId = searchParams.get('add');
-  const [, setProdutos] = useState<Record<string, Produto>>({});
+  const produtosQuery = useQuery({ queryKey: queryKeys.produtos(true), queryFn: () => getProdutos(true) });
+  const list = produtosQuery.data ?? [];
+  const loading = produtosQuery.isLoading;
+
   const [itens, setItens] = useState<Item[]>([]);
-  const [loading, setLoading] = useState(true);
   const [cupomInput, setCupomInput] = useState('');
   const [cupomAplicado, setCupomAplicado] = useState<{ codigo: string; porcentagem: number; valorMaximo?: number } | null>(() => getCupomAplicado());
   const [cupomErro, setCupomErro] = useState('');
@@ -59,35 +63,25 @@ export default function LojaCarrinho() {
   const [taxaEntregaLocal] = useState<number | null>(null);
 
   useEffect(() => {
-    getProdutos(true).then((list) => {
-      const map: Record<string, Produto> = {};
-      list.forEach((p) => { map[p.id] = p; });
-      setProdutos(map);
-      let saved = getCart();
-      if (addId && map[addId]) {
-        const exist = saved.find((x) => x.produto_id === addId);
-        if (exist) exist.quantidade++;
-        else saved = [...saved, { produto_id: addId, quantidade: 1, observacao: '' }];
-      }
-      const cart: Item[] = saved.map((s) => ({ produto: map[s.produto_id], quantidade: s.quantidade, observacao: s.observacao })).filter((i) => i.produto);
-      setItens(cart);
-      saveCart(cart);
-      setLoading(false);
-    });
-  }, [addId]);
+    if (list.length === 0) return;
+    const map: Record<string, Produto> = {};
+    list.forEach((p) => { map[p.id] = p; });
+    let saved = getCart();
+    if (addId && map[addId]) {
+      const exist = saved.find((x) => x.produto_id === addId);
+      if (exist) exist.quantidade++;
+      else saved = [...saved, { produto_id: addId, quantidade: 1, observacao: '' }];
+    }
+    const cart: Item[] = saved.map((s) => ({ produto: map[s.produto_id], quantidade: s.quantidade, observacao: s.observacao })).filter((i) => i.produto);
+    setItens(cart);
+    saveCart(cart);
+  }, [list, addId]);
 
-  const qtdDeltaRef = useRef<{ index: number; delta: number; id: number } | null>(null);
-  const appliedIdRef = useRef<number>(0);
   const updateQtd = (index: number, delta: number) => {
-    const id = Date.now();
-    qtdDeltaRef.current = { index, delta, id };
     setItens((prev) => {
-      const applied = qtdDeltaRef.current;
-      if (!applied || applied.index >= prev.length) return prev;
-      if (appliedIdRef.current === applied.id) return prev;
-      appliedIdRef.current = applied.id;
+      if (index < 0 || index >= prev.length) return prev;
       const next = prev.map((item, i) =>
-        i === applied.index ? { ...item, quantidade: Math.max(0, item.quantidade + applied.delta) } : item
+        i === index ? { ...item, quantidade: Math.max(0, item.quantidade + delta) } : item
       );
       const filtered = next.filter((i) => i.quantidade > 0);
       saveCart(filtered);

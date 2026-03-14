@@ -1,6 +1,8 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useState, useMemo } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronDown, ChevronRight, Search } from 'lucide-react';
-import { getCategorias, getProdutos, saveProduto } from '../../lib/api';
+import { getCategorias, getProdutos, saveProduto, updateProdutoAtivo, updateProdutoQuantidade } from '../../lib/api';
+import { queryKeys } from '../../lib/queryClient';
 import type { ProdutoWithCategorias } from '../../types/database';
 import type { Categoria } from '../../types/database';
 import { imagensProduto } from '../../types/database';
@@ -16,9 +18,20 @@ function produtosDaCategoria(produtos: ProdutoWithCategorias[], categoriaId: str
 }
 
 export default function AdminProdutos() {
-  const [list, setList] = useState<ProdutoWithCategorias[]>([]);
-  const [categorias, setCategorias] = useState<Categoria[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const produtosQuery = useQuery({
+    queryKey: queryKeys.produtos(false),
+    queryFn: () => getProdutos(false),
+    staleTime: 60 * 1000,
+  });
+  const categoriasQuery = useQuery({
+    queryKey: queryKeys.categorias,
+    queryFn: getCategorias,
+    staleTime: 60 * 1000,
+  });
+  const list = produtosQuery.data ?? [];
+  const categorias = categoriasQuery.data ?? [];
+  const loading = produtosQuery.isLoading || categoriasQuery.isLoading;
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<ProdutoWithCategorias | null>(null);
   const [codigo, setCodigo] = useState('');
@@ -37,6 +50,9 @@ export default function AdminProdutos() {
   const [submitting, setSubmitting] = useState(false);
   const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
+  const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [editingQuantidade, setEditingQuantidade] = useState<Record<string, string>>({});
+  const [savingQuantidadeId, setSavingQuantidadeId] = useState<string | null>(null);
 
   const { categoriasComProdutos, semCategoria } = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -89,15 +105,58 @@ export default function AdminProdutos() {
     });
   }
 
-  useEffect(() => {
-    load();
-    getCategorias().then(setCategorias);
-  }, []);
+  async function toggleAtivo(p: ProdutoWithCategorias) {
+    if (togglingId === p.id) return;
+    const novoAtivo = !p.ativo;
+    setTogglingId(p.id);
+    try {
+      await updateProdutoAtivo(p.id, novoAtivo);
+      queryClient.invalidateQueries({ queryKey: queryKeys.produtos() });
+    } catch {
+      // mantém estado atual; poderia mostrar toast
+    } finally {
+      setTogglingId(null);
+    }
+  }
 
-  async function load() {
-    const data = await getProdutos(false);
-    setList(data);
-    setLoading(false);
+  function getQuantidadeDisplay(p: ProdutoWithCategorias): string {
+    return editingQuantidade[p.id] !== undefined ? editingQuantidade[p.id] : String(Number(p.quantidade) ?? 0);
+  }
+
+  function setQuantidadeEdit(p: ProdutoWithCategorias, value: string) {
+    setEditingQuantidade((prev) => ({ ...prev, [p.id]: value }));
+  }
+
+  async function commitQuantidade(p: ProdutoWithCategorias) {
+    const raw = editingQuantidade[p.id] !== undefined ? editingQuantidade[p.id] : String(Number(p.quantidade) ?? 0);
+    const qtd = Math.max(0, Math.floor(parseInt(raw, 10) || 0));
+    setEditingQuantidade((prev) => {
+      const next = { ...prev };
+      delete next[p.id];
+      return next;
+    });
+    const current = Number(p.quantidade) ?? 0;
+    if (qtd === current) return;
+    setSavingQuantidadeId(p.id);
+    try {
+      await updateProdutoQuantidade(p.id, qtd);
+      queryClient.invalidateQueries({ queryKey: queryKeys.produtos() });
+    } catch {
+      setEditingQuantidade((prev) => ({ ...prev, [p.id]: raw }));
+    } finally {
+      setSavingQuantidadeId(null);
+    }
+  }
+
+  function blurQuantidade(p: ProdutoWithCategorias) {
+    commitQuantidade(p);
+  }
+
+  function keyDownQuantidade(_p: ProdutoWithCategorias, e: React.KeyboardEvent) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      (e.target as HTMLInputElement).blur();
+    }
   }
 
   function toggleCategoria(id: string) {
@@ -160,8 +219,8 @@ export default function AdminProdutos() {
         valor_promocional: emPromocao && valorPromocional.trim() ? Number(valorPromocional) : null,
         categoria_ids: categoriaIds,
       });
+      queryClient.invalidateQueries({ queryKey: queryKeys.produtos() });
       setOpen(false);
-      load();
     } finally {
       setSubmitting(false);
     }
@@ -179,6 +238,7 @@ export default function AdminProdutos() {
             type="search"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={(e) => e.key === 'Escape' && setSearchQuery('')}
             placeholder="Buscar por código, nome, descrição ou ingredientes..."
             className="w-full rounded-lg border border-stone-300 py-2 pl-9 pr-3 text-sm placeholder:text-stone-400 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
           />
@@ -237,6 +297,7 @@ export default function AdminProdutos() {
                         <th className="px-4 py-2 text-left text-xs font-medium text-stone-600">Nome</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-stone-600">Descrição</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-stone-600">Valor</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-stone-600">Quantidade</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-stone-600">Ativo</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-stone-600">Foto</th>
                         <th className="px-4 py-2"></th>
@@ -247,13 +308,39 @@ export default function AdminProdutos() {
                         <tr key={p.id} className="border-b border-stone-100 hover:bg-stone-50/50">
                           <td className="px-4 py-2 text-sm">{p.codigo}</td>
                           <td className="px-4 py-2 text-sm">{p.nome || '—'}</td>
-                          <td className="px-4 py-2 text-sm text-stone-600 max-w-[200px] truncate">{p.descricao}</td>
+                          <td className="px-4 py-2 text-sm text-stone-600 max-w-[140px] truncate">{p.descricao}</td>
                           <td className="px-4 py-2 text-sm">
                             {p.em_promocao && p.valor_promocional != null
                               ? <>R$ <span className="line-through text-stone-400">{Number(p.valor).toFixed(2)}</span> → R$ {Number(p.valor_promocional).toFixed(2)}</>
                               : `R$ ${Number(p.valor).toFixed(2)}`}
                           </td>
-                          <td className="px-4 py-2 text-sm">{p.ativo ? 'Sim' : 'Não'}</td>
+                          <td className="px-4 py-2">
+                            <input
+                              type="number"
+                              min={0}
+                              value={getQuantidadeDisplay(p)}
+                              onChange={(e) => setQuantidadeEdit(p, e.target.value)}
+                              onFocus={(e) => (e.target as HTMLInputElement).select()}
+                              onBlur={() => blurQuantidade(p)}
+                              onKeyDown={(e) => keyDownQuantidade(p, e)}
+                              disabled={savingQuantidadeId === p.id}
+                              className="w-20 rounded border border-stone-300 px-2 py-1 text-sm text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none disabled:bg-stone-100"
+                              aria-label="Quantidade"
+                            />
+                          </td>
+                          <td className="px-4 py-2">
+                            <button
+                              type="button"
+                              role="switch"
+                              aria-checked={p.ativo}
+                              aria-label={p.ativo ? 'Ativo' : 'Inativo'}
+                              disabled={togglingId === p.id}
+                              onClick={() => toggleAtivo(p)}
+                              className={`relative inline-flex h-6 w-11 flex-shrink-0 rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 disabled:opacity-50 ${p.ativo ? 'bg-amber-600' : 'bg-stone-200'}`}
+                            >
+                              <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition ${p.ativo ? 'translate-x-5' : 'translate-x-1'}`} />
+                            </button>
+                          </td>
                           <td className="px-4 py-2">
                             {(imagensProduto(p)[0]) ? <img src={imagensProduto(p)[0]} alt="" className="w-8 h-8 rounded object-cover" /> : <span className="text-stone-400 text-xs">—</span>}
                           </td>
@@ -290,6 +377,7 @@ export default function AdminProdutos() {
                       <th className="px-4 py-2 text-left text-xs font-medium text-stone-600">Nome</th>
                       <th className="px-4 py-2 text-left text-xs font-medium text-stone-600">Descrição</th>
                       <th className="px-4 py-2 text-left text-xs font-medium text-stone-600">Valor</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-stone-600">Quantidade</th>
                       <th className="px-4 py-2 text-left text-xs font-medium text-stone-600">Ativo</th>
                       <th className="px-4 py-2 text-left text-xs font-medium text-stone-600">Foto</th>
                       <th className="px-4 py-2"></th>
@@ -300,13 +388,39 @@ export default function AdminProdutos() {
                       <tr key={p.id} className="border-b border-stone-100 hover:bg-stone-50/50">
                         <td className="px-4 py-2 text-sm">{p.codigo}</td>
                         <td className="px-4 py-2 text-sm">{p.nome || '—'}</td>
-                        <td className="px-4 py-2 text-sm text-stone-600 max-w-[200px] truncate">{p.descricao}</td>
+                        <td className="px-4 py-2 text-sm text-stone-600 max-w-[140px] truncate">{p.descricao}</td>
                         <td className="px-4 py-2 text-sm">
                           {p.em_promocao && p.valor_promocional != null
                             ? <>R$ <span className="line-through text-stone-400">{Number(p.valor).toFixed(2)}</span> → R$ {Number(p.valor_promocional).toFixed(2)}</>
                             : `R$ ${Number(p.valor).toFixed(2)}`}
                         </td>
-                        <td className="px-4 py-2 text-sm">{p.ativo ? 'Sim' : 'Não'}</td>
+                        <td className="px-4 py-2">
+                          <input
+                            type="number"
+                            min={0}
+                            value={getQuantidadeDisplay(p)}
+                            onChange={(e) => setQuantidadeEdit(p, e.target.value)}
+                            onFocus={(e) => (e.target as HTMLInputElement).select()}
+                            onBlur={() => blurQuantidade(p)}
+                            onKeyDown={(e) => keyDownQuantidade(p, e)}
+                            disabled={savingQuantidadeId === p.id}
+                            className="w-20 rounded border border-stone-300 px-2 py-1 text-sm text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none disabled:bg-stone-100"
+                            aria-label="Quantidade"
+                          />
+                        </td>
+                        <td className="px-4 py-2">
+                          <button
+                            type="button"
+                            role="switch"
+                            aria-checked={p.ativo}
+                            aria-label={p.ativo ? 'Ativo' : 'Inativo'}
+                            disabled={togglingId === p.id}
+                            onClick={() => toggleAtivo(p)}
+                            className={`relative inline-flex h-6 w-11 flex-shrink-0 rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 disabled:opacity-50 ${p.ativo ? 'bg-amber-600' : 'bg-stone-200'}`}
+                          >
+                            <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition ${p.ativo ? 'translate-x-5' : 'translate-x-1'}`} />
+                          </button>
+                        </td>
                         <td className="px-4 py-2">
                           {(imagensProduto(p)[0]) ? <img src={imagensProduto(p)[0]} alt="" className="w-8 h-8 rounded object-cover" /> : <span className="text-stone-400 text-xs">—</span>}
                         </td>

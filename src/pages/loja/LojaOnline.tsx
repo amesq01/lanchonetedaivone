@@ -1,7 +1,9 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { ChevronLeft, ChevronRight, ShoppingCart, Trash2, X } from 'lucide-react';
 import { getProdutos, getCategorias } from '../../lib/api';
+import { queryKeys } from '../../lib/queryClient';
 import type { ProdutoWithCategorias } from '../../types/database';
 import type { Categoria } from '../../types/database';
 import { precoVenda, imagensProduto } from '../../types/database';
@@ -72,10 +74,23 @@ function saveCart(items: SavedItem[]) {
 
 export default function LojaOnline() {
   const { lanchoneteAberta, soRetirada, mensagemAbertura } = useLojaConfig();
-  const [produtos, setProdutos] = useState<ProdutoWithCategorias[]>([]);
-  const [categorias, setCategorias] = useState<Categoria[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [erro, setErro] = useState<string | null>(null);
+  const categoriasQuery = useQuery({ queryKey: queryKeys.categorias, queryFn: getCategorias });
+  const produtosQuery = useQuery({ queryKey: queryKeys.produtos(true), queryFn: () => getProdutos(true) });
+
+  const categorias = categoriasQuery.data ?? [];
+  const produtos = produtosQuery.data ?? [];
+  const loading = categoriasQuery.isLoading || produtosQuery.isLoading;
+  const erro =
+    categoriasQuery.isError && categoriasQuery.error
+      ? (categoriasQuery.error as Error).message
+      : produtosQuery.isError && produtosQuery.error
+        ? (produtosQuery.error as Error).message
+        : null;
+  const refetchCardapio = useCallback(() => {
+    categoriasQuery.refetch();
+    produtosQuery.refetch();
+  }, [categoriasQuery, produtosQuery]);
+
   const [cartCount, setCartCount] = useState(0);
   const [qtyByProd, setQtyByProd] = useState<Record<string, number>>({});
   const [categoriaSelecionada, setCategoriaSelecionada] = useState<string | null>(null);
@@ -86,32 +101,17 @@ export default function LojaOnline() {
     setCartCount(cart.reduce((s, i) => s + i.quantidade, 0));
   }, []);
 
-  const carregarCardapio = useCallback(() => {
-    setErro(null);
-    setLoading(true);
-    Promise.all([getCategorias(), getProdutos(true)])
-      .then(([cats, list]) => {
-        setCategorias(cats);
-        setProdutos(list);
-        const cart = getCart();
-        const byProd: Record<string, number> = {};
-        cart.forEach((i) => {
-          byProd[i.produto_id] = (byProd[i.produto_id] ?? 0) + i.quantidade;
-        });
-        setQtyByProd(byProd);
-        setCartCount(cart.reduce((s, i) => s + i.quantidade, 0));
-      })
-      .catch((e) => {
-        setErro(e?.message ?? 'Não foi possível carregar o cardápio.');
-      })
-      .finally(() => {
-        setLoading(false);
-      });
-  }, []);
-
   useEffect(() => {
-    carregarCardapio();
-  }, [carregarCardapio]);
+    if (produtosQuery.data && produtosQuery.data.length > 0) {
+      const cart = getCart();
+      const byProd: Record<string, number> = {};
+      cart.forEach((i) => {
+        byProd[i.produto_id] = (byProd[i.produto_id] ?? 0) + i.quantidade;
+      });
+      setQtyByProd(byProd);
+      setCartCount(cart.reduce((s, i) => s + i.quantidade, 0));
+    }
+  }, [produtosQuery.data]);
 
   useEffect(() => {
     const onStorage = () => refreshCartCount();
@@ -179,7 +179,7 @@ export default function LojaOnline() {
         <p className="text-center text-stone-600">{erro}</p>
         <button
           type="button"
-          onClick={carregarCardapio}
+          onClick={refetchCardapio}
           className="rounded-lg bg-amber-600 px-4 py-2 text-white font-medium hover:bg-amber-700"
         >
           Tentar novamente

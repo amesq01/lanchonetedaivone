@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { getPedidosOnlinePendentes } from '../lib/api';
+import { useQuery } from '@tanstack/react-query';
+import { fetchPedidosOnlineData } from '../lib/api';
+import { queryKeys } from '../lib/queryClient';
 
 function playBeep() {
   try {
@@ -17,32 +19,26 @@ function playBeep() {
   } catch (_) {}
 }
 
+/** Usa useQuery (cache) + Realtime (invalida pedidos-online). Sem polling. */
 export function useNovoPedidoOnline() {
   const [mostrar, setMostrar] = useState(false);
-  const [count, setCount] = useState(0);
   const prevCountRef = useRef<number | null>(null);
 
+  const { data } = useQuery({
+    queryKey: queryKeys.pedidosOnline,
+    queryFn: fetchPedidosOnlineData,
+    staleTime: 60 * 1000,
+  });
+
+  const count = (data?.pendentes ?? []).length;
+
   useEffect(() => {
-    let mounted = true;
-    async function poll() {
-      if (!mounted) return;
-      const lista = await getPedidosOnlinePendentes();
-      const n = lista.length;
-      if (prevCountRef.current !== null && n > prevCountRef.current) {
-        playBeep();
-        setMostrar(true);
-        setCount(n);
-      }
-      prevCountRef.current = n;
-      setCount(n);
+    if (prevCountRef.current !== null && count > prevCountRef.current) {
+      playBeep();
+      setMostrar(true);
     }
-    poll();
-    const t = setInterval(poll, 8000);
-    return () => {
-      mounted = false;
-      clearInterval(t);
-    };
-  }, []);
+    prevCountRef.current = count;
+  }, [count]);
 
   const fechar = () => setMostrar(false);
 

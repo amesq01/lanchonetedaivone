@@ -1,5 +1,7 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
-import { getLanchoneteAberta, getLojaOnlineSoRetirada, getLojaOnlineMensagemAbertura, getLojaOnlineFormasPagamento, getLojaOnlineAgendaAbertura, getConfig } from '../lib/api';
+import { createContext, useContext, type ReactNode } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { getLanchoneteAberta, getLojaOnlineSoRetirada, getLojaOnlineFormasPagamento, getLojaOnlineAgendaAbertura, getConfig, mensagemAberturaFromAgenda } from '../lib/api';
+import { queryKeys } from '../lib/queryClient';
 
 type LojaConfig = {
   loading: boolean;
@@ -14,49 +16,45 @@ type LojaConfig = {
 
 const LojaConfigContext = createContext<LojaConfig | undefined>(undefined);
 
-export function LojaConfigProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<Omit<LojaConfig, 'reload'>>({
-    loading: true,
-    lanchoneteAberta: null,
-    soRetirada: false,
-    mensagemAbertura: null,
-    formasPagamento: ['PIX', 'Cartão crédito', 'Cartão débito', 'Dinheiro'],
-    taxaEntrega: null,
-    agendaAbertura: null,
-  });
+const FORMAS_PADRAO = ['PIX', 'Cartão crédito', 'Cartão débito', 'Dinheiro'];
 
-  const reload = async () => {
-    setState((prev) => ({ ...prev, loading: true }));
-    try {
-      const [aberta, soRet, mensagem, formas, agenda, taxa] = await Promise.all([
+export function LojaConfigProvider({ children }: { children: ReactNode }) {
+  const query = useQuery({
+    queryKey: queryKeys.lojaConfig,
+    queryFn: async () => {
+      const [aberta, soRet, formas, agenda, taxa] = await Promise.all([
         getLanchoneteAberta(),
         getLojaOnlineSoRetirada(),
-        getLojaOnlineMensagemAbertura(),
         getLojaOnlineFormasPagamento(),
         getLojaOnlineAgendaAbertura(),
         getConfig('taxa_entrega'),
       ]);
-      setState({
-        loading: false,
+      const mensagemAbertura = mensagemAberturaFromAgenda(agenda);
+      return {
         lanchoneteAberta: aberta,
         soRetirada: soRet,
-        mensagemAbertura: mensagem,
+        mensagemAbertura,
         formasPagamento: formas,
         taxaEntrega: taxa,
         agendaAbertura: agenda,
-      });
-    } catch {
-      setState((prev) => ({ ...prev, loading: false }));
-    }
+      };
+    },
+  });
+
+  const data = query.data;
+  const value: LojaConfig = {
+    loading: query.isLoading,
+    lanchoneteAberta: data?.lanchoneteAberta ?? null,
+    soRetirada: data?.soRetirada ?? false,
+    mensagemAbertura: data?.mensagemAbertura ?? null,
+    formasPagamento: data?.formasPagamento ?? FORMAS_PADRAO,
+    taxaEntrega: data?.taxaEntrega ?? null,
+    agendaAbertura: data?.agendaAbertura ?? null,
+    reload: () => query.refetch().then(() => {}),
   };
 
-  useEffect(() => {
-    reload();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   return (
-    <LojaConfigContext.Provider value={{ ...state, reload }}>
+    <LojaConfigContext.Provider value={value}>
       {children}
     </LojaConfigContext.Provider>
   );
@@ -67,4 +65,3 @@ export function useLojaConfig() {
   if (!ctx) throw new Error('useLojaConfig deve ser usado dentro de LojaConfigProvider');
   return ctx;
 }
-

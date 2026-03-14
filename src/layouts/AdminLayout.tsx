@@ -1,8 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../contexts/AuthContext';
+import { queryKeys } from '../lib/queryClient';
+import { subscribePedidosAndComandasRealtime } from '../lib/supabaseRealtime';
+import { getAdminSidebarCounts } from '../lib/api';
 import { useNovoPedidoOnline } from '../hooks/useNovoPedidoOnline';
-import { getAdminSidebarCounts, getLanchoneteAberta, setLanchoneteAberta as setLanchoneteAbertaApi, getLojaOnlineSoRetirada, setLojaOnlineSoRetirada as setLojaOnlineSoRetiradaApi, getLojaOnlineAgendaAbertura, setLojaOnlineAgendaAbertura as setLojaOnlineAgendaAberturaApi, getLojaOnlineFormasPagamento, setLojaOnlineFormasPagamento as setLojaOnlineFormasPagamentoApi } from '../lib/api';
+import { getLanchoneteAberta, setLanchoneteAberta as setLanchoneteAbertaApi, getLojaOnlineSoRetirada, setLojaOnlineSoRetirada as setLojaOnlineSoRetiradaApi, getLojaOnlineAgendaAbertura, setLojaOnlineAgendaAbertura as setLojaOnlineAgendaAberturaApi, getLojaOnlineFormasPagamento, setLojaOnlineFormasPagamento as setLojaOnlineFormasPagamentoApi } from '../lib/api';
 import {
   UtensilsCrossed,
   Truck,
@@ -43,8 +47,13 @@ export default function AdminLayout() {
   const { profile, signOut } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const queryClient = useQueryClient();
   const { mostrar: novoPedidoOnline, count: pendentesOnline, fechar: fecharNovoPedido } = useNovoPedidoOnline();
-  const [counts, setCounts] = useState({ mesas: 0, viagem: 0, online: 0, cozinha: 0 });
+  const { data: counts = { mesas: 0, viagem: 0, online: 0, cozinha: 0 } } = useQuery({
+    queryKey: queryKeys.adminSidebarCounts,
+    queryFn: getAdminSidebarCounts,
+    staleTime: 20 * 1000,
+  });
   const [menuAberto, setMenuAberto] = useState(false);
   const [lanchoneteAberta, setLanchoneteAberta] = useState<boolean | null>(null);
   const [soRetirada, setSoRetirada] = useState<boolean | null>(null);
@@ -63,14 +72,10 @@ export default function AdminLayout() {
   const [configModalAberto, setConfigModalAberto] = useState(false);
   const [asidePinned, setAsidePinned] = useState(false);
 
+  // Realtime: invalida queries de pedidos/comandas quando há mudança no banco (reduz egress)
   useEffect(() => {
-    function load() {
-      getAdminSidebarCounts().then(setCounts);
-    }
-    load();
-    const t = setInterval(load, 20000);
-    return () => clearInterval(t);
-  }, []);
+    return subscribePedidosAndComandasRealtime(queryClient);
+  }, [queryClient]);
 
   useEffect(() => {
     getLanchoneteAberta().then(setLanchoneteAberta);
@@ -94,6 +99,7 @@ export default function AdminLayout() {
     setToggleLoading(true);
     try {
       await setLanchoneteAbertaApi(novaAberta);
+      queryClient.invalidateQueries({ queryKey: queryKeys.lojaConfig });
       setLanchoneteAberta(novaAberta);
       if (!novaAberta) {
         await setLojaOnlineSoRetiradaApi(false);
@@ -116,6 +122,7 @@ export default function AdminLayout() {
     setSoRetiradaLoading(true);
     try {
       await setLojaOnlineSoRetiradaApi(novo);
+      queryClient.invalidateQueries({ queryKey: queryKeys.lojaConfig });
       setSoRetirada(novo);
       setConfirmandoSoRetirada(null);
     } finally {
@@ -149,7 +156,7 @@ export default function AdminLayout() {
       />
       <aside
         className={`no-print group flex flex-col border-r border-stone-200 bg-white z-40 transition-all duration-200 ease-out fixed inset-y-0 left-0 overflow-hidden ${
-          menuAberto ? 'translate-x-0 w-52' : '-translate-x-full lg:translate-x-0 w-52 lg:w-14 lg:hover:w-52'
+          menuAberto ? 'translate-x-0 w-52' : '-translate-x-full lg:translate-x-0 w-52 lg:w-16 lg:hover:w-52'
         } ${asidePinned ? 'lg:!w-52' : ''}`}
       >
         <div
@@ -368,7 +375,7 @@ export default function AdminLayout() {
                                     const dias = [...novo].sort((a, b) => a - b);
                                     setAgendaAbertura((prev) => ({ ...prev, dias }));
                                     setAgendaSaving(true);
-                                    try { await setLojaOnlineAgendaAberturaApi(dias, agendaAbertura.horario); } finally { setAgendaSaving(false); }
+                                    try { await setLojaOnlineAgendaAberturaApi(dias, agendaAbertura.horario); queryClient.invalidateQueries({ queryKey: queryKeys.lojaConfig }); } finally { setAgendaSaving(false); }
                                   }}
                                   className="rounded border-stone-300"
                                 />
@@ -388,7 +395,7 @@ export default function AdminLayout() {
                       onBlur={async () => {
                         if (agendaSaving) return;
                         setAgendaSaving(true);
-                        try { await setLojaOnlineAgendaAberturaApi(agendaAbertura.dias, agendaAbertura.horario); } finally { setAgendaSaving(false); }
+                        try { await setLojaOnlineAgendaAberturaApi(agendaAbertura.dias, agendaAbertura.horario); queryClient.invalidateQueries({ queryKey: queryKeys.lojaConfig }); } finally { setAgendaSaving(false); }
                       }}
                       className="w-[110px] rounded border border-stone-300 px-2 py-1.5 text-sm"
                     />
@@ -424,7 +431,7 @@ export default function AdminLayout() {
                                   if (novo.has(forma)) { if (novo.size <= 1) return; novo.delete(forma); } else novo.add(forma);
                                   setFormasPagamento(novo);
                                   setFormasPagamentoSaving(true);
-                                  try { await setLojaOnlineFormasPagamentoApi([...novo]); } finally { setFormasPagamentoSaving(false); }
+                                  try { await setLojaOnlineFormasPagamentoApi([...novo]); queryClient.invalidateQueries({ queryKey: queryKeys.lojaConfig }); } finally { setFormasPagamentoSaving(false); }
                                 }}
                                 className="rounded border-stone-300"
                               />
@@ -442,7 +449,7 @@ export default function AdminLayout() {
           </div>
         </div>
       )}
-      <main className={`flex-1 flex flex-col min-w-0 overflow-auto transition-[padding] duration-200 ${asidePinned ? 'lg:pl-52' : 'lg:pl-14'}`}>
+      <main className={`flex-1 flex flex-col min-w-0 overflow-auto transition-[padding] duration-200 ${asidePinned ? 'lg:pl-52' : 'lg:pl-16'}`}>
         {/* Barra superior no mobile: hamburger + título */}
         <div className="lg:hidden flex-shrink-0 flex items-center gap-2 px-3 py-3 bg-white border-b border-stone-200 sticky top-0 z-20">
           <button
@@ -458,7 +465,7 @@ export default function AdminLayout() {
             <span className="truncate">Admin</span>
           </NavLink>
         </div>
-        <div className="flex-1 p-3 sm:p-4 lg:p-6 min-w-0">
+        <div className="flex-1 p-3 sm:p-4 lg:p-6 lg:pl-4 min-w-0">
           <Outlet />
         </div>
       </main>
