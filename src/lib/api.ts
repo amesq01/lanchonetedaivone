@@ -903,6 +903,13 @@ function hojeBrasiliaUTC(): { desde: string; ate: string } {
   return { desde, ate };
 }
 
+/** Retorna intervalo das últimas 12 horas (desde = now - 12h, ate = now) em ISO UTC. */
+function ultimas12HorasUTC(): { desde: string; ate: string } {
+  const ate = new Date().toISOString();
+  const desde = new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString();
+  return { desde, ate };
+}
+
 export async function getPedidosPresencialEncerradosHoje() {
   const { desde, ate } = hojeBrasiliaUTC();
   const { data } = await supabase
@@ -918,7 +925,7 @@ export async function getPedidosPresencialEncerradosHoje() {
 }
 
 export async function getPedidosOnlinePendentes() {
-  const { desde, ate } = hojeBrasiliaUTC();
+  const { desde, ate } = ultimas12HorasUTC();
   const { data } = await supabase
     .from('pedidos')
     .select('*, pedido_itens(*, produtos(*))')
@@ -931,7 +938,7 @@ export async function getPedidosOnlinePendentes() {
 }
 
 export async function getPedidosOnlineTodos() {
-  const { desde, ate } = hojeBrasiliaUTC();
+  const { desde, ate } = ultimas12HorasUTC();
   const { data } = await supabase
     .from('pedidos')
     .select('*, pedido_itens(*, produtos(*))')
@@ -949,12 +956,27 @@ export async function getPedidosOnlineEncerradosHoje() {
   return (data ?? []) as any[];
 }
 
-/** Retorno usado por useQuery (Pedidos Online + useNovoPedidoOnline). Realtime invalida a query. */
+/** Encerrados nas últimas 12 horas (para o kanban de Pedidos Online). */
+async function getPedidosOnlineEncerradosUltimas12h() {
+  const { desde, ate } = ultimas12HorasUTC();
+  const { data } = await supabase
+    .from('pedidos')
+    .select('*, pedido_itens(*, produtos(*))')
+    .eq('origem', 'online')
+    .eq('status', 'finalizado')
+    .not('encerrado_em', 'is', null)
+    .gte('encerrado_em', desde)
+    .lte('encerrado_em', ate)
+    .order('encerrado_em', { ascending: false });
+  return (data ?? []) as any[];
+}
+
+/** Retorno usado por useQuery (Pedidos Online + useNovoPedidoOnline). Kanban mostra últimas 12 horas. Realtime invalida a query. */
 export async function fetchPedidosOnlineData(): Promise<{ pendentes: any[]; todos: any[]; encerradosHoje: any[] }> {
   const [pend, all, encerrados] = await Promise.all([
     getPedidosOnlinePendentes(),
     getPedidosOnlineTodos(),
-    getPedidosOnlineEncerradosHoje(),
+    getPedidosOnlineEncerradosUltimas12h(),
   ]);
   const todos = (all as any[]).filter((p) => p.status !== 'aguardando_aceite' && !p.encerrado_em);
   return { pendentes: pend, todos, encerradosHoje: encerrados };

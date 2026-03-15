@@ -354,7 +354,8 @@ export default function AdminPedidosOnline() {
 
   return (
     <div className="no-print">
-      <h1 className="text-2xl font-bold text-stone-800 mb-4">Pedidos Online</h1>
+      <h1 className="text-2xl font-bold text-stone-800 mb-1">Pedidos Online</h1>
+      <p className="text-sm text-stone-500 mb-4">Colunas do kanban: últimas 12 horas.</p>
 
       <div className="mb-4">
         <label className="block text-sm font-medium text-stone-600 mb-1">Buscar pedido</label>
