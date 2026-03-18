@@ -54,22 +54,57 @@ function removeIframeAndRevoke(iframe: HTMLIFrameElement, url: string) {
   URL.revokeObjectURL(url);
 }
 
-/** Exibe o PDF em iframe e abre o diálogo de impressão. Só remove o iframe quando o usuário fechar o diálogo (afterprint). */
-function openAndPrint(doc: jsPDF) {
-  const blob = doc.output('blob');
-  const url = URL.createObjectURL(blob);
-  const iframe = document.createElement('iframe');
-  iframe.style.cssText = 'position:fixed;left:0;top:0;width:100%;height:100%;border:none;z-index:9999;opacity:0;pointer-events:none;background:transparent;';
-  document.body.appendChild(iframe);
-  iframe.onload = () => {
-    const win = iframe.contentWindow;
-    if (!win) return;
-    const cleanup = () => removeIframeAndRevoke(iframe, url);
-    win.addEventListener('afterprint', cleanup, { once: true });
-    win.print();
-    setTimeout(cleanup, 120000);
+function isMobileBrowser(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent || '');
+}
+
+type PrintTarget = {
+  /** Abre a janela/iframe para o PDF e tenta imprimir (quando possível). */
+  open: (doc: jsPDF) => void;
+};
+
+/**
+ * Prepara o alvo de impressão de forma síncrona (importante para mobile).
+ * - Desktop: usa iframe oculto e chama print().
+ * - Mobile: abre uma nova aba/janela imediatamente; depois navega para o PDF.
+ */
+function createPrintTarget(): PrintTarget {
+  const mobile = isMobileBrowser();
+  const win = mobile ? window.open('', '_blank') : null;
+
+  return {
+    open: (doc: jsPDF) => {
+      const blob = doc.output('blob');
+      const url = URL.createObjectURL(blob);
+
+      if (win) {
+        // Em mobile, evitar popup-blocker: a aba já foi aberta no clique.
+        try {
+          win.location.href = url;
+        } catch {
+          // fallback: se não conseguir navegar, segue para o iframe
+        }
+        // Revoga depois de um tempo (não temos afterprint confiável no mobile).
+        setTimeout(() => URL.revokeObjectURL(url), 120000);
+        return;
+      }
+
+      // Desktop (ou fallback): iframe oculto + diálogo de impressão.
+      const iframe = document.createElement('iframe');
+      iframe.style.cssText = 'position:fixed;left:0;top:0;width:100%;height:100%;border:none;z-index:9999;opacity:0;pointer-events:none;background:transparent;';
+      document.body.appendChild(iframe);
+      iframe.onload = () => {
+        const w = iframe.contentWindow;
+        if (!w) return;
+        const cleanup = () => removeIframeAndRevoke(iframe, url);
+        w.addEventListener('afterprint', cleanup, { once: true });
+        w.print();
+        setTimeout(cleanup, 120000);
+      };
+      iframe.src = url;
+    },
   };
-  iframe.src = url;
 }
 
 export type ItemConta = { codigo: string; descricao: string; quantidade: number; valor: number };
@@ -140,6 +175,7 @@ export async function printContaMesa(opts: {
   pagamentosParciais?: { valor: number; forma_pagamento: string; nome_quem_pagou: string | null; descricaoTipo?: string }[];
   restanteAPagar?: number;
 }) {
+  const printTarget = createPrintTarget();
   const doc = createDoc();
   let y = 10;
   doc.setTextColor(...BLACK);
@@ -236,7 +272,7 @@ export async function printContaMesa(opts: {
 
   y = await addPixQrCode(doc, y);
   addFooter(doc, y);
-  openAndPrint(doc);
+  printTarget.open(doc);
 }
 
 /** Conta do pedido viagem ou online. Para online: passar tipoEntrega e opcionalmente endereço, pagamento, etc. */
@@ -259,6 +295,7 @@ export async function printContaViagem(opts: {
   /** Taxa de entrega (pedidos online com entrega) */
   taxaEntrega?: number;
 }) {
+  const printTarget = createPrintTarget();
   const doc = createDoc();
   let y = 10;
   doc.setTextColor(...BLACK);
@@ -323,7 +360,7 @@ export async function printContaViagem(opts: {
   y = addTotaisSection(doc, y, opts.subtotal, opts.total, linhasViagem);
   y = await addPixQrCode(doc, y);
   addFooter(doc, y);
-  openAndPrint(doc);
+  printTarget.open(doc);
 }
 
 /** Imprime um pedido (comanda) em qualquer contexto: mesa, viagem ou online. tituloSuffix ex.: "Mesa 2", "Viagem", "Entrega", "Retirada". */
@@ -349,6 +386,7 @@ export async function printPedido(
   },
   tituloSuffix: string
 ) {
+  const printTarget = createPrintTarget();
   const doc = createDoc();
   let y = 10;
   doc.setTextColor(...BLACK);
@@ -431,7 +469,7 @@ export async function printPedido(
   y = addTotaisSection(doc, y, subtotal, total, linhasExtra);
   y = await addPixQrCode(doc, y);
   addFooter(doc, y);
-  openAndPrint(doc);
+  printTarget.open(doc);
 }
 
 type PedidoParaImpressao = {
@@ -451,6 +489,7 @@ type PedidoParaImpressao = {
 /** Imprime vários pedidos em um único comprovante, unificados. tituloContexto ex.: "Mesa 2", "Viagem". */
 export async function printPedidosUnificados(pedidos: PedidoParaImpressao[], tituloContexto: string) {
   if (pedidos.length === 0) return;
+  const printTarget = createPrintTarget();
   const ordenados = [...pedidos].sort((a, b) => a.numero - b.numero);
   const numeros = ordenados.map((p) => p.numero).join(', #');
   const doc = createDoc();
@@ -527,7 +566,7 @@ export async function printPedidosUnificados(pedidos: PedidoParaImpressao[], tit
   y += 12;
   y = await addPixQrCode(doc, y);
   addFooter(doc, y);
-  openAndPrint(doc);
+  printTarget.open(doc);
 }
 
 /** Pedido para entrega/retirada (online). Mesmo esquema visual das impressões de mesa e viagem. */
@@ -550,6 +589,7 @@ export async function printPedidoEntrega(pedido: {
     produtos?: { codigo?: string; nome?: string; descricao?: string };
   }>;
 }) {
+  const printTarget = createPrintTarget();
   const doc = createDoc();
   let y = 10;
   doc.setTextColor(...BLACK);
@@ -630,5 +670,5 @@ export async function printPedidoEntrega(pedido: {
   y = addTotaisSection(doc, y, subtotal, total, linhasEntrega);
   y = await addPixQrCode(doc, y);
   addFooter(doc, y);
-  openAndPrint(doc);
+  printTarget.open(doc);
 }

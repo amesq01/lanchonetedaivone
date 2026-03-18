@@ -4,6 +4,7 @@ import { Inbox, ChefHat, CheckCircle } from 'lucide-react';
 import { getPedidosCozinha, updatePedidoStatus } from '../../lib/api';
 import { playSomNovoPedido, cozinhaSomInitOnFirstClick } from '../../lib/cozinhaSound';
 import { queryKeys } from '../../lib/queryClient';
+import { imprimirPedidoCozinhaRawBT } from '../../lib/rawbt';
 
 const COLUNAS = [
   { key: 'novo_pedido', label: 'Novo pedido', icon: Inbox, className: 'bg-amber-100 border-amber-200 text-amber-900' },
@@ -149,12 +150,25 @@ export default function CozinhaKanban() {
                 </ul>
                 <div className="mt-2 flex gap-2">
                   {p.status === 'novo_pedido' && (
-                    <button onClick={() => setConfirmacao({ tipo: 'em_preparacao', pedido: p })} className="rounded bg-amber-600 px-2 py-1 text-sm text-white hover:bg-amber-700">
-                      Preparar
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => imprimirPedidoCozinhaRawBT(p)}
+                        className="rounded border border-stone-300 bg-white px-2 py-1 text-sm text-stone-600 hover:bg-stone-50"
+                      >
+                        Imprimir
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setConfirmacao({ tipo: 'em_preparacao', pedido: p })}
+                        className="rounded bg-amber-600 px-2 py-1 text-sm text-white hover:bg-amber-700"
+                      >
+                        Preparar
+                      </button>
+                    </>
                   )}
                   {p.status === 'em_preparacao' && (
-                    <button onClick={() => setConfirmacao({ tipo: 'finalizado', pedido: p })} className="rounded bg-green-600 px-2 py-1 text-sm text-white hover:bg-green-700">
+                    <button type="button" onClick={() => setConfirmacao({ tipo: 'finalizado', pedido: p })} className="rounded bg-green-600 px-2 py-1 text-sm text-white hover:bg-green-700">
                       Finalizar
                     </button>
                   )}
