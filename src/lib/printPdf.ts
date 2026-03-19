@@ -4,8 +4,8 @@ import QRCode from 'qrcode';
 
 /** Código PIX Copia e Cola (EMV) */
 const PIX_CODIGO =
-  '00020101021126810014BR.GOV.BCB.PIX2559pix-qr.mercadopago.com/instore/ol/v2/3Z8a9lIADOTW2ZtS0GvMcl5204000053039865802BR5914Ivone Mesquita6009SAO PAULO62080504mpis630437A0';
-const PIX_NOME = 'Ivone Pereira Mesquita';
+  '00020126580014br.gov.bcb.pix01365a31cab8-d994-4ce5-9917-90a74a5f57865204000053039865802BR5925Joao Batista De Sousa Mes6009Sao Paulo62290525REC69BC6B277E3DA0599355366304D635';
+const PIX_NOME = 'Joao Batista De Sousa Mes';
 const QR_SIZE_MM = 40;
 
 const PAPER_WIDTH_MM = 80;
