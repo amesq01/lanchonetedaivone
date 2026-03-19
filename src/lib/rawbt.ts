@@ -1,7 +1,7 @@
 /**
  * Integração simples com o app RawBT (Android).
  *
- * A ideia é enviar um texto (com quebras de linha) para o esquema `rawbt:...`.
+ * Envia dados para o app RawBT (Android) usando `rawbt:base64,...`.
  * O RawBT normalmente imprime na última impressora selecionada/pareada.
  *
  * Observação: a especificação do RawBT pode variar por versão. Se você precisar
@@ -35,11 +35,6 @@ type PedidoCozinha = {
 function safeStr(v: unknown): string {
   if (v == null) return '';
   return String(v);
-}
-
-function encodeRawbtText(text: string): string {
-  // EncodeURIComponent já transforma '\n' em '%0A', que o RawBT entende.
-  return encodeURIComponent(text);
 }
 
 function buildPedidoCozinhaTexto(pedido: PedidoCozinha): string {
@@ -76,9 +71,62 @@ function buildPedidoCozinhaTexto(pedido: PedidoCozinha): string {
   return lines.join('\n');
 }
 
+function toBase64(bytes: Uint8Array): string {
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += 1) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary);
+}
+
+function buildEscPosBytesComFonteMaior(texto: string): Uint8Array {
+  const ESC = 0x1b;
+  const GS = 0x1d;
+  const LF = 0x0a;
+
+  const out: number[] = [];
+  // Inicializa impressora
+  out.push(ESC, 0x40);
+  // Alinhamento à esquerda
+  out.push(ESC, 0x61, 0x00);
+  // Fonte padrão para cabeçalho/demais linhas
+  out.push(GS, 0x21, 0x00);
+
+  const enc = new TextEncoder();
+  const linhas = texto.split('\n').filter((l) => l.trim() !== '');
+  const idxSeparador = linhas.findIndex((l) => l.includes('----------------------------'));
+
+  const appendLine = (linha: string) => {
+    const bytes = enc.encode(linha);
+    for (let i = 0; i < bytes.length; i += 1) out.push(bytes[i]);
+    out.push(LF);
+  };
+
+  if (idxSeparador === -1) {
+    // Fallback: se não achar a seção de itens, imprime tudo no tamanho padrão.
+    for (const linha of linhas) appendLine(linha);
+  } else {
+    const cabecalho = linhas.slice(0, idxSeparador + 1);
+    const itens = linhas.slice(idxSeparador + 1);
+
+    // Cabeçalho em fonte normal
+    for (const linha of cabecalho) appendLine(linha);
+
+    // Somente os itens em fonte maior (altura dobrada)
+    out.push(GS, 0x21, 0x01);
+    for (const linha of itens) appendLine(linha);
+    // Retorna para fonte normal
+    out.push(GS, 0x21, 0x00);
+  }
+
+  // Avanço de papel para destacar a saída
+  out.push(LF, LF, LF);
+
+  return new Uint8Array(out);
+}
+
 export function imprimirPedidoCozinhaRawBT(pedido: PedidoCozinha) {
   const texto = buildPedidoCozinhaTexto(pedido);
-  const url = `rawbt:${encodeRawbtText(texto)}`;
+  const bytes = buildEscPosBytesComFonteMaior(texto);
+  const url = `rawbt:base64,${toBase64(bytes)}`;
 
   // Chamar no clique do usuário para reduzir chance de bloqueio.
   window.location.href = url;
