@@ -48,7 +48,7 @@ function saveCart(items: Item[]) {
 }
 
 export default function LojaCarrinho() {
-  const { taxaEntrega, lanchoneteAberta, soRetirada, mensagemAbertura } = useLojaConfig();
+  const { lanchoneteAberta, soRetirada, mensagemAbertura } = useLojaConfig();
   const [searchParams] = useSearchParams();
   const addId = searchParams.get('add');
   const produtosQuery = useQuery({ queryKey: queryKeys.produtos(true), queryFn: () => getProdutos(true) });
@@ -60,8 +60,6 @@ export default function LojaCarrinho() {
   const [cupomAplicado, setCupomAplicado] = useState<{ codigo: string; porcentagem: number; valorMaximo?: number } | null>(() => getCupomAplicado());
   const [cupomErro, setCupomErro] = useState('');
   const [cupomLoading, setCupomLoading] = useState(false);
-  const [taxaEntregaLocal] = useState<number | null>(null);
-
   useEffect(() => {
     if (list.length === 0) return;
     const map: Record<string, Produto> = {};
@@ -108,13 +106,12 @@ export default function LojaCarrinho() {
 
   const rawSubtotal = itens.reduce((s, i) => s + i.quantidade * precoVenda(i.produto), 0);
   const subtotal = Number.isFinite(rawSubtotal) ? rawSubtotal : 0;
-  // Taxa só quando não for "só retirada" (quando null/loading, não cobrar taxa até definir)
-  const taxaBase = taxaEntregaLocal ?? taxaEntrega;
-  const taxa = soRetirada === true ? 0 : (soRetirada === false && taxaBase !== null && Number.isFinite(taxaBase) ? taxaBase : 0);
   let rawDesconto = cupomAplicado ? (subtotal * Number(cupomAplicado.porcentagem)) / 100 : 0;
   if (cupomAplicado?.valorMaximo != null) rawDesconto = Math.min(rawDesconto, cupomAplicado.valorMaximo);
   const desconto = Number.isFinite(rawDesconto) ? rawDesconto : 0;
-  const total = Math.max(0, subtotal + taxa - desconto) || 0;
+  // No carrinho não existe seleção de "entrega" vs "retirada".
+  // A taxa de entrega deve entrar apenas em `Checkout` quando o usuário escolher "Entrega".
+  const total = Math.max(0, subtotal - desconto) || 0;
 
   async function handleAplicarCupom() {
     setCupomErro('');
