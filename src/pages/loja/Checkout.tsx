@@ -50,11 +50,12 @@ function getCart(): SavedItem[] {
 export default function LojaCheckout() {
   const navigate = useNavigate();
   const { loading: configLoading, lanchoneteAberta, soRetirada, formasPagamento, taxaEntrega, mensagemAbertura } = useLojaConfig();
-  const [nome, setNome] = useState('');
-  const [whatsapp, setWhatsapp] = useState('');
+  const [nome, setNome] = useState(() => getSavedCliente()?.nome ?? '');
+  const [whatsapp, setWhatsapp] = useState(() => getSavedCliente()?.whatsapp ?? '');
+  const whatsappInputRef = useRef<HTMLInputElement | null>(null);
   const [tipoEntrega, setTipoEntrega] = useState<'entrega' | 'retirada'>('entrega');
-  const [endereco, setEndereco] = useState('');
-  const [pontoReferencia, setPontoReferencia] = useState('');
+  const [endereco, setEndereco] = useState(() => getSavedCliente()?.endereco ?? '');
+  const [pontoReferencia, setPontoReferencia] = useState(() => getSavedCliente()?.pontoReferencia ?? '');
   const [formaPagamento, setFormaPagamento] = useState('');
   const [precisaTroco, setPrecisaTroco] = useState(false);
   const [trocoPara, setTrocoPara] = useState('');
@@ -65,6 +66,8 @@ export default function LojaCheckout() {
   const [cupomLoading, setCupomLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [popupConfirmWhats, setPopupConfirmWhats] = useState(false);
+  const [whatsappDraft, setWhatsappDraft] = useState('');
   const cupomDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const produtosQuery = useQuery({ queryKey: queryKeys.produtos(true), queryFn: () => getProdutos(true) });
@@ -75,15 +78,7 @@ export default function LojaCheckout() {
     ? { motivo: mensagemAbertura ? `A lanchonete está fechada para pedidos online. ${mensagemAbertura.charAt(0).toLowerCase() + mensagemAbertura.slice(1)}.` : 'A lanchonete está fechada para pedidos online no momento. Tente novamente mais tarde.' }
     : null;
 
-  useEffect(() => {
-    const saved = getSavedCliente();
-    if (saved) {
-      if (saved.nome) setNome(saved.nome);
-      if (saved.whatsapp) setWhatsapp(saved.whatsapp);
-      if (saved.endereco) setEndereco(saved.endereco);
-      if (saved.pontoReferencia) setPontoReferencia(saved.pontoReferencia);
-    }
-  }, []);
+  // Campos nome/whatsapp/endereco/pontoReferencia já são inicializados do localStorage.
 
   useEffect(() => {
     if (soRetirada) setTipoEntrega('retirada');
@@ -161,13 +156,7 @@ export default function LojaCheckout() {
     );
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    if (lanchoneteAberta !== true) {
-      setError(mensagemAbertura ? `A lanchonete está fechada para pedidos online. ${mensagemAbertura.charAt(0).toLowerCase() + mensagemAbertura.slice(1)}.` : 'A lanchonete está fechada para pedidos online.');
-      return;
-    }
+  const enviarPedidoOnline = async (whatsToUse: string) => {
     setSubmitting(true);
     try {
       const byId: Record<string, number> = {};
@@ -179,10 +168,11 @@ export default function LojaCheckout() {
         observacao: i.observacao || undefined,
       }));
       if (itens.length === 0) throw new Error('Nenhum item válido no carrinho.');
+
       await createPedidoOnline(
         {
           cliente_nome: nome,
-          cliente_whatsapp: whatsapp,
+          cliente_whatsapp: whatsToUse,
           cliente_endereco: tipoEntrega === 'entrega' ? endereco : 'Retirada no local',
           ponto_referencia: tipoEntrega === 'entrega' && pontoReferencia ? pontoReferencia : undefined,
           forma_pagamento: formaPagamento,
@@ -194,11 +184,12 @@ export default function LojaCheckout() {
         },
         { allowed: true, taxaEntrega: taxaEntrega ?? undefined },
       );
+
       localStorage.setItem(
         CLIENTE_KEY,
         JSON.stringify({
           nome,
-          whatsapp,
+          whatsapp: whatsToUse,
           endereco: tipoEntrega === 'entrega' ? endereco : '',
           pontoReferencia,
         } satisfies SavedCliente),
@@ -211,6 +202,73 @@ export default function LojaCheckout() {
       setSubmitting(false);
     }
   };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+
+    if (lanchoneteAberta !== true) {
+      setError(mensagemAbertura ? `A lanchonete está fechada para pedidos online. ${mensagemAbertura.charAt(0).toLowerCase() + mensagemAbertura.slice(1)}.` : 'A lanchonete está fechada para pedidos online no momento. Tente novamente mais tarde.');
+      return;
+    }
+
+    const nomeTrim = nome.trim();
+    const whatsTrim = (whatsappDraft || whatsapp).trim();
+    const formaTrim = formaPagamento.trim();
+    const enderecoTrim = endereco.trim();
+
+    if (!nomeTrim) {
+      setError('Informe seu nome.');
+      return;
+    }
+    if (!whatsTrim) {
+      setError('Informe o número do WhatsApp.');
+      return;
+    }
+    if (!formaTrim) {
+      setError('Selecione a forma de pagamento.');
+      return;
+    }
+    if (tipoEntrega === 'entrega' && !enderecoTrim) {
+      setError('Informe o endereço.');
+      return;
+    }
+
+    setWhatsappDraft(whatsapp);
+    setPopupConfirmWhats(true);
+  };
+
+  const handleConfirmWhatsApp = async () => {
+    const whatsTrim = (whatsappDraft || '').trim();
+    if (!whatsTrim) {
+      setError('Informe o número do WhatsApp.');
+      return;
+    }
+
+    setPopupConfirmWhats(false);
+    setWhatsapp(whatsappDraft);
+    await enviarPedidoOnline(whatsTrim);
+  };
+
+  const handleBackToFormEdit = () => {
+    setPopupConfirmWhats(false);
+    setError('');
+    setWhatsapp(whatsappDraft);
+    setTimeout(() => {
+      whatsappInputRef.current?.focus();
+      // Ajuda em iOS/Android: deixa o cursor no final do texto.
+      try {
+        const el = whatsappInputRef.current;
+        if (el) el.setSelectionRange?.(el.value.length, el.value.length);
+      } catch {
+        //
+      }
+    }, 0);
+  };
+
+  const whatsMudouNoModal = whatsappDraft.trim() !== whatsapp.trim();
+  const whatsDraftDigits = whatsappDraft.replace(/\D/g, '');
+  const whatsDraftTemQuantidadeCorreta = whatsDraftDigits.length === 11;
 
   useEffect(() => {
     if (formaPagamento && !formasPagamento.includes(formaPagamento)) setFormaPagamento('');
@@ -236,6 +294,7 @@ export default function LojaCheckout() {
           <div>
             <label className="block text-sm font-medium text-stone-600">WhatsApp *</label>
             <input
+              ref={whatsappInputRef}
               type="tel"
               inputMode="numeric"
               value={whatsapp}
@@ -320,6 +379,56 @@ export default function LojaCheckout() {
           </button>
         </form>
       </main>
+
+      {popupConfirmWhats && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
+            <div className="flex items-start justify-between gap-3 mb-2">
+              <h3 className="font-semibold text-stone-800">Confirmar WhatsApp</h3>
+              <button
+                type="button"
+                onClick={handleBackToFormEdit}
+                disabled={submitting}
+                className="rounded-lg border border-stone-200 px-3 py-1 text-sm text-stone-600 hover:bg-stone-50"
+                aria-label="Fechar"
+                title="Fechar"
+              >
+                X
+              </button>
+            </div>
+            <p className="text-sm text-stone-600 mb-4">Confirme o número do WhatsApp para contato do pedido. Você pode editar.</p>
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-stone-600 mb-1">WhatsApp *</label>
+              <input
+                type="tel"
+                inputMode="numeric"
+                value={whatsappDraft}
+                onChange={(e) => setWhatsappDraft(mascaraWhatsApp(e.target.value))}
+                required
+                placeholder="(00) 00000-0000"
+                maxLength={15}
+                className="w-full rounded-lg border border-stone-300 px-3 py-2"
+              />
+            </div>
+
+            {error && <p className="text-sm text-red-600 mb-3">{error}</p>}
+
+            <button
+              type="button"
+              onClick={handleConfirmWhatsApp}
+              disabled={submitting}
+              className="w-full rounded-lg bg-amber-600 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50"
+            >
+              {whatsMudouNoModal
+                ? whatsDraftTemQuantidadeCorreta
+                  ? 'Agora sim está correto'
+                  : 'Alterando número'
+                : 'Sim! Está correto'}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

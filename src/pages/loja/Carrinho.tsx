@@ -229,12 +229,6 @@ export default function LojaCarrinho() {
                   <span>Subtotal</span>
                   <span>R$ {subtotal.toFixed(2)}</span>
                 </div>
-                {taxa > 0 && (
-                  <div className="flex justify-between text-sm text-stone-600">
-                    <span>Taxa de entrega</span>
-                    <span>R$ {taxa.toFixed(2)}</span>
-                  </div>
-                )}
                 {desconto > 0 && (
                   <div className="flex justify-between text-sm text-amber-700">
                     <span>Desconto (cupom)</span>
