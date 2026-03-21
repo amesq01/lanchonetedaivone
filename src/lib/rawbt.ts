@@ -13,6 +13,8 @@ type PedidoCozinha = {
   id: string;
   numero: number;
   origem?: string;
+  /** Online: 'retirada' | 'entrega' */
+  tipo_entrega?: string | null;
   created_at?: string;
   cliente_nome?: string | null;
   ponto_referencia?: string | null;
@@ -37,12 +39,39 @@ function safeStr(v: unknown): string {
   return String(v);
 }
 
+/** Linha clara: mesa (salão), viagem ou online retirada/entrega. */
+function linhaOrigemLocal(pedido: PedidoCozinha): string {
+  const origem = (pedido.origem || '').toLowerCase();
+  const mesas = pedido.comandas?.mesas;
+  const mesaNum = mesas?.numero != null ? safeStr(mesas.numero) : '';
+  const mesaNome = mesas?.nome != null ? safeStr(mesas.nome).trim() : '';
+
+  if (origem === 'online') {
+    const t = (pedido.tipo_entrega || '').toLowerCase();
+    if (t === 'retirada') return 'Online — Retirada no local';
+    if (t === 'entrega') return 'Online — Entrega';
+    return 'Online';
+  }
+
+  if (origem === 'viagem') {
+    const partes: string[] = ['Mesa viagem'];
+    if (mesaNome) partes.push(mesaNome);
+    else if (mesaNum) partes.push(`Nº ${mesaNum}`);
+    return partes.join(' — ');
+  }
+
+  // presencial (e fallback)
+  if (mesaNum || mesaNome) {
+    const p = [mesaNum ? `Mesa ${mesaNum}` : null, mesaNome || null].filter(Boolean);
+    return p.join(' — ');
+  }
+  return origem === 'presencial' ? 'Presencial (mesa não informada)' : `Origem: ${origem || '-'}`;
+}
+
 function buildPedidoCozinhaTexto(pedido: PedidoCozinha): string {
   const numero = safeStr(pedido.numero);
   const cliente = safeStr(pedido.cliente_nome || pedido.comandas?.nome_cliente || '-');
-  const mesaNumero = pedido.comandas?.mesas?.numero != null ? safeStr(pedido.comandas?.mesas?.numero) : '';
-  const mesaNome = pedido.comandas?.mesas?.nome != null ? safeStr(pedido.comandas?.mesas?.nome) : '';
-  const mesaInfo = [mesaNumero ? `Mesa ${mesaNumero}` : null, mesaNome || null].filter(Boolean).join(' - ');
+  const origemLocal = linhaOrigemLocal(pedido);
   const atendente = safeStr(pedido.comandas?.profiles?.nome || '');
 
   const itens = (pedido.pedido_itens ?? [])
@@ -58,7 +87,7 @@ function buildPedidoCozinhaTexto(pedido: PedidoCozinha): string {
   lines.push('Lanchonete Terra e Mar');
   lines.push('COZINHA');
   lines.push(`Pedido #${numero}`);
-  if (mesaInfo) lines.push(mesaInfo);
+  lines.push(origemLocal);
   lines.push(`Cliente: ${cliente}`);
   if (atendente) lines.push(`Atendente: ${atendente}`);
   if (pedido.ponto_referencia) lines.push(`Ref: ${safeStr(pedido.ponto_referencia)}`);

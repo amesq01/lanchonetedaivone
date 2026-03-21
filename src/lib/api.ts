@@ -817,7 +817,7 @@ export async function updatePedidoItens(
 export async function getPedidosCozinha() {
   const { data } = await supabase
     .from('pedidos')
-    .select('id, numero, status, origem, cliente_nome, encerrado_em, updated_at, aceito_em, created_at, comanda_id, lancado_pelo_admin, pedido_itens(id, quantidade, observacao, produtos(id, nome, descricao, vai_para_cozinha)), comandas(nome_cliente, mesa_id, mesas(numero, nome), profiles(nome))')
+    .select('id, numero, status, origem, tipo_entrega, cliente_nome, encerrado_em, updated_at, aceito_em, created_at, comanda_id, lancado_pelo_admin, pedido_itens(id, quantidade, observacao, produtos(id, nome, descricao, vai_para_cozinha)), comandas(nome_cliente, mesa_id, mesas(numero, nome), profiles(nome))')
     .in('status', ['novo_pedido', 'em_preparacao', 'finalizado'])
     .order('created_at');
   const list = (data ?? []) as any[];
