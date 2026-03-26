@@ -168,7 +168,7 @@ export default function AdminMesas() {
 
       <div className="mt-8">
         <button onClick={() => setAccordionFinalizados(!accordionFinalizados)} className="flex w-full items-center justify-between rounded-lg bg-stone-100 px-4 py-2 text-left font-medium text-stone-700">
-          Pedidos finalizados hoje (mesas)
+          Pedidos finalizados hoje! (mesas)
           <span>{accordionFinalizados ? '−' : '+'}</span>
         </button>
         {accordionFinalizados && (
