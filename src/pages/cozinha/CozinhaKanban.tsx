@@ -12,6 +12,9 @@ const COLUNAS = [
   { key: 'finalizado', label: 'Finalizado', icon: CheckCircle, className: 'bg-green-100 border-green-200 text-green-900' },
 ] as const;
 
+/** Só as duas primeiras colunas (Novo / Em preparação) — uso em telas < md. */
+const COLUNAS_KANBAN_ATIVO = COLUNAS.filter((c) => c.key !== 'finalizado');
+
 function pedidoGeradoHa(fromAt: string): string {
   const min = Math.floor((Date.now() - new Date(fromAt).getTime()) / 60_000);
   if (min < 1) return 'há menos de 1 min';
@@ -58,6 +61,7 @@ export default function CozinhaKanban() {
   const queryClient = useQueryClient();
   const [, setTick] = useState(0);
   const [confirmacao, setConfirmacao] = useState<ConfirmacaoAcao | null>(null);
+  const [accordionFinalizadosAberto, setAccordionFinalizadosAberto] = useState(false);
   const idsNovoPedidoRef = useRef<Set<string> | null>(null);
 
   const { data: pedidos = [], isLoading: loading } = useQuery({
@@ -112,74 +116,108 @@ export default function CozinhaKanban() {
     return pedidos.filter((p) => p.status === key);
   };
 
+  const finalizadosHoje = porColuna('finalizado');
+
+  const pedidoCard = (p: any) => {
+    const refGerado = dataRefPedido(p);
+    return (
+      <div key={p.id} className="rounded-lg bg-white p-3 shadow-sm border border-stone-200 flex-shrink-0">
+        <div className="flex items-center justify-between gap-2 mb-2">
+          <span className="font-medium text-stone-800">#{p.numero}{nomeAtendente(p) !== '-' ? ` – ${nomeAtendente(p)}` : ''}</span>
+          <div className="flex flex-col items-end">
+            <span className={`text-xs px-2 py-0.5 rounded ${p.origem === 'online' ? 'bg-blue-100 text-blue-800' : p.origem === 'viagem' ? 'bg-amber-100 text-amber-800' : 'bg-stone-100 text-stone-600'}`}>
+              {p.origem === 'online' ? 'ONLINE' : p.origem === 'viagem' ? 'VIAGEM' : 'Presencial'}
+            </span>
+            {(p.status === 'novo_pedido' || p.status === 'em_preparacao') && refGerado && (
+              <span className="text-[10px] text-stone-500 mt-0.5">{pedidoGeradoHa(refGerado)}</span>
+            )}
+            {p.status === 'finalizado' && (p.encerrado_em ?? p.updated_at) && (
+              <span className="text-[10px] text-stone-500 mt-0.5">{finalizadoHa(p.encerrado_em ?? p.updated_at)}</span>
+            )}
+          </div>
+        </div>
+        <p className="text-sm text-stone-600">{nomeClienteEMesa(p)}</p>
+        <ul className="text-sm text-stone-500 mt-1">
+          {(p.pedido_itens ?? []).map((i: any) => (
+            <li key={i.id}>{i.quantidade}x {i.produtos?.nome || i.produtos?.descricao} {i.observacao ? ` (${i.observacao})` : ''}</li>
+          ))}
+        </ul>
+        <div className="mt-2 flex gap-2">
+          {p.status === 'novo_pedido' && (
+            <>
+              <button
+                type="button"
+                onClick={() => imprimirPedidoCozinhaRawBT(p)}
+                className="rounded border border-stone-300 bg-white px-2 py-1 text-sm text-stone-600 hover:bg-stone-50"
+              >
+                Imprimir
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmacao({ tipo: 'em_preparacao', pedido: p })}
+                className="rounded bg-amber-600 px-2 py-1 text-sm text-white hover:bg-amber-700"
+              >
+                Preparar
+              </button>
+            </>
+          )}
+          {p.status === 'em_preparacao' && (
+            <button type="button" onClick={() => setConfirmacao({ tipo: 'finalizado', pedido: p })} className="rounded bg-green-600 px-2 py-1 text-sm text-white hover:bg-green-700">
+              Finalizar
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   if (loading) return <p className="text-stone-500">Carregando...</p>;
+
+  const colunaKanban = (col: (typeof COLUNAS)[number]) => {
+    const Icon = col.icon;
+    return (
+      <div key={col.key} className="min-w-0 rounded-xl bg-stone-100 border border-stone-200 p-2 sm:p-4 flex flex-col min-h-0">
+        <h3 className={`font-semibold mb-3 flex-shrink-0 flex items-center gap-2 rounded-lg border px-3 py-2 ${col.className}`}>
+          <Icon className="h-5 w-5 flex-shrink-0" />
+          {col.label}
+        </h3>
+        <div className="flex-1 overflow-y-auto space-y-3 min-h-0">
+          {porColuna(col.key).map(pedidoCard)}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="h-full flex flex-col min-h-0">
-      <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-3 min-h-0">
-      {COLUNAS.map((col) => {
-        const Icon = col.icon;
-        return (
-        <div key={col.key} className="rounded-xl bg-stone-100 border border-stone-200 p-4 flex flex-col min-h-0">
-          <h3 className={`font-semibold mb-3 flex-shrink-0 flex items-center gap-2 rounded-lg border px-3 py-2 ${col.className}`}>
-            <Icon className="h-5 w-5 flex-shrink-0" />
-            {col.label}
-          </h3>
-          <div className="flex-1 overflow-y-auto space-y-3 min-h-0">
-            {porColuna(col.key).map((p) => (
-              <div key={p.id} className="rounded-lg bg-white p-3 shadow-sm border border-stone-200 flex-shrink-0">
-                <div className="flex items-center justify-between gap-2 mb-2">
-                  <span className="font-medium text-stone-800">#{p.numero}{nomeAtendente(p) !== '-' ? ` – ${nomeAtendente(p)}` : ''}</span>
-                  <div className="flex flex-col items-end">
-                    <span className={`text-xs px-2 py-0.5 rounded ${p.origem === 'online' ? 'bg-blue-100 text-blue-800' : p.origem === 'viagem' ? 'bg-amber-100 text-amber-800' : 'bg-stone-100 text-stone-600'}`}>
-                      {p.origem === 'online' ? 'ONLINE' : p.origem === 'viagem' ? 'VIAGEM' : 'Presencial'}
-                    </span>
-                    {(col.key === 'novo_pedido' || col.key === 'em_preparacao') && dataRefPedido(p) && (
-                      <span className="text-[10px] text-stone-500 mt-0.5">{pedidoGeradoHa(dataRefPedido(p)!)}</span>
-                    )}
-                    {col.key === 'finalizado' && (p.encerrado_em ?? p.updated_at) && (
-                      <span className="text-[10px] text-stone-500 mt-0.5">{finalizadoHa(p.encerrado_em ?? p.updated_at)}</span>
-                    )}
-                  </div>
-                </div>
-                <p className="text-sm text-stone-600">{nomeClienteEMesa(p)}</p>
-                <ul className="text-sm text-stone-500 mt-1">
-                  {(p.pedido_itens ?? []).map((i: any) => (
-                    <li key={i.id}>{i.quantidade}x {i.produtos?.nome || i.produtos?.descricao} {i.observacao ? ` (${i.observacao})` : ''}</li>
-                  ))}
-                </ul>
-                <div className="mt-2 flex gap-2">
-                  {p.status === 'novo_pedido' && (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => imprimirPedidoCozinhaRawBT(p)}
-                        className="rounded border border-stone-300 bg-white px-2 py-1 text-sm text-stone-600 hover:bg-stone-50"
-                      >
-                        Imprimir
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setConfirmacao({ tipo: 'em_preparacao', pedido: p })}
-                        className="rounded bg-amber-600 px-2 py-1 text-sm text-white hover:bg-amber-700"
-                      >
-                        Preparar
-                      </button>
-                    </>
-                  )}
-                  {p.status === 'em_preparacao' && (
-                    <button type="button" onClick={() => setConfirmacao({ tipo: 'finalizado', pedido: p })} className="rounded bg-green-600 px-2 py-1 text-sm text-white hover:bg-green-700">
-                      Finalizar
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
+      {/* Mobile / tablet: acordion de finalizados + só Novo pedido e Em preparação */}
+      <div className="flex flex-1 flex-col min-h-0 md:hidden">
+        <div className="mb-3 flex-shrink-0">
+          <button
+            type="button"
+            onClick={() => setAccordionFinalizadosAberto(!accordionFinalizadosAberto)}
+            className="flex w-full items-center justify-between rounded-lg border border-stone-200 bg-stone-100 px-4 py-2 text-left font-medium text-stone-700"
+          >
+            <span>Finalizado{finalizadosHoje.length ? ` (${finalizadosHoje.length})` : ''}</span>
+            <span>{accordionFinalizadosAberto ? '−' : '+'}</span>
+          </button>
+          {accordionFinalizadosAberto && (
+            <div className="mt-2 max-h-[min(40vh,420px)] space-y-3 overflow-y-auto rounded-lg border border-stone-200 bg-stone-50/50 p-3">
+              {finalizadosHoje.length === 0 ? (
+                <p className="py-2 text-sm text-stone-500">Nenhum pedido finalizado hoje.</p>
+              ) : (
+                finalizadosHoje.map(pedidoCard)
+              )}
+            </div>
+          )}
         </div>
-        );
-      })}
+        <div className="grid min-h-0 flex-1 grid-cols-2 gap-2 sm:gap-3">
+          {COLUNAS_KANBAN_ATIVO.map(colunaKanban)}
+        </div>
       </div>
+
+      {/* Desktop: três colunas como antes */}
+      <div className="hidden min-h-0 flex-1 gap-3 md:grid md:grid-cols-3">{COLUNAS.map(colunaKanban)}</div>
 
       {confirmacao && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
