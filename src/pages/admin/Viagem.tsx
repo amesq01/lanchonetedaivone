@@ -172,7 +172,7 @@ export default function AdminViagem() {
     });
   };
 
-  const formas = ['dinheiro', 'pix', 'cartão de crédito', 'cartão de débito'];
+  const formas = ['dinheiro', 'pix', 'crédito', 'débito'];
   const totalPagoViagem = fracoesPagamento.reduce((s, f) => s + f.valor, 0);
   const contaZeradaViagem = totalContaEncerramento < 0.01;
   const podeConfirmarEncerramentoViagem = popupPagamento && (contaZeradaViagem || (fracoesPagamento.length > 0 && totalPagoViagem >= totalContaEncerramento - 0.01));

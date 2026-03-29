@@ -16,7 +16,7 @@ type LojaConfig = {
 
 const LojaConfigContext = createContext<LojaConfig | undefined>(undefined);
 
-const FORMAS_PADRAO = ['PIX', 'Cartão crédito', 'Cartão débito', 'Dinheiro'];
+const FORMAS_PADRAO = ['PIX', 'Crédito', 'Débito', 'Dinheiro'];
 
 export function LojaConfigProvider({ children }: { children: ReactNode }) {
   const query = useQuery({

@@ -38,14 +38,35 @@ export async function setConfigValue(key: string, value: string | number) {
   await (supabase as any).from('config').upsert({ key, value, updated_at: new Date().toISOString() });
 }
 
-const FORMAS_PAGAMENTO_PADRAO = ['PIX', 'Cartão crédito', 'Cartão débito', 'Dinheiro'];
+const FORMAS_PAGAMENTO_PADRAO = ['PIX', 'Crédito', 'Débito', 'Dinheiro'];
+
+/** Converte texto sem acentos / espaços extras para comparação. */
+function formaPagamentoChaveNormalizada(s: string): string {
+  return String(s)
+    .trim()
+    .normalize('NFD')
+    .replace(/\p{M}+/gu, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/** Unifica rótulos legados (cartão crédito/débito etc.) para o padrão da loja online. */
+function migrarFormaPagamentoLojaOnline(s: string): string {
+  const t = String(s).trim();
+  if (!t) return t;
+  const key = formaPagamentoChaveNormalizada(t);
+  if (key.includes('debito')) return 'Débito';
+  if (key === 'credito' || key === 'cartao credito' || key === 'cartao de credito') return 'Crédito';
+  return t;
+}
 
 /** Formas de pagamento disponíveis na loja online. Retorna as marcadas no admin. */
 export async function getLojaOnlineFormasPagamento(): Promise<string[]> {
   const { data } = await supabase.from('config').select('value').eq('key', 'loja_online_formas_pagamento').maybeSingle();
   const v = (data as { value?: unknown } | null)?.value;
   if (!Array.isArray(v) || v.length === 0) return [...FORMAS_PAGAMENTO_PADRAO];
-  return v.filter((x): x is string => typeof x === 'string');
+  return v.filter((x): x is string => typeof x === 'string').map(migrarFormaPagamentoLojaOnline);
 }
 
 /** Atualiza as formas de pagamento disponíveis na loja online. */
@@ -1260,12 +1281,13 @@ export async function getRelatorioFinanceiro(desde: string, ate: string) {
   }
   const totalPorFormaPagamento: Record<string, number> = {};
   const normalizarForma = (s: string): string => {
-    const t = String(s ?? '').toLowerCase().trim();
-    if (t.startsWith('pix')) return 'pix';
-    if (t.startsWith('dinheiro')) return 'dinheiro';
-    if (t.startsWith('cartão crédito') || t.startsWith('cartao credito')) return 'cartão crédito';
-    if (t.startsWith('cartão débito') || t.startsWith('cartao debito')) return 'cartão débito';
-    return t || '-';
+    const key = formaPagamentoChaveNormalizada(String(s ?? ''));
+    if (!key) return '-';
+    if (key.startsWith('pix')) return 'pix';
+    if (key.startsWith('dinheiro')) return 'dinheiro';
+    if (key.includes('debito') || key === 'cartao debito' || key === 'cartao de debito') return 'débito';
+    if (key === 'credito' || key === 'cartao credito' || key === 'cartao de credito') return 'crédito';
+    return key || '-';
   };
   const fmtPagamento = (lista: { valor: number; forma_pagamento: string; nome_quem_pagou?: string | null }[]) =>
     lista.length ? lista.map((x) => `${x.forma_pagamento} R$ ${x.valor.toFixed(2)}${x.nome_quem_pagou ? ` (${x.nome_quem_pagou})` : ''}`).join(', ') : null;

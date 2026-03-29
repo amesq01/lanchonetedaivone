@@ -628,7 +628,7 @@ export default function AdminMesaDetail() {
   const valorDesconto = Math.min(subtotal, valorCupom + valorManual);
   const totalComDesconto = subtotal - valorDesconto;
 
-  const formas = ['dinheiro', 'pix', 'cartão crédito', 'cartão débito'];
+  const formas = ['dinheiro', 'pix', 'crédito', 'débito'];
   const totalJaPagoParciais = pagamentosComanda.reduce((s, p) => s + p.valor, 0);
   const totalRestante = Math.max(0, totalComDesconto - totalJaPagoParciais);
   /** IDs de pedidos já pagos totalmente em algum pagamento parcial "pedidos selecionados". */

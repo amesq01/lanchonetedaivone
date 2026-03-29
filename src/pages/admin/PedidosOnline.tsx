@@ -66,12 +66,27 @@ export default function AdminPedidosOnline() {
   const [cupomDesconto, setCupomDesconto] = useState('');
   const [descontoManual, setDescontoManual] = useState('');
 
-  const formasPagamento = ['dinheiro', 'pix', 'cartão crédito', 'cartão débito'];
+  const formasPagamento = ['dinheiro', 'pix', 'crédito', 'débito'];
   const normalizarFormaPagamento = (forma: string | null | undefined): string => {
     if (!forma?.trim()) return formasPagamento[0];
     const f = forma.trim();
-    const map: Record<string, string> = { PIX: 'pix', Dinheiro: 'dinheiro', 'Cartão crédito': 'cartão crédito', 'Cartão débito': 'cartão débito' };
-    return map[f] ?? (formasPagamento.includes(f) ? f : formasPagamento.find((x) => x.toLowerCase() === f.toLowerCase()) ?? f);
+    const map: Record<string, string> = {
+      PIX: 'pix',
+      Dinheiro: 'dinheiro',
+      Crédito: 'crédito',
+      Débito: 'débito',
+      'Cartão crédito': 'crédito',
+      'Cartão de crédito': 'crédito',
+      'Cartão débito': 'débito',
+      'Cartão de débito': 'débito',
+    };
+    if (map[f]) return map[f];
+    const fl = f.normalize('NFD').replace(/\p{M}+/gu, '').toLowerCase();
+    if (fl.includes('debito')) return 'débito';
+    if (fl.includes('credito') && !fl.includes('debito')) return 'crédito';
+    return formasPagamento.includes(f)
+      ? f
+      : (formasPagamento.find((x) => x.toLowerCase() === f.toLowerCase()) ?? f);
   };
   const totalPagoEncerrar = fracoesEncerrar.reduce((s, f) => s + f.valor, 0);
   const totalEncerramento = popupEncerrar?.total ?? 0;

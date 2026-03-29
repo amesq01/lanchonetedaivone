@@ -65,7 +65,7 @@ export default function AdminLayout() {
   const [agendaAbertura, setAgendaAbertura] = useState<{ dias: number[]; horario: string }>({ dias: [1, 2, 3, 4, 5, 6], horario: '08:00' });
   const [agendaSaving, setAgendaSaving] = useState(false);
   const [diasSelectAberto, setDiasSelectAberto] = useState(false);
-  const FORMAS_PAGAMENTO = ['PIX', 'Cartão crédito', 'Cartão débito', 'Dinheiro'];
+  const FORMAS_PAGAMENTO = ['PIX', 'Crédito', 'Débito', 'Dinheiro'];
   const [formasPagamento, setFormasPagamento] = useState<Set<string>>(new Set(FORMAS_PAGAMENTO));
   const [formasPagamentoSaving, setFormasPagamentoSaving] = useState(false);
   const [formasPagamentoSelectAberto, setFormasPagamentoSelectAberto] = useState(false);
