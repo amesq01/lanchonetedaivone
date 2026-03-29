@@ -260,9 +260,11 @@ export default function AdminPedidosOnline() {
         return;
       }
       const novaComanda = await openComanda(mesaIdEnviar, profile.id, novoNomeClienteEnviar.trim());
-      await movePedidosParaOutraComanda([popupEnviarParaMesa.pedido.id], novaComanda.id);
+      await movePedidosParaOutraComanda([popupEnviarParaMesa.pedido.id], novaComanda.id, { onlineParaPresencial: true });
       setPopupEnviarParaMesa(null);
       invalidatePedidosOnline();
+      queryClient.invalidateQueries({ queryKey: queryKeys.mesasDashboard });
+      queryClient.invalidateQueries({ queryKey: queryKeys.adminMesaDetail(mesaIdEnviar) });
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Erro ao enviar para mesa.');
     } finally {

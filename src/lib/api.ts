@@ -285,7 +285,7 @@ export async function getMesasParaTransferencia(mesaIdExcluir?: string): Promise
 export async function movePedidosParaOutraComanda(
   pedidoIds: string[],
   comandaIdDestino: string,
-  opts?: { novoNomeCliente?: string; fecharComandasOrigemIds?: string[] }
+  opts?: { novoNomeCliente?: string; fecharComandasOrigemIds?: string[]; onlineParaPresencial?: boolean }
 ) {
   await exigirAdminTransferencia();
   if (!pedidoIds.length) throw new Error('Nenhum pedido selecionado.');
@@ -295,6 +295,13 @@ export async function movePedidosParaOutraComanda(
   if (!(dest as { aberta: boolean }).aberta) throw new Error('A mesa de destino não está com comanda aberta. Só é possível transferir para uma mesa que esteja aberta.');
   const now = new Date().toISOString();
   await (supabase as any).from('pedidos').update({ comanda_id: comandaIdDestino, updated_at: now }).in('id', pedidoIds);
+  if (opts?.onlineParaPresencial) {
+    await (supabase as any)
+      .from('pedidos')
+      .update({ origem: 'presencial', tipo_entrega: null, taxa_entrega: 0, updated_at: now })
+      .in('id', pedidoIds)
+      .eq('origem', 'online');
+  }
   if (opts?.novoNomeCliente != null && opts.novoNomeCliente.trim()) {
     await (supabase as any).from('comandas').update({ nome_cliente: opts.novoNomeCliente.trim(), updated_at: now }).eq('id', comandaIdDestino);
   }
