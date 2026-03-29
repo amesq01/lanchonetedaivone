@@ -11,6 +11,8 @@ const QR_SIZE_MM = 30;
 const PAPER_WIDTH_MM = 80;
 const MARGIN_MM = 1;
 const CONTENT_WIDTH = PAPER_WIDTH_MM - MARGIN_MM * 2;
+/** Espaçamento uniforme entre linhas do bloco cliente (nome, tel, endereço, ref., pagamento, obs.) */
+const CLIENTE_INFO_LINE_MM = 5;
 /** Posição X (align right) dos valores na seção de totais — um pouco mais à esquerda que a margem direita. */
 const VALORES_RIGHT_MM = PAPER_WIDTH_MM - MARGIN_MM - 10;
 
@@ -339,23 +341,23 @@ export async function printContaViagem(opts: {
   y += 6;
   doc.text(`${opts.clienteNome}`, PAPER_WIDTH_MM / 2, y, { align: 'center' });
 
-  y += 8;
+  y += CLIENTE_INFO_LINE_MM;
   doc.setFontSize(10);
   if (opts.clienteTelefone) {
     doc.text('Tel.: ', MARGIN_MM, y);
     const w = doc.getTextWidth('Tel.: ');
     doc.text(opts.clienteTelefone, MARGIN_MM + w, y);
-    y += 4;
+    y += CLIENTE_INFO_LINE_MM;
   }
   if (opts.clienteEndereco) {
     const addrLines = doc.splitTextToSize(opts.clienteEndereco, CONTENT_WIDTH);
     doc.text(addrLines, MARGIN_MM, y);
-    y += addrLines.length * 4 + 2;
+    y += addrLines.length * CLIENTE_INFO_LINE_MM;
   }
   if (opts.pontoReferencia) {
     const refLines = doc.splitTextToSize(`Ref.: ${opts.pontoReferencia}`, CONTENT_WIDTH);
     doc.text(refLines, MARGIN_MM, y);
-    y += refLines.length * 4 + 2;
+    y += refLines.length * CLIENTE_INFO_LINE_MM;
   }
   if (opts.formaPagamento) {
     let pag = opts.formaPagamento;
@@ -363,9 +365,9 @@ export async function printContaViagem(opts: {
       pag += ` – Troco R$ ${opts.trocoPara.toFixed(2)}`;
     }
     doc.text(`Pagamento: ${pag}`, MARGIN_MM, y);
-    y += 4;
+    y += CLIENTE_INFO_LINE_MM;
   }
-  y += 2;
+  y += 4;
 
   autoTable(doc, {
     startY: y,
@@ -439,35 +441,35 @@ export async function printPedido(
     doc.setFont('helvetica', 'bold');
     doc.text((nomeCliente || '').toUpperCase(), MARGIN_MM, y);
     doc.setFont('helvetica', 'normal');
-    y += 5;
+    y += CLIENTE_INFO_LINE_MM;
   }
   if (pedido.cliente_whatsapp) {
     doc.setTextColor(...BLACK);
     doc.text('Tel.: ', MARGIN_MM, y);
     const w = doc.getTextWidth('Tel.: ');
     doc.text(pedido.cliente_whatsapp, MARGIN_MM + w, y);
-    y += 4;
+    y += CLIENTE_INFO_LINE_MM;
   }
   if (pedido.cliente_endereco) {
     const addrLines = doc.splitTextToSize(pedido.cliente_endereco, CONTENT_WIDTH);
     doc.text(addrLines, MARGIN_MM, y);
-    y += addrLines.length * 4 + 2;
+    y += addrLines.length * CLIENTE_INFO_LINE_MM;
   }
   if (pedido.ponto_referencia) {
     const refLines = doc.splitTextToSize(`Ref: ${pedido.ponto_referencia}`, CONTENT_WIDTH);
     doc.text(refLines, MARGIN_MM, y);
-    y += refLines.length * 4 + 2;
+    y += refLines.length * CLIENTE_INFO_LINE_MM;
   }
   if (pedido.forma_pagamento != null || pedido.troco_para != null) {
     doc.text(`Pagamento: ${pedido.forma_pagamento || '-'}${pedido.troco_para ? ` - Troco R$ ${Number(pedido.troco_para).toFixed(2)}` : ''}`, MARGIN_MM, y);
-    y += 4;
+    y += CLIENTE_INFO_LINE_MM;
   }
   if (pedido.observacoes) {
     const obsLines = doc.splitTextToSize(pedido.observacoes, CONTENT_WIDTH);
     doc.text(obsLines, MARGIN_MM, y);
-    y += obsLines.length * 4 + 2;
+    y += obsLines.length * CLIENTE_INFO_LINE_MM;
   }
-  y += 4;
+  y += CLIENTE_INFO_LINE_MM;
 
   const itens = pedido.pedido_itens ?? [];
   const subtotal = itens.reduce((s, i) => s + (i.quantidade || 0) * Number(i.valor_unitario || 0), 0);
@@ -643,33 +645,33 @@ export async function printPedidoEntrega(pedido: {
     doc.setFont('helvetica', 'bold');
     doc.text((pedido.cliente_nome || '').toUpperCase(), MARGIN_MM, y);
     doc.setFont('helvetica', 'normal');
-    y += 5;
+    y += CLIENTE_INFO_LINE_MM;
   }
   if (pedido.cliente_whatsapp) {
     doc.setTextColor(...BLACK);
     doc.text('Tel.: ', MARGIN_MM, y);
     const w = doc.getTextWidth('Tel.: ');
     doc.text(pedido.cliente_whatsapp, MARGIN_MM + w, y);
-    y += 4;
+    y += CLIENTE_INFO_LINE_MM;
   }
   if (pedido.cliente_endereco) {
     const addrLines = doc.splitTextToSize(pedido.cliente_endereco, CONTENT_WIDTH);
     doc.text(addrLines, MARGIN_MM, y);
-    y += addrLines.length * 4 + 2;
+    y += addrLines.length * CLIENTE_INFO_LINE_MM;
   }
   if (pedido.ponto_referencia) {
     const refLines = doc.splitTextToSize(`Ref: ${pedido.ponto_referencia}`, CONTENT_WIDTH);
     doc.text(refLines, MARGIN_MM, y);
-    y += refLines.length * 4 + 2;
+    y += refLines.length * CLIENTE_INFO_LINE_MM;
   }
   doc.text(`Pagamento: ${pedido.forma_pagamento || '-'}${pedido.troco_para ? ` - Troco R$ ${Number(pedido.troco_para).toFixed(2)}` : ''}`, MARGIN_MM, y);
-  y += 4;
+  y += CLIENTE_INFO_LINE_MM;
   if (pedido.observacoes) {
     const obsLines = doc.splitTextToSize(pedido.observacoes, CONTENT_WIDTH);
     doc.text(obsLines, MARGIN_MM, y);
-    y += obsLines.length * 4 + 2;
+    y += obsLines.length * CLIENTE_INFO_LINE_MM;
   }
-  y += 4;
+  y += CLIENTE_INFO_LINE_MM;
 
   const itens = pedido.pedido_itens ?? [];
   const subtotal = itens.reduce((s, i) => s + (i.quantidade || 0) * Number(i.valor_unitario || 0), 0);
