@@ -901,6 +901,31 @@ export async function updatePedidoViagemCliente(pedidoId: string, payload: { nom
   if (eUpCom) throw eUpCom;
 }
 
+/** Salão: atualiza nome e telefone da comanda e replica o nome em todos os pedidos. Mesa viagem: use Admin > Mesa viagem. */
+export async function updateComandaClienteMesaSalao(comandaId: string, payload: { nome_cliente: string; telefone: string | null }) {
+  const nome = payload.nome_cliente.trim();
+  if (!nome) throw new Error('Informe o nome do cliente.');
+  const tel = payload.telefone?.trim() ? payload.telefone.trim() : null;
+  const { data: comRow, error: eCom } = await supabase
+    .from('comandas')
+    .select('id, aberta, mesa_id, mesas(is_viagem)')
+    .eq('id', comandaId)
+    .maybeSingle();
+  if (eCom) throw eCom;
+  const com = comRow as { id: string; aberta: boolean; mesa_id: string; mesas: { is_viagem: boolean } | null } | null;
+  if (!com) throw new Error('Comanda não encontrada.');
+  if (com.mesas?.is_viagem) throw new Error('Para mesa viagem, edite o cliente em Admin > Mesa viagem.');
+  if (!com.aberta) throw new Error('A comanda está fechada; não é possível alterar o cliente.');
+  const now = new Date().toISOString();
+  const { error: eUpCom } = await (supabase as any)
+    .from('comandas')
+    .update({ nome_cliente: nome, telefone: tel, updated_at: now })
+    .eq('id', comandaId);
+  if (eUpCom) throw eUpCom;
+  const { error: eUpPed } = await (supabase as any).from('pedidos').update({ cliente_nome: nome, updated_at: now }).eq('comanda_id', comandaId);
+  if (eUpPed) throw eUpPed;
+}
+
 /** Pedidos da mesa Viagem já encerrados hoje (para o accordion de finalizados). */
 export async function getPedidosViagemEncerradosHoje() {
   const { data: mesas } = await supabase.from('mesas').select('id').eq('is_viagem', true).limit(1);

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { getComandaByMesa, getComandaWithPedidos, getTotalComanda, getPagamentosComanda, addPagamentoParcial, deletePagamentoParcial, closeComanda, getMesas, updatePedidoStatus, updatePedidoItens, getProdutos, getCuponsAtivos, applyDescontoComanda, clearDescontoComanda, getMesasParaTransferencia, openComanda, movePedidosParaOutraComanda, createPedidoPresencial, getAtendentes, atribuirComandaParaAtendente } from '../../lib/api';
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
+import { getComandaByMesa, getComandaWithPedidos, getTotalComanda, getPagamentosComanda, addPagamentoParcial, deletePagamentoParcial, closeComanda, getMesas, updatePedidoStatus, updatePedidoItens, getProdutos, getCuponsAtivos, applyDescontoComanda, clearDescontoComanda, getMesasParaTransferencia, openComanda, movePedidosParaOutraComanda, createPedidoPresencial, getAtendentes, atribuirComandaParaAtendente, updateComandaClienteMesaSalao } from '../../lib/api';
 import type { FraçãoPagamento } from '../../lib/api';
 import { printContaMesa, printPedido, printPedidosUnificados } from '../../lib/printPdf';
 import { useAuth } from '../../contexts/AuthContext';
@@ -73,6 +73,9 @@ export default function AdminMesaDetail() {
   const [atendentes, setAtendentes] = useState<{ id: string; nome: string }[]>([]);
   const [atendenteIdAtribuir, setAtendenteIdAtribuir] = useState('');
   const [enviandoAtribuir, setEnviandoAtribuir] = useState(false);
+  const [popupEditarCliente, setPopupEditarCliente] = useState(false);
+  const [formClienteNomeEdit, setFormClienteNomeEdit] = useState('');
+  const [formClienteTelEdit, setFormClienteTelEdit] = useState('');
 
   const queryClient = useQueryClient();
 
@@ -108,6 +111,39 @@ export default function AdminMesaDetail() {
 
   const invalidateMesa = () => {
     if (mesaId) queryClient.invalidateQueries({ queryKey: queryKeys.adminMesaDetail(mesaId) });
+  };
+
+  const mutationClienteMesa = useMutation({
+    mutationFn: (args: { comandaId: string; nome: string; telefone: string | null }) =>
+      updateComandaClienteMesaSalao(args.comandaId, { nome_cliente: args.nome, telefone: args.telefone }),
+    onSuccess: () => {
+      invalidateMesa();
+      queryClient.invalidateQueries({ queryKey: queryKeys.mesasDashboard });
+    },
+  });
+
+  const abrirModalEditarCliente = () => {
+    if (!comanda) return;
+    setFormClienteNomeEdit(comanda.nome_cliente || '');
+    setFormClienteTelEdit(comanda.telefone ? formatarTelefone(comanda.telefone) : '');
+    setPopupEditarCliente(true);
+  };
+
+  const salvarClienteMesa = () => {
+    if (!comanda) return;
+    const nome = formClienteNomeEdit.trim();
+    if (!nome) {
+      alert('Informe o nome do cliente.');
+      return;
+    }
+    const telTrim = formClienteTelEdit.trim();
+    mutationClienteMesa.mutate(
+      { comandaId: comanda.id, nome, telefone: telTrim ? telTrim : null },
+      {
+        onSuccess: () => setPopupEditarCliente(false),
+        onError: (e) => alert(e instanceof Error ? e.message : 'Erro ao salvar.'),
+      }
+    );
   };
 
   useEffect(() => {
@@ -678,7 +714,17 @@ export default function AdminMesaDetail() {
       <div className="mb-4 sm:mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <h1 className="text-xl sm:text-2xl font-bold text-stone-800 truncate">{mesaNome}</h1>
-          <p className="text-stone-600 text-sm sm:text-base truncate">Cliente: {comanda.nome_cliente}</p>
+          <p className="text-stone-600 text-sm sm:text-base truncate">
+            Cliente: {comanda.nome_cliente}
+            {comanda.telefone ? (
+              <span className="text-stone-500"> · {formatarTelefone(comanda.telefone)}</span>
+            ) : null}
+          </p>
+          {!isMesaViagem && (
+            <button type="button" onClick={abrirModalEditarCliente} className="mt-1 text-sm text-stone-600 hover:text-stone-800 hover:underline">
+              Editar dados do cliente
+            </button>
+          )}
           <p className="text-stone-500 text-sm truncate">Aberta por: {(comanda as any).profiles?.nome ?? '—'}</p>
           <button type="button" onClick={abrirPopupAtribuirAtendente} className="mt-1 text-sm text-amber-600 hover:underline">
             Atribuir a outro atendente
@@ -1039,6 +1085,43 @@ export default function AdminMesaDetail() {
             <div className="flex gap-2">
               <button onClick={() => { abrirEdicao(confirmarEdicaoAvancada); setConfirmarEdicaoAvancada(null); }} className="flex-1 rounded-lg bg-amber-600 py-2 text-white hover:bg-amber-700">Sim, editar</button>
               <button onClick={() => setConfirmarEdicaoAvancada(null)} className="rounded-lg border border-stone-300 px-4 py-2 text-stone-600">Não</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {popupEditarCliente && comanda && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl border border-stone-200">
+            <h3 className="font-semibold text-stone-800 mb-1">Dados do cliente – {mesaNome}</h3>
+            <p className="text-xs text-stone-500 mb-4">O nome é atualizado na comanda e em todos os pedidos desta mesa.</p>
+            <label className="block text-sm font-medium text-stone-600 mb-1">Nome</label>
+            <input
+              type="text"
+              value={formClienteNomeEdit}
+              onChange={(e) => setFormClienteNomeEdit(e.target.value)}
+              className="w-full rounded-lg border border-stone-300 px-3 py-2 mb-3"
+            />
+            <label className="block text-sm font-medium text-stone-600 mb-1">Telefone (opcional)</label>
+            <input
+              type="tel"
+              value={formClienteTelEdit}
+              onChange={(e) => setFormClienteTelEdit(formatarTelefone(e.target.value))}
+              placeholder="(11) 99999-9999"
+              className="w-full rounded-lg border border-stone-300 px-3 py-2 mb-4"
+            />
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={salvarClienteMesa}
+                disabled={mutationClienteMesa.isPending}
+                className="flex-1 rounded-lg bg-amber-600 py-2 font-medium text-white hover:bg-amber-700 disabled:opacity-50"
+              >
+                {mutationClienteMesa.isPending ? 'Salvando...' : 'Salvar'}
+              </button>
+              <button type="button" onClick={() => setPopupEditarCliente(false)} className="rounded-lg border border-stone-300 px-4 py-2 text-stone-600">
+                Cancelar
+              </button>
             </div>
           </div>
         </div>
