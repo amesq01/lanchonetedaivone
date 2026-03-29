@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { getPedidosViagemAbertos, getPedidosViagemEncerradosHoje, getTotalComanda, getTotalAPagarComanda, closeComanda, getCuponsAtivos, applyDescontoComanda, clearDescontoComanda, getProdutos, updatePedidoItens, updatePedidoStatus, getMesasParaTransferencia, openComanda, movePedidosParaOutraComanda, createPedidoViagem } from '../../lib/api';
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
+import { getPedidosViagemAbertos, getPedidosViagemEncerradosHoje, getTotalComanda, getTotalAPagarComanda, closeComanda, getCuponsAtivos, applyDescontoComanda, clearDescontoComanda, getProdutos, updatePedidoItens, updatePedidoStatus, getMesasParaTransferencia, openComanda, movePedidosParaOutraComanda, createPedidoViagem, updatePedidoViagemCliente } from '../../lib/api';
 import { queryKeys } from '../../lib/queryClient';
 import type { FraçãoPagamento } from '../../lib/api';
 import { printContaViagem, printPedido, printPedidosUnificados } from '../../lib/printPdf';
@@ -94,6 +94,9 @@ export default function AdminViagem() {
   const [searchPedidos, setSearchPedidos] = useState('');
   const [atendenteIdFiltro, setAtendenteIdFiltro] = useState<string | null>(null);
   const [, setTick] = useState(0);
+  const [popupCliente, setPopupCliente] = useState<any | null>(null);
+  const [formClienteNome, setFormClienteNome] = useState('');
+  const [formClienteTelefone, setFormClienteTelefone] = useState('');
 
   const { profile } = useAuth();
 
@@ -106,6 +109,37 @@ export default function AdminViagem() {
   const invalidateViagem = () => {
     queryClient.invalidateQueries({ queryKey: queryKeys.pedidosViagem });
     queryClient.invalidateQueries({ queryKey: queryKeys.adminSidebarCounts });
+  };
+
+  const mutationClienteViagem = useMutation({
+    mutationFn: (args: { pedidoId: string; nome: string; telefone: string | null }) =>
+      updatePedidoViagemCliente(args.pedidoId, { nome_cliente: args.nome, telefone: args.telefone }),
+    onSuccess: invalidateViagem,
+  });
+
+  const abrirEditarCliente = (p: any) => {
+    const nome = p.cliente_nome || (p.comandas as any)?.nome_cliente || '';
+    const tel = (p.comandas as any)?.telefone ?? '';
+    setFormClienteNome(nome);
+    setFormClienteTelefone(tel ? formatarTelefone(String(tel)) : '');
+    setPopupCliente(p);
+  };
+
+  const salvarClienteViagem = () => {
+    if (!popupCliente) return;
+    const nome = formClienteNome.trim();
+    if (!nome) {
+      alert('Informe o nome do cliente.');
+      return;
+    }
+    const telTrim = formClienteTelefone.trim();
+    mutationClienteViagem.mutate(
+      { pedidoId: popupCliente.id, nome, telefone: telTrim ? telTrim : null },
+      {
+        onSuccess: () => setPopupCliente(null),
+        onError: (e) => alert(e instanceof Error ? e.message : 'Erro ao salvar.'),
+      }
+    );
   };
 
   const atendentes = useMemo(() => {
@@ -607,7 +641,14 @@ export default function AdminViagem() {
             const numero = String(p.numero ?? '');
             const nomeCliente = (p.cliente_nome || (p.comandas as any)?.nome_cliente || '').toLowerCase();
             const nomeAtendente = String((p.comandas as any)?.profiles?.nome ?? '').toLowerCase();
-            return numero.includes(s) || nomeCliente.includes(s) || nomeAtendente.includes(s);
+            const telDigits = String((p.comandas as any)?.telefone || '').replace(/\D/g, '');
+            const sDigits = s.replace(/\D/g, '');
+            return (
+              numero.includes(s) ||
+              nomeCliente.includes(s) ||
+              nomeAtendente.includes(s) ||
+              (sDigits.length > 0 && telDigits.includes(sDigits))
+            );
           });
           return (
             <div key={col.titulo} className={`rounded-xl border-2 min-h-[160px] flex flex-col overflow-hidden ${col.cor === 'stone' ? 'border-stone-200 bg-stone-50/30' : col.cor === 'amber' ? 'border-amber-200 bg-amber-50/30' : 'border-green-200 bg-green-50/30'}`}>
@@ -635,7 +676,12 @@ export default function AdminViagem() {
                             {(p.comandas as any)?.profiles?.nome ? `#${p.numero} – ${(p.comandas as any).profiles.nome}${(p as any).lancado_pelo_admin ? ' (admin)' : ''}` : `#${p.numero}${(p as any).lancado_pelo_admin ? ' (admin)' : ''}`}
                           </div>
                           <p className="text-xs font-medium text-amber-700">R$ {totalPedido(p).toFixed(2)}</p>
-                          <span className="text-xs text-stone-600">{p.cliente_nome || (p.comandas as any)?.nome_cliente}</span>
+                          <span className="text-xs text-stone-600">
+                            {p.cliente_nome || (p.comandas as any)?.nome_cliente}
+                            {(p.comandas as any)?.telefone ? (
+                              <span className="text-stone-500"> · {formatarTelefone(String((p.comandas as any).telefone))}</span>
+                            ) : null}
+                          </span>
                           <ul className="mt-1 text-xs text-stone-600 line-clamp-2">
                             {(p.pedido_itens ?? []).map((i: any) => (
                               <li key={i.id}>{i.quantidade}x {i.produtos?.nome || i.produtos?.descricao}</li>
@@ -651,15 +697,20 @@ export default function AdminViagem() {
                       </div>
                       <div className="flex flex-wrap gap-1 text-xs">
                         {jaEncerrado ? (
-                          <button type="button" onClick={() => printPedido(p, 'Viagem')} className="rounded border border-stone-300 px-2 py-1 text-stone-600 hover:bg-stone-50 text-xs">Reimprimir pedido</button>
+                          <>
+                            <button type="button" onClick={() => printPedido(p, 'Viagem')} className="rounded border border-stone-300 px-2 py-1 text-stone-600 hover:bg-stone-50 text-xs">Reimprimir pedido</button>
+                            <button type="button" onClick={() => abrirEditarCliente(p)} className="rounded border border-stone-300 px-2 py-1 text-stone-700 hover:bg-stone-50 text-xs">Cliente</button>
+                          </>
                         ) : prontoEncerrar ? (
                           <>
+                            <button type="button" onClick={() => abrirEditarCliente(p)} className="rounded border border-stone-300 px-2 py-1 text-stone-700 hover:bg-stone-50 text-xs">Cliente</button>
                             <button type="button" onClick={() => handleAbrirImprimir(p)} className="rounded border border-stone-300 px-2 py-1 text-stone-600 hover:bg-stone-50 text-xs">Imprimir conta</button>
                             <button type="button" onClick={() => handleEncerrarPedido(p)} className="rounded border border-amber-400 bg-amber-100 px-2 py-1 text-amber-700 font-medium hover:bg-amber-200 text-xs">Encerrar pedido</button>
                           </>
                         ) : (
                           <>
                             <button type="button" onClick={() => printPedido(p, 'Viagem')} className="rounded border border-stone-300 px-2 py-1 text-stone-600 hover:bg-stone-50 text-xs">Imprimir</button>
+                            <button type="button" onClick={() => abrirEditarCliente(p)} className="rounded border border-stone-300 px-2 py-1 text-stone-700 hover:bg-stone-50 text-xs">Cliente</button>
                             <button type="button" onClick={() => pedidoPodeEditarSemConfirmacao(p) ? abrirEdicao(p) : setConfirmarEdicaoAvancada(p)} className="rounded border border-amber-300 px-2 py-1 text-amber-700 hover:bg-amber-50 text-xs">Editar</button>
                             <button type="button" onClick={() => setPopupCancelar({ pedidoId: p.id, adminOverride: !pedidoPodeEditarSemConfirmacao(p) })} className="rounded border border-red-200 px-2 py-1 text-red-600 hover:bg-red-50 text-xs">Cancelar</button>
                           </>
@@ -676,6 +727,43 @@ export default function AdminViagem() {
           );
         })}
       </div>
+
+      {popupCliente && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl border border-stone-200">
+            <h3 className="font-semibold text-stone-800 mb-1">Cliente – Pedido #{popupCliente.numero}</h3>
+            <p className="text-xs text-stone-500 mb-4">Altera o nome na comanda e em todos os pedidos desta comanda na viagem.</p>
+            <label className="block text-sm font-medium text-stone-600 mb-1">Nome</label>
+            <input
+              type="text"
+              value={formClienteNome}
+              onChange={(e) => setFormClienteNome(e.target.value)}
+              className="w-full rounded-lg border border-stone-300 px-3 py-2 mb-3"
+            />
+            <label className="block text-sm font-medium text-stone-600 mb-1">Telefone (opcional)</label>
+            <input
+              type="tel"
+              value={formClienteTelefone}
+              onChange={(e) => setFormClienteTelefone(formatarTelefone(e.target.value))}
+              placeholder="(11) 99999-9999"
+              className="w-full rounded-lg border border-stone-300 px-3 py-2 mb-4"
+            />
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={salvarClienteViagem}
+                disabled={mutationClienteViagem.isPending}
+                className="flex-1 rounded-lg bg-amber-600 py-2 font-medium text-white hover:bg-amber-700 disabled:opacity-50"
+              >
+                {mutationClienteViagem.isPending ? 'Salvando...' : 'Salvar'}
+              </button>
+              <button type="button" onClick={() => setPopupCliente(null)} className="rounded-lg border border-stone-300 px-4 py-2 text-stone-600">
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {popupEditar && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 overflow-y-auto">

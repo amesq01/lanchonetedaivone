@@ -866,11 +866,39 @@ export async function getPedidosViagemAbertos() {
   if (!comandaIds.length) return [];
   const { data } = await supabase
     .from('pedidos')
-    .select('*, pedido_itens(*, produtos(*)), comandas(nome_cliente, aberta, atendente_id, profiles(nome))')
+    .select('*, pedido_itens(*, produtos(*)), comandas(nome_cliente, telefone, aberta, atendente_id, profiles(nome))')
     .in('comanda_id', comandaIds)
     .neq('status', 'cancelado')
     .order('created_at', { ascending: false });
   return (data ?? []) as any[];
+}
+
+/** Atualiza nome do cliente no pedido e na comanda, e telefone na comanda (mesa viagem). */
+export async function updatePedidoViagemCliente(pedidoId: string, payload: { nome_cliente: string; telefone: string | null }) {
+  const nome = payload.nome_cliente.trim();
+  if (!nome) throw new Error('Informe o nome do cliente.');
+  const tel = payload.telefone?.trim() ? payload.telefone.trim() : null;
+  const { data: pedRow, error: ePed } = await supabase.from('pedidos').select('id, comanda_id, status').eq('id', pedidoId).maybeSingle();
+  if (ePed) throw ePed;
+  const ped = pedRow as { id: string; comanda_id: string | null; status: string } | null;
+  if (!ped?.comanda_id) throw new Error('Pedido sem comanda.');
+  if (ped.status === 'cancelado') throw new Error('Não é possível alterar um pedido cancelado.');
+  const { data: comRow, error: eCom } = await supabase
+    .from('comandas')
+    .select('id, mesa_id, mesas(is_viagem)')
+    .eq('id', ped.comanda_id)
+    .maybeSingle();
+  if (eCom) throw eCom;
+  const com = comRow as { id: string; mesa_id: string; mesas: { is_viagem: boolean } | null } | null;
+  if (!com?.mesas?.is_viagem) throw new Error('Este pedido não está na mesa viagem.');
+  const now = new Date().toISOString();
+  const { error: eUpPed } = await (supabase as any).from('pedidos').update({ cliente_nome: nome, updated_at: now }).eq('comanda_id', ped.comanda_id);
+  if (eUpPed) throw eUpPed;
+  const { error: eUpCom } = await (supabase as any)
+    .from('comandas')
+    .update({ nome_cliente: nome, telefone: tel, updated_at: now })
+    .eq('id', ped.comanda_id);
+  if (eUpCom) throw eUpCom;
 }
 
 /** Pedidos da mesa Viagem já encerrados hoje (para o accordion de finalizados). */
@@ -884,7 +912,7 @@ export async function getPedidosViagemEncerradosHoje() {
   const { desde, ate } = hojeBrasiliaUTC();
   const { data } = await supabase
     .from('pedidos')
-    .select('*, pedido_itens(*, produtos(*)), comandas(nome_cliente, aberta, atendente_id, profiles(nome))')
+    .select('*, pedido_itens(*, produtos(*)), comandas(nome_cliente, telefone, aberta, atendente_id, profiles(nome))')
     .in('comanda_id', comandaIds)
     .eq('status', 'finalizado')
     .not('encerrado_em', 'is', null)
