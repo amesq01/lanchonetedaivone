@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Copy, X } from 'lucide-react';
-import { fetchPedidosOnlineData, acceptPedidoOnline, setImprimidoEntregaPedido, encerrarPedidoOnline, getTotalAPagarPedido, getTotalPedidoById, getCuponsAtivos, updatePedidoStatus, updatePedidoItens, getProdutos, getMesasFechadasParaTransferencia, getComandaByMesa, openComanda, movePedidosParaOutraComanda, applyDescontoPedidoOnline, clearDescontoPedidoOnline, updatePedidoOnlineCliente } from '../../lib/api';
+import { fetchPedidosOnlineData, acceptPedidoOnline, setImprimidoEntregaPedido, encerrarPedidoOnline, getTotalAPagarPedido, getTotalPedidoById, getCuponsAtivos, updatePedidoStatus, updatePedidoItens, getProdutos, getMesasFechadasParaTransferencia, getComandaByMesa, openComanda, movePedidosParaOutraComanda, applyDescontoPedidoOnline, clearDescontoPedidoOnline, updatePedidoOnlineCliente, setPedidoOnlinePedidoPago } from '../../lib/api';
 import type { FraçãoPagamento } from '../../lib/api';
 import { printPedido, printContaViagem } from '../../lib/printPdf';
 import { useAuth } from '../../contexts/AuthContext';
@@ -41,6 +41,7 @@ export default function AdminPedidosOnline() {
   const [motivoCancelamento, setMotivoCancelamento] = useState('');
   const [confirmarEdicaoAvancada, setConfirmarEdicaoAvancada] = useState<any | null>(null);
   const [confirmarAceitar, setConfirmarAceitar] = useState<any | null>(null);
+  const [confirmarPedidoPago, setConfirmarPedidoPago] = useState<any | null>(null);
   const { data: produtos = [] } = useQuery({
     queryKey: queryKeys.produtos(true),
     queryFn: () => getProdutos(true),
@@ -163,6 +164,10 @@ export default function AdminPedidosOnline() {
     mutationFn: (pedidoId: string) => setImprimidoEntregaPedido(pedidoId),
     onSuccess: invalidatePedidosOnline,
   });
+  const mutationPedidoPago = useMutation({
+    mutationFn: (pedidoId: string) => setPedidoOnlinePedidoPago(pedidoId, true),
+    onSuccess: invalidatePedidosOnline,
+  });
   const mutationDadosPedido = useMutation({
     mutationFn: (args: { pedidoId: string; payload: Parameters<typeof updatePedidoOnlineCliente>[1] }) =>
       updatePedidoOnlineCliente(args.pedidoId, args.payload),
@@ -238,6 +243,7 @@ export default function AdminPedidosOnline() {
       formaPagamento: popupImprimirConta.forma_pagamento,
       trocoPara: popupImprimirConta.troco_para != null ? Number(popupImprimirConta.troco_para) : undefined,
       taxaEntrega: taxaPrint > 0 ? taxaPrint : undefined,
+      pedidoPago: Boolean(popupImprimirConta.pedido_pago),
     });
     setPopupImprimirConta(null);
     setCupomDesconto('');
@@ -542,6 +548,9 @@ export default function AdminPedidosOnline() {
                             </>
                           )}
                           <span>Pagamento: {descricaoPagamento(p)}</span>
+                          {p.pedido_pago && (
+                            <span className="text-emerald-700 font-medium">Pedido pago (impressão sem QR)</span>
+                          )}
                         </div>
                         {!isAguardando && <span className={`ml-1 text-xs px-1.5 py-0.5 rounded ${jaEncerrado ? 'bg-green-200 text-green-800 font-medium' : 'bg-stone-100 text-stone-600'}`}>{jaEncerrado ? 'Entregue' : (statusLabel[p.status] ?? p.status)}</span>}
                         <ul className="mt-1 text-xs text-stone-600 line-clamp-2">
@@ -567,7 +576,18 @@ export default function AdminPedidosOnline() {
                           </>
                         )}
                         {isAguardando && (
-                          <button type="button" onClick={() => setConfirmarAceitar(p)} className="rounded border border-green-600 bg-green-600 px-2 py-1 text-white font-medium hover:bg-green-700">Aceitar</button>
+                          <>
+                            {!p.pedido_pago && (
+                              <button
+                                type="button"
+                                onClick={() => setConfirmarPedidoPago(p)}
+                                className="rounded border border-emerald-600 px-2 py-1 text-emerald-800 font-medium hover:bg-emerald-50"
+                              >
+                                Pedido pago
+                              </button>
+                            )}
+                            <button type="button" onClick={() => setConfirmarAceitar(p)} className="rounded border border-green-600 bg-green-600 px-2 py-1 text-white font-medium hover:bg-green-700">Aceitar</button>
+                          </>
                         )}
                         {!jaEncerrado && (
                           <button type="button" onClick={() => abrirEnviarParaMesa(p)} className="rounded border border-stone-300 px-2 py-1 text-stone-600 hover:bg-stone-50">Enviar para mesa</button>
@@ -835,6 +855,35 @@ export default function AdminPedidosOnline() {
             <div className="flex gap-2">
               <button onClick={() => { handleAceitar(confirmarAceitar.id); setConfirmarAceitar(null); }} className="flex-1 rounded-lg bg-green-600 py-2 text-white hover:bg-green-700">Sim, aceitar</button>
               <button onClick={() => setConfirmarAceitar(null)} className="rounded-lg border border-stone-300 px-4 py-2 text-stone-600">Não</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmarPedidoPago && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl border border-stone-200">
+            <h3 className="font-semibold text-stone-800 mb-2">Pedido pago</h3>
+            <p className="text-sm text-stone-600 mb-4">
+              Marcar o pedido #{confirmarPedidoPago.numero} como já pago? No PDF, <strong className="text-stone-800">só o bloco do QR Code PIX</strong> (e o nome da titular logo abaixo) será trocado pelo selo <strong className="text-stone-800">PEDIDO PAGO</strong> centralizado com borda. Cliente, itens, valores, totais e mensagem final continuam iguais ao comprovante normal.
+            </p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  mutationPedidoPago.mutate(confirmarPedidoPago.id, {
+                    onSuccess: () => setConfirmarPedidoPago(null),
+                    onError: (e) => alert(e instanceof Error ? e.message : 'Erro ao salvar.'),
+                  });
+                }}
+                disabled={mutationPedidoPago.isPending}
+                className="flex-1 rounded-lg bg-emerald-600 py-2 text-white font-medium hover:bg-emerald-700 disabled:opacity-50"
+              >
+                {mutationPedidoPago.isPending ? 'Salvando...' : 'Confirmar'}
+              </button>
+              <button type="button" onClick={() => setConfirmarPedidoPago(null)} className="rounded-lg border border-stone-300 px-4 py-2 text-stone-600">
+                Cancelar
+              </button>
             </div>
           </div>
         </div>

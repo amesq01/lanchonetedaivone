@@ -41,6 +41,33 @@ async function addPixQrCode(doc: jsPDF, y: number): Promise<number> {
   return y;
 }
 
+/**
+ * Selo no lugar do bloco PIX (QR + nome da titular) em pedidos online marcados como pagos.
+ * O restante do PDF (cabeçalho, dados do cliente, tabela de itens, totais, “Obrigado!”) é impresso
+ * igual ao fluxo normal; apenas esta seção final substitui `addPixQrCode`.
+ */
+function addPedidoPagoStamp(doc: jsPDF, y: number): number {
+  const boxW = 56;
+  const boxH = 16;
+  const x = (PAPER_WIDTH_MM - boxW) / 2;
+  doc.setDrawColor(0, 0, 0);
+  doc.setLineWidth(0.6);
+  doc.rect(x, y, boxW, boxH);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.setTextColor(...BLACK);
+  const cx = x + boxW / 2;
+  const cy = y + boxH / 2;
+  doc.text('PEDIDO PAGO', cx, cy, { align: 'center', baseline: 'middle' });
+  return y + boxH + 5;
+}
+
+/** Troca só o QR PIX (e linha da titular) pelo selo; não altera o corpo do comprovante acima. */
+async function addPixOuPedidoPago(doc: jsPDF, y: number, pedidoPago?: boolean): Promise<number> {
+  if (pedidoPago) return addPedidoPagoStamp(doc, y);
+  return addPixQrCode(doc, y);
+}
+
 function addFooter(doc: jsPDF, y: number) {
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
@@ -294,6 +321,8 @@ export async function printContaViagem(opts: {
   trocoPara?: number;
   /** Taxa de entrega (pedidos online com entrega) */
   taxaEntrega?: number;
+  /** Pedido online já pago: imprime selo no lugar do QR PIX */
+  pedidoPago?: boolean;
 }) {
   const printTarget = createPrintTarget();
   const doc = createDoc();
@@ -358,7 +387,7 @@ export async function printContaViagem(opts: {
   if (opts.valorManual > 0) linhasViagem.push({ label: 'Desconto:', valor: `- R$ ${opts.valorManual.toFixed(2)}` });
   if ((opts.taxaEntrega ?? 0) > 0) linhasViagem.push({ label: 'Taxa de entrega:', valor: `R$ ${(opts.taxaEntrega ?? 0).toFixed(2)}` });
   y = addTotaisSection(doc, y, opts.subtotal, opts.total, linhasViagem);
-  y = await addPixQrCode(doc, y);
+  y = await addPixOuPedidoPago(doc, y, opts.pedidoPago);
   addFooter(doc, y);
   printTarget.open(doc);
 }
@@ -367,6 +396,8 @@ export async function printContaViagem(opts: {
 export async function printPedido(
   pedido: {
     numero: number;
+    /** Pedido online marcado como pago: selo no lugar do QR PIX */
+    pedido_pago?: boolean;
     cliente_nome?: string;
     cliente_whatsapp?: string;
     cliente_endereco?: string;
@@ -467,7 +498,7 @@ export async function printPedido(
   if (desconto > 0) linhasExtra.push({ label: 'Desconto:', valor: `- R$ ${desconto.toFixed(2)}` });
   if (taxa > 0) linhasExtra.push({ label: 'Taxa entrega:', valor: `R$ ${taxa.toFixed(2)}` });
   y = addTotaisSection(doc, y, subtotal, total, linhasExtra);
-  y = await addPixQrCode(doc, y);
+  y = await addPixOuPedidoPago(doc, y, Boolean(pedido.pedido_pago));
   addFooter(doc, y);
   printTarget.open(doc);
 }

@@ -146,6 +146,7 @@ export interface Database {
           ponto_referencia: string | null;
           imprimido_entrega_em: string | null;
           aceito_em: string | null;
+          pedido_pago: boolean;
           created_at: string;
           updated_at: string;
         };

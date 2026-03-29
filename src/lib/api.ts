@@ -1082,6 +1082,18 @@ export async function setImprimidoEntregaPedido(pedidoId: string) {
   await (supabase as any).from('pedidos').update({ imprimido_entrega_em: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('id', pedidoId);
 }
 
+/** Pedido online: marca se já foi pago (impressão sem QR, com selo PEDIDO PAGO). */
+export async function setPedidoOnlinePedidoPago(pedidoId: string, pedidoPago: boolean) {
+  const { data: row, error: selErr } = await supabase.from('pedidos').select('id, origem, status').eq('id', pedidoId).maybeSingle();
+  if (selErr) throw selErr;
+  const ped = row as { id: string; origem: string; status: string } | null;
+  if (!ped || ped.origem !== 'online') throw new Error('Pedido não encontrado ou não é online.');
+  if (ped.status === 'cancelado') throw new Error('Não é possível alterar pedido cancelado.');
+  const now = new Date().toISOString();
+  const { error } = await (supabase as any).from('pedidos').update({ pedido_pago: pedidoPago, updated_at: now }).eq('id', pedidoId);
+  if (error) throw error;
+}
+
 export async function encerrarPedidoOnline(pedidoId: string, pagamentos: FraçãoPagamento[]) {
   const totalAPagar = await getTotalAPagarPedido(pedidoId);
   const contaZerada = totalAPagar < 0.01;
