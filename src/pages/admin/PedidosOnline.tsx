@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Copy, X } from 'lucide-react';
-import { fetchPedidosOnlineData, acceptPedidoOnline, setImprimidoEntregaPedido, encerrarPedidoOnline, getTotalAPagarPedido, getTotalPedidoById, getCuponsAtivos, updatePedidoStatus, updatePedidoItens, getProdutos, getMesasFechadasParaTransferencia, getComandaByMesa, openComanda, movePedidosParaOutraComanda, applyDescontoPedidoOnline, clearDescontoPedidoOnline } from '../../lib/api';
+import { fetchPedidosOnlineData, acceptPedidoOnline, setImprimidoEntregaPedido, encerrarPedidoOnline, getTotalAPagarPedido, getTotalPedidoById, getCuponsAtivos, updatePedidoStatus, updatePedidoItens, getProdutos, getMesasFechadasParaTransferencia, getComandaByMesa, openComanda, movePedidosParaOutraComanda, applyDescontoPedidoOnline, clearDescontoPedidoOnline, updatePedidoOnlineCliente } from '../../lib/api';
 import type { FraçãoPagamento } from '../../lib/api';
 import { printPedido, printContaViagem } from '../../lib/printPdf';
 import { useAuth } from '../../contexts/AuthContext';
 import type { Produto } from '../../types/database';
 import { precoVenda, imagensProduto } from '../../types/database';
 import { queryKeys } from '../../lib/queryClient';
+import { useLojaConfig } from '../../contexts/LojaConfigContext';
 
 function haXTempo(iso: string | null | undefined): string {
   if (!iso) return '';
@@ -24,6 +25,7 @@ function haXTempo(iso: string | null | undefined): string {
 
 export default function AdminPedidosOnline() {
   const { profile } = useAuth();
+  const { formasPagamento: formasPagamentoLoja } = useLojaConfig();
   const queryClient = useQueryClient();
   const { data, isLoading } = useQuery({
     queryKey: queryKeys.pedidosOnline,
@@ -65,6 +67,16 @@ export default function AdminPedidosOnline() {
   const [contaItensPedido, setContaItensPedido] = useState<{ itens: { codigo: string; descricao: string; quantidade: number; valor: number }[]; total: number } | null>(null);
   const [cupomDesconto, setCupomDesconto] = useState('');
   const [descontoManual, setDescontoManual] = useState('');
+  const [popupDadosPedido, setPopupDadosPedido] = useState<any | null>(null);
+  const [formDadosPedido, setFormDadosPedido] = useState({
+    cliente_nome: '',
+    cliente_whatsapp: '',
+    cliente_endereco: '',
+    ponto_referencia: '',
+    forma_pagamento: '',
+    tipo_entrega: 'entrega' as 'entrega' | 'retirada',
+    troco_para: '',
+  });
 
   const formasPagamento = ['dinheiro', 'pix', 'crédito', 'débito'];
   const normalizarFormaPagamento = (forma: string | null | undefined): string => {
@@ -101,6 +113,28 @@ export default function AdminPedidosOnline() {
     setPopupEditar(p);
   };
 
+  const formasLoja = formasPagamentoLoja?.length ? formasPagamentoLoja : ['PIX', 'Crédito', 'Débito', 'Dinheiro'];
+  const abrirDadosPedido = (p: any) => {
+    const rawForma = p.forma_pagamento ?? '';
+    const formaMatch =
+      formasLoja.find((f) => f === rawForma) ??
+      formasLoja.find((f) => normalizarFormaPagamento(f) === normalizarFormaPagamento(rawForma)) ??
+      formasLoja[0];
+    const enderecoDb = (p.cliente_endereco ?? '').trim();
+    const enderecoEdit =
+      p.tipo_entrega === 'retirada' && (enderecoDb === 'Retirada no local' || !enderecoDb) ? '' : (p.cliente_endereco ?? '');
+    setFormDadosPedido({
+      cliente_nome: p.cliente_nome ?? '',
+      cliente_whatsapp: p.cliente_whatsapp ?? '',
+      cliente_endereco: enderecoEdit,
+      ponto_referencia: p.ponto_referencia ?? '',
+      forma_pagamento: formaMatch,
+      tipo_entrega: p.tipo_entrega === 'retirada' ? 'retirada' : 'entrega',
+      troco_para: p.troco_para != null && Number(p.troco_para) > 0 ? String(Number(p.troco_para)) : '',
+    });
+    setPopupDadosPedido(p);
+  };
+
   const invalidatePedidosOnline = () => {
     queryClient.invalidateQueries({ queryKey: queryKeys.pedidosOnline });
     queryClient.invalidateQueries({ queryKey: queryKeys.adminSidebarCounts });
@@ -129,6 +163,36 @@ export default function AdminPedidosOnline() {
     mutationFn: (pedidoId: string) => setImprimidoEntregaPedido(pedidoId),
     onSuccess: invalidatePedidosOnline,
   });
+  const mutationDadosPedido = useMutation({
+    mutationFn: (args: { pedidoId: string; payload: Parameters<typeof updatePedidoOnlineCliente>[1] }) =>
+      updatePedidoOnlineCliente(args.pedidoId, args.payload),
+    onSuccess: invalidatePedidosOnline,
+  });
+
+  const salvarDadosPedido = () => {
+    if (!popupDadosPedido) return;
+    const trocoNum = Number(String(formDadosPedido.troco_para).replace(',', '.'));
+    const payload = {
+      cliente_nome: formDadosPedido.cliente_nome,
+      cliente_whatsapp: formDadosPedido.cliente_whatsapp,
+      cliente_endereco: formDadosPedido.cliente_endereco,
+      ponto_referencia: formDadosPedido.ponto_referencia.trim() ? formDadosPedido.ponto_referencia : null,
+      tipo_entrega: formDadosPedido.tipo_entrega,
+      troco_para: popupDadosPedido.encerrado_em ? null : Number.isFinite(trocoNum) && trocoNum > 0 ? trocoNum : null,
+      ...(popupDadosPedido.encerrado_em ? {} : { forma_pagamento: formDadosPedido.forma_pagamento }),
+    };
+    mutationDadosPedido.mutate(
+      { pedidoId: popupDadosPedido.id, payload },
+      {
+        onSuccess: () => {
+          setPopupDadosPedido(null);
+        },
+        onError: (e) => alert(e instanceof Error ? e.message : 'Erro ao salvar dados do pedido.'),
+      }
+    );
+  };
+
+  const formaDadosEhDinheiro = String(formDadosPedido.forma_pagamento || '').toLowerCase().includes('dinheiro');
 
   useEffect(() => {
     if (popupImprimirConta) getTotalPedidoById(popupImprimirConta.id).then(setContaItensPedido);
@@ -488,13 +552,17 @@ export default function AdminPedidosOnline() {
                       </div>
                       <div className="flex flex-wrap gap-1 text-xs">
                         {jaEncerrado ? (
-                          <button type="button" onClick={() => handleImprimirPedido(p)} className="rounded border border-stone-300 px-2 py-1 text-stone-600 hover:bg-stone-50">Reimprimir</button>
+                          <>
+                            <button type="button" onClick={() => handleImprimirPedido(p)} className="rounded border border-stone-300 px-2 py-1 text-stone-600 hover:bg-stone-50">Reimprimir</button>
+                            <button type="button" onClick={() => abrirDadosPedido(p)} className="rounded border border-stone-300 px-2 py-1 text-stone-700 hover:bg-stone-50">Dados do pedido</button>
+                          </>
                         ) : !(isFinalizado && !jaEncerrado) && (
                           <button type="button" onClick={() => handleImprimirPedido(p)} className="rounded border border-stone-300 px-2 py-1 text-stone-600 hover:bg-stone-50">Imprimir</button>
                         )}
                         {!jaEncerrado && (
                           <>
                             <button type="button" onClick={() => (pedidoPodeEditarSemConfirmacao(p) ? abrirEdicao(p) : setConfirmarEdicaoAvancada(p))} className="rounded border border-amber-300 px-2 py-1 text-amber-700 hover:bg-amber-50">Editar</button>
+                            <button type="button" onClick={() => abrirDadosPedido(p)} className="rounded border border-stone-300 px-2 py-1 text-stone-700 hover:bg-stone-50">Dados do pedido</button>
                             <button type="button" onClick={() => setPopupCancelar({ pedidoId: p.id, adminOverride: !pedidoPodeEditarSemConfirmacao(p) })} className="rounded border border-red-200 px-2 py-1 text-red-600 hover:bg-red-50">Cancelar</button>
                           </>
                         )}
@@ -574,6 +642,99 @@ export default function AdminPedidosOnline() {
             <div className="flex gap-2 mt-4">
               <button onClick={handleImprimirConta} disabled={!contaItensPedido} className="flex-1 rounded-lg bg-amber-600 py-2 text-white hover:bg-amber-700 disabled:opacity-50">Imprimir</button>
               <button onClick={() => { setPopupImprimirConta(null); setCupomDesconto(''); setDescontoManual(''); }} className="rounded-lg border border-stone-300 px-4 py-2 text-stone-600">Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {popupDadosPedido && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 overflow-y-auto">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl border border-stone-200 my-4">
+            <h3 className="font-semibold text-stone-800 mb-1">Dados do pedido #{popupDadosPedido.numero}</h3>
+            <p className="text-xs text-stone-500 mb-4">
+              O número do pedido não pode ser alterado. Ao mudar entre entrega e retirada, a taxa de entrega é atualizada automaticamente.
+              {popupDadosPedido.encerrado_em ? ' Pedido já encerrado: forma de pagamento registrada no encerramento não é alterada aqui.' : ''}
+            </p>
+            <label className="block text-sm font-medium text-stone-600 mb-1">Nome</label>
+            <input
+              type="text"
+              value={formDadosPedido.cliente_nome}
+              onChange={(e) => setFormDadosPedido((s) => ({ ...s, cliente_nome: e.target.value }))}
+              className="w-full rounded-lg border border-stone-300 px-3 py-2 mb-3"
+            />
+            <label className="block text-sm font-medium text-stone-600 mb-1">Telefone / WhatsApp</label>
+            <input
+              type="text"
+              value={formDadosPedido.cliente_whatsapp}
+              onChange={(e) => setFormDadosPedido((s) => ({ ...s, cliente_whatsapp: e.target.value }))}
+              className="w-full rounded-lg border border-stone-300 px-3 py-2 mb-3"
+            />
+            <label className="block text-sm font-medium text-stone-600 mb-1">Tipo de entrega</label>
+            <select
+              value={formDadosPedido.tipo_entrega}
+              onChange={(e) => setFormDadosPedido((s) => ({ ...s, tipo_entrega: e.target.value as 'entrega' | 'retirada' }))}
+              className="w-full rounded-lg border border-stone-300 px-3 py-2 mb-3"
+            >
+              <option value="entrega">Entrega</option>
+              <option value="retirada">Retirada no local</option>
+            </select>
+            {formDadosPedido.tipo_entrega === 'entrega' && (
+              <>
+                <label className="block text-sm font-medium text-stone-600 mb-1">Endereço</label>
+                <textarea
+                  value={formDadosPedido.cliente_endereco}
+                  onChange={(e) => setFormDadosPedido((s) => ({ ...s, cliente_endereco: e.target.value }))}
+                  rows={3}
+                  className="w-full rounded-lg border border-stone-300 px-3 py-2 mb-3"
+                />
+                <label className="block text-sm font-medium text-stone-600 mb-1">Ponto de referência</label>
+                <input
+                  type="text"
+                  value={formDadosPedido.ponto_referencia}
+                  onChange={(e) => setFormDadosPedido((s) => ({ ...s, ponto_referencia: e.target.value }))}
+                  className="w-full rounded-lg border border-stone-300 px-3 py-2 mb-3"
+                />
+              </>
+            )}
+            {!popupDadosPedido.encerrado_em && (
+              <>
+                <label className="block text-sm font-medium text-stone-600 mb-1">Forma de pagamento</label>
+                <select
+                  value={formDadosPedido.forma_pagamento}
+                  onChange={(e) => setFormDadosPedido((s) => ({ ...s, forma_pagamento: e.target.value }))}
+                  className="w-full rounded-lg border border-stone-300 px-3 py-2 mb-3"
+                >
+                  {formasLoja.map((f) => (
+                    <option key={f} value={f}>{f}</option>
+                  ))}
+                </select>
+                {formaDadosEhDinheiro && (
+                  <>
+                    <label className="block text-sm font-medium text-stone-600 mb-1">Troco para (R$)</label>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={formDadosPedido.troco_para}
+                      onChange={(e) => setFormDadosPedido((s) => ({ ...s, troco_para: e.target.value }))}
+                      placeholder="Ex: 50"
+                      className="w-full rounded-lg border border-stone-300 px-3 py-2 mb-3"
+                    />
+                  </>
+                )}
+              </>
+            )}
+            <div className="flex gap-2 mt-2">
+              <button
+                type="button"
+                onClick={salvarDadosPedido}
+                disabled={mutationDadosPedido.isPending}
+                className="flex-1 rounded-lg bg-amber-600 py-2 font-medium text-white hover:bg-amber-700 disabled:opacity-50"
+              >
+                {mutationDadosPedido.isPending ? 'Salvando...' : 'Salvar'}
+              </button>
+              <button type="button" onClick={() => setPopupDadosPedido(null)} className="rounded-lg border border-stone-300 px-4 py-2 text-stone-600">
+                Cancelar
+              </button>
             </div>
           </div>
         </div>

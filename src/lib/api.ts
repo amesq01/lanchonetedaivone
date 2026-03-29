@@ -1043,6 +1043,62 @@ export async function encerrarPedidoOnline(pedidoId: string, pagamentos: Fraçã
   await (supabase as any).from('pedidos').update({ encerrado_em: now, forma_pagamento: resumo, updated_at: now }).eq('id', pedidoId);
 }
 
+/** Atualiza dados do cliente e entrega de um pedido online (não altera número nem itens). Recalcula taxa_entrega conforme tipo_entrega. */
+export async function updatePedidoOnlineCliente(
+  pedidoId: string,
+  payload: {
+    cliente_nome: string;
+    cliente_whatsapp: string;
+    cliente_endereco: string;
+    ponto_referencia: string | null;
+    /** Ignorado se o pedido já estiver encerrado (mantém resumo do encerramento). */
+    forma_pagamento?: string;
+    tipo_entrega: 'entrega' | 'retirada';
+    troco_para: number | null;
+  },
+) {
+  const nome = payload.cliente_nome.trim();
+  if (!nome) throw new Error('Informe o nome do cliente.');
+  const whats = payload.cliente_whatsapp.trim();
+  if (!whats) throw new Error('Informe o telefone/WhatsApp.');
+  const { data: rowPre, error: selErrPre } = await supabase.from('pedidos').select('id, origem, status, encerrado_em').eq('id', pedidoId).maybeSingle();
+  if (selErrPre) throw selErrPre;
+  const pedPre = rowPre as { id: string; origem: string; status: string; encerrado_em: string | null } | null;
+  if (!pedPre || pedPre.origem !== 'online') throw new Error('Pedido não encontrado ou não é online.');
+  if (pedPre.status === 'cancelado') throw new Error('Não é possível alterar um pedido cancelado.');
+  const jaEncerrado = Boolean(pedPre.encerrado_em);
+  const forma = (payload.forma_pagamento ?? '').trim();
+  if (!jaEncerrado && !forma) throw new Error('Selecione a forma de pagamento.');
+  const enderecoTrim = payload.cliente_endereco.trim();
+  if (payload.tipo_entrega === 'entrega' && !enderecoTrim) throw new Error('Informe o endereço para entrega.');
+  const enderecoFinal = payload.tipo_entrega === 'retirada' ? (enderecoTrim || 'Retirada no local') : enderecoTrim;
+  const taxa = payload.tipo_entrega === 'retirada' ? 0 : await getConfig('taxa_entrega');
+  const ponto = payload.ponto_referencia?.trim() ? payload.ponto_referencia.trim() : null;
+  const troco =
+    !jaEncerrado &&
+    forma.toLowerCase().includes('dinheiro') &&
+    payload.troco_para != null &&
+    Number.isFinite(payload.troco_para) &&
+    payload.troco_para > 0
+      ? payload.troco_para
+      : null;
+  const now = new Date().toISOString();
+  const baseUpdate = {
+    cliente_nome: nome,
+    cliente_whatsapp: whats,
+    cliente_endereco: enderecoFinal,
+    ponto_referencia: payload.tipo_entrega === 'entrega' ? ponto : null,
+    tipo_entrega: payload.tipo_entrega,
+    taxa_entrega: taxa,
+    updated_at: now,
+  };
+  const updateRow = jaEncerrado
+    ? baseUpdate
+    : { ...baseUpdate, forma_pagamento: forma, troco_para: troco };
+  const { error } = await (supabase as any).from('pedidos').update(updateRow).eq('id', pedidoId);
+  if (error) throw error;
+}
+
 export async function createPedidoOnline(
   payload: {
     cliente_nome: string;
