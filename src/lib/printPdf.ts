@@ -353,8 +353,9 @@ export async function printContaViagem(opts: {
     y += addrLines.length * 4 + 2;
   }
   if (opts.pontoReferencia) {
-    doc.text(`Ref.: ${opts.pontoReferencia}`, MARGIN_MM, y);
-    y += 4;
+    const refLines = doc.splitTextToSize(`Ref.: ${opts.pontoReferencia}`, CONTENT_WIDTH);
+    doc.text(refLines, MARGIN_MM, y);
+    y += refLines.length * 4 + 2;
   }
   if (opts.formaPagamento) {
     let pag = opts.formaPagamento;
@@ -453,8 +454,9 @@ export async function printPedido(
     y += addrLines.length * 4 + 2;
   }
   if (pedido.ponto_referencia) {
-    doc.text(`Ref: ${pedido.ponto_referencia}`, MARGIN_MM, y);
-    y += 4;
+    const refLines = doc.splitTextToSize(`Ref: ${pedido.ponto_referencia}`, CONTENT_WIDTH);
+    doc.text(refLines, MARGIN_MM, y);
+    y += refLines.length * 4 + 2;
   }
   if (pedido.forma_pagamento != null || pedido.troco_para != null) {
     doc.text(`Pagamento: ${pedido.forma_pagamento || '-'}${pedido.troco_para ? ` - Troco R$ ${Number(pedido.troco_para).toFixed(2)}` : ''}`, MARGIN_MM, y);
@@ -656,8 +658,9 @@ export async function printPedidoEntrega(pedido: {
     y += addrLines.length * 4 + 2;
   }
   if (pedido.ponto_referencia) {
-    doc.text(`Ref: ${pedido.ponto_referencia}`, MARGIN_MM, y);
-    y += 4;
+    const refLines = doc.splitTextToSize(`Ref: ${pedido.ponto_referencia}`, CONTENT_WIDTH);
+    doc.text(refLines, MARGIN_MM, y);
+    y += refLines.length * 4 + 2;
   }
   doc.text(`Pagamento: ${pedido.forma_pagamento || '-'}${pedido.troco_para ? ` - Troco R$ ${Number(pedido.troco_para).toFixed(2)}` : ''}`, MARGIN_MM, y);
   y += 4;
