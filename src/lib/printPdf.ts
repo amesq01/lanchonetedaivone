@@ -5,8 +5,8 @@ import QRCode from 'qrcode';
 /** Código PIX Copia e Cola (EMV) */
 const PIX_CODIGO =
   '00020126580014br.gov.bcb.pix01365a31cab8-d994-4ce5-9917-90a74a5f57865204000053039865802BR5925Joao Batista De Sousa Mes6009Sao Paulo62290525REC69BC6B277E3DA0599355366304D635';
-const PIX_NOME = 'Joao Batista De Sousa Mes';
-const QR_SIZE_MM = 40;
+const PIX_NOME = 'Joao Batista De Sousa Mesquita';
+const QR_SIZE_MM = 30;
 
 const PAPER_WIDTH_MM = 80;
 const MARGIN_MM = 1;
@@ -48,7 +48,7 @@ async function addPixQrCode(doc: jsPDF, y: number): Promise<number> {
  */
 function addPedidoPagoStamp(doc: jsPDF, y: number): number {
   const boxW = 56;
-  const boxH = 16;
+  const boxH = 10;
   const x = (PAPER_WIDTH_MM - boxW) / 2;
   doc.setDrawColor(0, 0, 0);
   doc.setLineWidth(0.6);
@@ -185,7 +185,7 @@ function addTotaisSection(
   doc.setFontSize(12);
   doc.text('TOTAL:', MARGIN_MM, y);
   doc.text(`R$ ${total.toFixed(2)}`, VALORES_RIGHT_MM, y, { align: 'right' });
-  return y + 12;
+  return y + 8;
 }
 
 /** Conta da mesa (presencial). Inclui pagamentos parciais se informados. */

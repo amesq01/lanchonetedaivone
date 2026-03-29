@@ -256,7 +256,7 @@ export default function AdminPedidosOnline() {
   }
 
   function handleImprimirPedido(p: any) {
-    const titulo = p.tipo_entrega === 'retirada' ? 'Retirada' : 'Entrega';
+    const titulo = p.tipo_entrega === 'retirada' ? 'RETIRADA' : 'ENTREGA';
     printPedido(p, titulo);
     if (p.status === 'finalizado' && !p.imprimido_entrega_em) mutationImprimirEntrega.mutate(p.id);
   }
