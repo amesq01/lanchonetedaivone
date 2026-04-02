@@ -378,16 +378,30 @@ async function getPedidosOnlineParaContagem(): Promise<{ id: string; status: str
   return (data ?? []) as any[];
 }
 
-/** Busca mínima para contagem cozinha na sidebar: id, status e pedido_itens.produtos.vai_para_cozinha. */
+/** Item conta para cozinha se não estiver explicitamente false (igual tela de produtos). */
+function pedidoTemItemCozinhaRow(p: { pedido_itens?: { produtos?: { vai_para_cozinha?: boolean | null } | null }[] }): boolean {
+  const itens = p.pedido_itens ?? [];
+  return itens.some((i: any) => i.produtos?.vai_para_cozinha !== false);
+}
+
+/** Busca mínima para contagem cozinha na sidebar. Consultas separadas evitam o limite padrão de 1000 linhas misturando milhares de finalizados com a fila ativa. */
 async function getPedidosCozinhaParaContagem(): Promise<{ id: string; status: string; pedido_itens: { produtos: { vai_para_cozinha: boolean } | null }[] }[]> {
-  const { data } = await supabase
-    .from('pedidos')
-    .select('id, status, pedido_itens(produtos(vai_para_cozinha))')
-    .in('status', ['novo_pedido', 'em_preparacao', 'finalizado']);
-  const list = (data ?? []) as any[];
+  const { desde, ate } = hojeBrasiliaUTC();
+  const sel = 'id, status, pedido_itens(produtos(vai_para_cozinha))';
+  const [{ data: ativos, error: e1 }, { data: finEnc, error: e2 }, { data: finSem, error: e3 }] = await Promise.all([
+    supabase.from('pedidos').select(sel).in('status', ['novo_pedido', 'em_preparacao']),
+    supabase.from('pedidos').select(sel).eq('status', 'finalizado').not('encerrado_em', 'is', null).gte('encerrado_em', desde).lte('encerrado_em', ate),
+    supabase.from('pedidos').select(sel).eq('status', 'finalizado').is('encerrado_em', null).gte('updated_at', desde).lte('updated_at', ate),
+  ]);
+  if (e1) throw e1;
+  if (e2) throw e2;
+  if (e3) throw e3;
+  const list = [...(ativos ?? []), ...(finEnc ?? []), ...(finSem ?? [])] as any[];
+  const seen = new Set<string>();
   return list.filter((p) => {
-    const itens = p.pedido_itens ?? [];
-    return itens.some((i: any) => Boolean(i.produtos?.vai_para_cozinha));
+    if (seen.has(p.id)) return false;
+    seen.add(p.id);
+    return pedidoTemItemCozinhaRow(p);
   });
 }
 
@@ -842,17 +856,47 @@ export async function updatePedidoItens(
   }
 }
 
+const SELECT_PEDIDOS_COZINHA_KANBAN =
+  'id, numero, status, origem, tipo_entrega, cliente_nome, encerrado_em, updated_at, aceito_em, created_at, comanda_id, lancado_pelo_admin, pedido_itens(id, quantidade, observacao, produtos(id, nome, descricao, vai_para_cozinha)), comandas(nome_cliente, mesa_id, mesas(numero, nome), profiles(nome))';
+
+/**
+ * Kanban cozinha: fila ativa (novo + em preparação) sem filtro de data — não compete com o limite de linhas do PostgREST.
+ * Finalizados: só o dia corrente em Brasília (encerrado_em, ou updated_at se encerrado_em for nulo).
+ */
 export async function getPedidosCozinha() {
-  const { data } = await supabase
-    .from('pedidos')
-    .select('id, numero, status, origem, tipo_entrega, cliente_nome, encerrado_em, updated_at, aceito_em, created_at, comanda_id, lancado_pelo_admin, pedido_itens(id, quantidade, observacao, produtos(id, nome, descricao, vai_para_cozinha)), comandas(nome_cliente, mesa_id, mesas(numero, nome), profiles(nome))')
-    .in('status', ['novo_pedido', 'em_preparacao', 'finalizado'])
-    .order('created_at');
-  const list = (data ?? []) as any[];
-  return list.filter((p) => {
-    const itens = p.pedido_itens ?? [];
-    const temItemParaCozinha = itens.some((i: any) => Boolean(i.produtos?.vai_para_cozinha));
-    return temItemParaCozinha;
+  const { desde, ate } = hojeBrasiliaUTC();
+  const [{ data: ativos, error: e1 }, { data: finEnc, error: e2 }, { data: finSem, error: e3 }] = await Promise.all([
+    supabase
+      .from('pedidos')
+      .select(SELECT_PEDIDOS_COZINHA_KANBAN)
+      .in('status', ['novo_pedido', 'em_preparacao'])
+      .order('created_at', { ascending: true }),
+    supabase
+      .from('pedidos')
+      .select(SELECT_PEDIDOS_COZINHA_KANBAN)
+      .eq('status', 'finalizado')
+      .not('encerrado_em', 'is', null)
+      .gte('encerrado_em', desde)
+      .lte('encerrado_em', ate)
+      .order('encerrado_em', { ascending: false }),
+    supabase
+      .from('pedidos')
+      .select(SELECT_PEDIDOS_COZINHA_KANBAN)
+      .eq('status', 'finalizado')
+      .is('encerrado_em', null)
+      .gte('updated_at', desde)
+      .lte('updated_at', ate)
+      .order('updated_at', { ascending: false }),
+  ]);
+  if (e1) throw e1;
+  if (e2) throw e2;
+  if (e3) throw e3;
+  const merged = [...(ativos ?? []), ...(finEnc ?? []), ...(finSem ?? [])] as any[];
+  const seen = new Set<string>();
+  return merged.filter((p) => {
+    if (seen.has(p.id)) return false;
+    seen.add(p.id);
+    return pedidoTemItemCozinhaRow(p);
   });
 }
 
