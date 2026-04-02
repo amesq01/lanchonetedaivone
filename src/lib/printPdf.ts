@@ -112,7 +112,7 @@ function createPrintTarget(): PrintTarget {
         try {
           win.location.href = url;
         } catch {
-          // fallback: se não conseguir navegar, segue para o iframe
+          // fallback: se não v conseguir navegar, segue para o iframe
         }
         // Revoga depois de um tempo (não temos afterprint confiável no mobile).
         setTimeout(() => URL.revokeObjectURL(url), 120000);
