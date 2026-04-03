@@ -2,8 +2,9 @@ import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { ChevronLeft, ChevronRight, ShoppingCart, Trash2, X } from 'lucide-react';
-import { getProdutos, getCategorias } from '../../lib/api';
+import { getProdutosLojaOnline, getCategorias } from '../../lib/api';
 import { queryKeys } from '../../lib/queryClient';
+import { produtoIndisponivelNoCardapio } from '../../lib/produtoLoja';
 import type { ProdutoWithCategorias } from '../../types/database';
 import type { Categoria } from '../../types/database';
 import { precoVenda, imagensProduto } from '../../types/database';
@@ -75,7 +76,7 @@ function saveCart(items: SavedItem[]) {
 export default function LojaOnline() {
   const { lanchoneteAberta, soRetirada, mensagemAbertura } = useLojaConfig();
   const categoriasQuery = useQuery({ queryKey: queryKeys.categorias, queryFn: getCategorias });
-  const produtosQuery = useQuery({ queryKey: queryKeys.produtos(true), queryFn: () => getProdutos(true) });
+  const produtosQuery = useQuery({ queryKey: queryKeys.produtosLojaOnline, queryFn: getProdutosLojaOnline });
 
   const categorias = categoriasQuery.data ?? [];
   const produtos = produtosQuery.data ?? [];
@@ -121,6 +122,10 @@ export default function LojaOnline() {
 
   function updateQtyInCart(produto: ProdutoWithCategorias, newQty: number) {
     const cart = getCart();
+    const cur = cart.find((x) => x.produto_id === produto.id)?.quantidade ?? 0;
+    if (produtoIndisponivelNoCardapio(produto) && newQty > cur) {
+      newQty = cur;
+    }
     if (newQty <= 0) {
       const filtered = cart.filter((x) => x.produto_id !== produto.id);
       saveCart(filtered);
@@ -144,7 +149,9 @@ export default function LojaOnline() {
   }
 
   function openModal(produto: ProdutoWithCategorias) {
-    if ((qtyByProd[produto.id] ?? 0) === 0) updateQtyInCart(produto, 1);
+    if (!produtoIndisponivelNoCardapio(produto) && (qtyByProd[produto.id] ?? 0) === 0) {
+      updateQtyInCart(produto, 1);
+    }
     setModalProduto(produto);
   }
 
@@ -298,6 +305,7 @@ function ModalProduto({
   const preco = precoVenda(produto);
   const emPromo = produto.em_promocao && produto.valor_promocional != null && Number(produto.valor_promocional) > 0;
   const qty = Math.max(0, qtyInCart);
+  const indisponivel = produtoIndisponivelNoCardapio(produto);
   const fotos = imagensProduto(produto);
   const [idx, setIdx] = useState(0);
   const indice = Math.min(idx, Math.max(0, fotos.length - 1));
@@ -311,7 +319,14 @@ function ModalProduto({
             <X className="w-5 h-5" />
           </button>
           <div className="aspect-square w-full max-h-72 bg-stone-100 flex items-center justify-center text-stone-400 overflow-hidden relative">
-            {urlAtual ? <img src={urlAtual} alt="" className="w-full h-full object-contain object-center" /> : 'Sem imagem'}
+            {urlAtual ? <img src={urlAtual} alt="" className={`w-full h-full object-contain object-center ${indisponivel ? 'opacity-50' : ''}`} /> : 'Sem imagem'}
+            {indisponivel && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/35 px-3">
+                <span className="rounded-lg bg-white/95 px-3 py-2 text-center text-sm font-semibold text-stone-800 shadow-sm">
+                  Indisponível no momento
+                </span>
+              </div>
+            )}
             {fotos.length > 1 && (
               <>
                 <button type="button" onClick={(e) => { e.stopPropagation(); setIdx((i) => (i - 1 + fotos.length) % fotos.length); }} className="absolute left-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/90 hover:bg-white shadow flex items-center justify-center text-stone-600" aria-label="Imagem anterior"><ChevronLeft className="w-5 h-5" /></button>
@@ -334,11 +349,16 @@ function ModalProduto({
           {produto.acompanhamentos && (
             <p className="mt-1 text-sm text-stone-600"><span className="font-medium text-stone-700">Acompanhamentos:</span> {produto.acompanhamentos}</p>
           )}
+          {indisponivel && (
+            <p className="mt-3 text-sm text-stone-700 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+              Este produto está indisponível no momento {produto.ativo === false ? '(inativo no cardápio)' : '(sem estoque)'}.
+            </p>
+          )}
           <div className="mt-4 flex items-center gap-2">
             <span className="text-sm font-medium text-stone-600">Quantidade:</span>
             <button type="button" onClick={() => onQtyChange(Math.max(0, qty - 1))} className="w-9 h-9 rounded-lg border border-stone-300 text-stone-600 hover:bg-stone-50 font-medium disabled:opacity-50 disabled:cursor-not-allowed" disabled={qty <= 0}>−</button>
             <span className="w-10 text-center font-semibold text-stone-800">{qty}</span>
-            <button type="button" onClick={() => onQtyChange(qty + 1)} className="w-9 h-9 rounded-lg border border-stone-300 text-stone-600 hover:bg-stone-50 font-medium">+</button>
+            <button type="button" onClick={() => onQtyChange(qty + 1)} className="w-9 h-9 rounded-lg border border-stone-300 text-stone-600 hover:bg-stone-50 font-medium disabled:opacity-50 disabled:cursor-not-allowed" disabled={indisponivel}>+</button>
           </div>
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <div className={emPromo ? 'flex flex-col' : 'font-semibold text-amber-600'}>
@@ -354,10 +374,11 @@ function ModalProduto({
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); onClose(); }}
-              className="flex-1 min-w-[140px] rounded-xl bg-amber-600 py-3 px-3 text-white font-semibold opacity-90 hover:opacity-100 hover:bg-amber-700 flex items-center justify-center gap-1.5 transition-opacity"
+              disabled={indisponivel}
+              className="flex-1 min-w-[140px] rounded-xl bg-amber-600 py-3 px-3 text-white font-semibold opacity-90 hover:opacity-100 hover:bg-amber-700 flex items-center justify-center gap-1.5 transition-opacity disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:opacity-50"
             >
               <ShoppingCart className="w-5 h-5" />
-              Adicionar ao carrinho
+              {indisponivel ? 'Indisponível' : 'Adicionar ao carrinho'}
             </button>
           </div>
         </div>
@@ -386,17 +407,29 @@ function CardProduto({
   const quantidade = Math.max(0, qty);
   const preco = precoVenda(produto);
   const emPromo = produto.em_promocao && produto.valor_promocional != null && Number(produto.valor_promocional) > 0;
+  const indisponivel = produtoIndisponivelNoCardapio(produto);
   return (
     <div
       role="button"
       tabIndex={0}
       onClick={onOpenModal}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpenModal(); } }}
-      className="flex h-full min-h-0 flex-row sm:flex-col rounded-2xl border border-stone-100 bg-white p-2 sm:p-4 shadow-sm transition hover:shadow-md hover:border-amber-200 cursor-pointer focus:outline-none focus:ring-2 focus:ring-amber-400 focus:ring-offset-2"
+      className={`flex h-full min-h-0 flex-row sm:flex-col rounded-2xl border border-stone-100 bg-white p-2 sm:p-4 shadow-sm transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-amber-400 focus:ring-offset-2 ${indisponivel ? 'opacity-[0.97] hover:border-stone-100 hover:shadow-sm' : 'hover:shadow-md hover:border-amber-200'}`}
     >
       {/* Imagem: no mobile à esquerda (quadrada), centralizada; no sm+ em cima */}
-      <div className="w-28 h-28 flex-shrink-0 self-center sm:self-auto sm:w-full sm:h-auto sm:aspect-square overflow-hidden rounded-xl bg-stone-100 flex items-center justify-center text-stone-400 text-xs sm:text-sm">
-        {imagensProduto(produto)[0] ? <img src={imagensProduto(produto)[0]} alt="" className="h-full w-full object-cover object-center" /> : 'Sem imagem'}
+      <div className="relative w-28 h-28 flex-shrink-0 self-center sm:self-auto sm:w-full sm:h-auto sm:aspect-square overflow-hidden rounded-xl bg-stone-100 flex items-center justify-center text-stone-400 text-xs sm:text-sm">
+        {imagensProduto(produto)[0] ? (
+          <img src={imagensProduto(produto)[0]} alt="" className={`h-full w-full object-cover object-center ${indisponivel ? 'opacity-55' : ''}`} />
+        ) : (
+          'Sem imagem'
+        )}
+        {indisponivel && (
+          <div className="absolute inset-0 flex items-center justify-center bg-stone-900/25 px-1">
+            <span className="rounded-md bg-white/95 px-2 py-1.5 text-center text-[10px] font-semibold leading-tight text-stone-800 shadow-sm sm:text-xs">
+              Indisponível no momento
+            </span>
+          </div>
+        )}
       </div>
       {/* Lado direito no mobile: texto + preço + botão */}
       <div className="flex-1 min-w-0 flex flex-col ml-2 sm:ml-0 sm:mt-3 gap-1 sm:gap-0">
@@ -425,12 +458,12 @@ function CardProduto({
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); onOpenModal(); }}
-              className="flex-1 min-w-0 rounded-lg bg-amber-600 py-2 px-3 text-white font-medium opacity-80 hover:opacity-100 hover:bg-amber-700 flex items-center justify-center gap-1.5 transition-opacity max-sm:flex-none max-sm:w-[208px] max-sm:min-w-0 max-sm:h-[44px] max-sm:bg-[#f57c00] max-sm:hover:bg-[#e66d00] max-sm:text-[12px] max-sm:font-semibold max-sm:py-2 max-sm:px-3 max-sm:gap-1.5 max-sm:justify-end max-sm:rounded-none max-sm:[clip-path:path('M0,44_C10,44_20,43.5_30,42_C42,39_56,33_72,24_C92,12_118,5_156,4_L208,4_L208,44_Z')]"
-              aria-label="Adicionar ao carrinho"
-              title="Adicionar ao carrinho"
+              className={`flex-1 min-w-0 rounded-lg py-2 px-3 text-white font-medium flex items-center justify-center gap-1.5 transition-opacity max-sm:flex-none max-sm:w-[208px] max-sm:min-w-0 max-sm:h-[44px] max-sm:text-[12px] max-sm:font-semibold max-sm:py-2 max-sm:px-3 max-sm:gap-1.5 max-sm:justify-end max-sm:rounded-none max-sm:[clip-path:path('M0,44_C10,44_20,43.5_30,42_C42,39_56,33_72,24_C92,12_118,5_156,4_L208,4_L208,44_Z')] ${indisponivel ? 'bg-stone-500 opacity-90 hover:opacity-100 max-sm:bg-stone-500 max-sm:hover:bg-stone-600' : 'bg-amber-600 opacity-80 hover:opacity-100 hover:bg-amber-700 max-sm:bg-[#f57c00] max-sm:hover:bg-[#e66d00]'}`}
+              aria-label={indisponivel ? 'Ver detalhes (indisponível no momento)' : 'Adicionar ao carrinho'}
+              title={indisponivel ? 'Indisponível — toque para ver detalhes' : 'Adicionar ao carrinho'}
             >
-              <span className="truncate">Adicionar ao</span>
-              <ShoppingCart className="w-4 h-4 flex-shrink-0 max-sm:w-3.5 max-sm:h-3.5" />
+              <span className="truncate">{indisponivel ? 'Indisponível' : 'Adicionar ao'}</span>
+              {!indisponivel && <ShoppingCart className="w-4 h-4 flex-shrink-0 max-sm:w-3.5 max-sm:h-3.5" />}
             </button>
             {quantidade > 0 && (
               <button type="button" onClick={(e) => { e.stopPropagation(); onRemove(); }} className="flex-shrink-0 w-9 h-9 max-sm:w-8 max-sm:h-8 rounded-lg border border-red-300 text-red-600 hover:bg-red-50 flex items-center justify-center" aria-label="Retirar do carrinho" title="Retirar do carrinho">

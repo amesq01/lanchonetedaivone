@@ -585,6 +585,16 @@ export async function getProdutos(ativoOnly = false): Promise<ProdutoWithCategor
   return (data ?? []) as ProdutoWithCategorias[];
 }
 
+/** Catálogo da loja online: todos os produtos (ativos/inativos, qualquer estoque) para exibir indisponível. Requer RLS `Produtos public read` com USING (true). */
+export async function getProdutosLojaOnline(): Promise<ProdutoWithCategorias[]> {
+  const { data, error } = await supabase
+    .from('produtos')
+    .select('*, produto_categorias(categoria_id, categorias(id, nome))')
+    .order('codigo');
+  if (error) throw error;
+  return (data ?? []) as ProdutoWithCategorias[];
+}
+
 /** Salva produto (insert ou update) e sincroniza categorias em produto_categorias. */
 export async function saveProduto(payload: {
   id?: string;

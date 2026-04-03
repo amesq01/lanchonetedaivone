@@ -162,7 +162,7 @@ CREATE POLICY "Admin update profile" ON profiles FOR UPDATE USING (public.get_my
 CREATE POLICY "Admin full config" ON config FOR ALL USING (public.get_my_profile_role() = 'admin');
 CREATE POLICY "Staff full mesas" ON mesas FOR ALL USING (public.get_my_profile_role() IS NOT NULL);
 CREATE POLICY "Staff full comandas" ON comandas FOR ALL USING (public.get_my_profile_role() IS NOT NULL);
-CREATE POLICY "Produtos public read" ON produtos FOR SELECT USING (ativo = TRUE);
+CREATE POLICY "Produtos public read" ON produtos FOR SELECT USING (true);
 CREATE POLICY "Staff full produtos" ON produtos FOR ALL USING (public.get_my_profile_role() IS NOT NULL);
 CREATE POLICY "Staff full cupons" ON cupons FOR ALL USING (public.get_my_profile_role() IS NOT NULL);
 CREATE POLICY "Pedidos staff" ON pedidos FOR ALL USING (public.get_my_profile_role() IS NOT NULL);
