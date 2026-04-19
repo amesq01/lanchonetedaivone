@@ -570,6 +570,15 @@ export default function AdminPedidosOnline() {
                         )}
                         {!jaEncerrado && (
                           <>
+                            {(p.status === 'novo_pedido' || p.status === 'em_preparacao') && !p.pedido_pago && (
+                              <button
+                                type="button"
+                                onClick={() => setConfirmarPedidoPago(p)}
+                                className="rounded border border-emerald-600 px-2 py-1 text-emerald-800 font-medium hover:bg-emerald-50"
+                              >
+                                Pedido pago
+                              </button>
+                            )}
                             <button type="button" onClick={() => (pedidoPodeEditarSemConfirmacao(p) ? abrirEdicao(p) : setConfirmarEdicaoAvancada(p))} className="rounded border border-amber-300 px-2 py-1 text-amber-700 hover:bg-amber-50">Editar</button>
                             <button type="button" onClick={() => abrirDadosPedido(p)} className="rounded border border-stone-300 px-2 py-1 text-stone-700 hover:bg-stone-50">Dados do pedido</button>
                             <button type="button" onClick={() => setPopupCancelar({ pedidoId: p.id, adminOverride: !pedidoPodeEditarSemConfirmacao(p) })} className="rounded border border-red-200 px-2 py-1 text-red-600 hover:bg-red-50">Cancelar</button>
