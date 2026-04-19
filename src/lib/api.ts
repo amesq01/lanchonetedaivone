@@ -281,6 +281,20 @@ export async function getMesasParaTransferencia(mesaIdExcluir?: string): Promise
   return out.map(({ mesaId, mesaNome, comandaId }) => ({ mesaId, mesaNome, comandaId }));
 }
 
+/** Mesma regra que aceitar pedido online: itens para cozinha → novo_pedido; caso contrário → finalizado. */
+async function statusPedidoOnlineAposAceite(pedidoId: string): Promise<'novo_pedido' | 'finalizado'> {
+  const { data: itens } = await supabase.from('pedido_itens').select('produto_id').eq('pedido_id', pedidoId);
+  const ids = [...new Set((itens ?? []).map((i: any) => i.produto_id))];
+  let temItemParaCozinha = false;
+  if (ids.length > 0) {
+    const { data: produtos } = await supabase.from('produtos').select('id, vai_para_cozinha').in('id', ids);
+    const byId: Record<string, { vai_para_cozinha: boolean }> = {};
+    (produtos ?? []).forEach((p: any) => { byId[p.id] = p; });
+    temItemParaCozinha = (itens as any[]).some((i) => Boolean(byId[i.produto_id]?.vai_para_cozinha));
+  }
+  return temItemParaCozinha ? 'novo_pedido' : 'finalizado';
+}
+
 /** Transfere pedidos para outra comanda. Apenas admin. A mesa de destino deve estar com comanda aberta. Se passar fecharComandasOrigemIds, comandas de origem que ficarem sem pedidos são encerradas (mesa fica livre para novo atendimento). */
 export async function movePedidosParaOutraComanda(
   pedidoIds: string[],
@@ -296,6 +310,19 @@ export async function movePedidosParaOutraComanda(
   const now = new Date().toISOString();
   await (supabase as any).from('pedidos').update({ comanda_id: comandaIdDestino, updated_at: now }).in('id', pedidoIds);
   if (opts?.onlineParaPresencial) {
+    const { data: aguardandoRows } = await supabase
+      .from('pedidos')
+      .select('id')
+      .in('id', pedidoIds)
+      .eq('origem', 'online')
+      .eq('status', 'aguardando_aceite');
+    for (const row of (aguardandoRows ?? []) as { id: string }[]) {
+      const status = await statusPedidoOnlineAposAceite(row.id);
+      await (supabase as any)
+        .from('pedidos')
+        .update({ status, aceito_em: now, lancado_pelo_admin: true, updated_at: now })
+        .eq('id', row.id);
+    }
     await (supabase as any)
       .from('pedidos')
       .update({ origem: 'presencial', tipo_entrega: null, taxa_entrega: 0, updated_at: now })
@@ -1119,16 +1146,7 @@ export async function fetchPedidosOnlineData(): Promise<{ pendentes: any[]; todo
 
 export async function acceptPedidoOnline(pedidoId: string) {
   const now = new Date().toISOString();
-  const { data: itens } = await supabase.from('pedido_itens').select('produto_id').eq('pedido_id', pedidoId);
-  const ids = [...new Set((itens ?? []).map((i: any) => i.produto_id))];
-  let temItemParaCozinha = false;
-  if (ids.length > 0) {
-    const { data: produtos } = await supabase.from('produtos').select('id, vai_para_cozinha').in('id', ids);
-    const byId: Record<string, { vai_para_cozinha: boolean }> = {};
-    (produtos ?? []).forEach((p: any) => { byId[p.id] = p; });
-    temItemParaCozinha = (itens as any[]).some((i) => Boolean(byId[i.produto_id]?.vai_para_cozinha));
-  }
-  const status = temItemParaCozinha ? 'novo_pedido' : 'finalizado';
+  const status = await statusPedidoOnlineAposAceite(pedidoId);
   await (supabase as any).from('pedidos').update({ status, aceito_em: now, updated_at: now }).eq('id', pedidoId);
 }
 
