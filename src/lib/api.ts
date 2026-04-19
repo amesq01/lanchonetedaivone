@@ -1083,10 +1083,16 @@ function hojeBrasiliaUTC(): { desde: string; ate: string } {
   return { desde, ate };
 }
 
-/** Retorna intervalo das últimas 12 horas (desde = now - 12h, ate = now) em ISO UTC. */
+/**
+ * Janela das últimas 12h (ISO UTC) para o kanban de pedidos online.
+ * O limite superior usa margem de +15 min: se o relógio do cliente estiver atrás do do servidor
+ * (ou do Postgres), `created_at` pode ficar “no futuro” em relação ao `Date.now()` do browser
+ * e o pedido some de `.lte(created_at, ate)` — a badge (dia em Brasília) ainda conta o pedido.
+ */
 function ultimas12HorasUTC(): { desde: string; ate: string } {
-  const ate = new Date().toISOString();
-  const desde = new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString();
+  const agora = Date.now();
+  const ate = new Date(agora + 15 * 60 * 1000).toISOString();
+  const desde = new Date(agora - 12 * 60 * 60 * 1000).toISOString();
   return { desde, ate };
 }
 
@@ -1113,7 +1119,7 @@ export async function getPedidosOnlinePendentes() {
     .eq('status', 'aguardando_aceite')
     .gte('created_at', desde)
     .lte('created_at', ate)
-    .order('created_at');
+    .order('created_at', { ascending: false });
   return (data ?? []) as any[];
 }
 
