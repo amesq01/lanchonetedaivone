@@ -1119,7 +1119,7 @@ export async function getPedidosOnlinePendentes() {
     .eq('status', 'aguardando_aceite')
     .gte('created_at', desde)
     .lte('created_at', ate)
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: true });
   return (data ?? []) as any[];
 }
 
