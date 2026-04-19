@@ -894,7 +894,25 @@ export async function updatePedidoItens(
 }
 
 const SELECT_PEDIDOS_COZINHA_KANBAN =
-  'id, numero, status, origem, tipo_entrega, cliente_nome, encerrado_em, updated_at, aceito_em, created_at, comanda_id, lancado_pelo_admin, pedido_itens(id, quantidade, observacao, produtos(id, nome, descricao, vai_para_cozinha)), comandas(nome_cliente, mesa_id, mesas(numero, nome), profiles(nome))';
+  'id, numero, status, origem, tipo_entrega, cliente_nome, encerrado_em, updated_at, aceito_em, created_at, comanda_id, lancado_pelo_admin, pedido_itens(id, quantidade, observacao, cozinha_preparado, produtos(id, nome, descricao, vai_para_cozinha)), comandas(nome_cliente, mesa_id, mesas(numero, nome), profiles(nome))';
+
+/** Cozinha: marca item como preparado (só com pedido em em_preparacao). */
+export async function setPedidoItemCozinhaPreparado(pedidoItemId: string, preparado: boolean) {
+  const { data: row, error: selErr } = await supabase
+    .from('pedido_itens')
+    .select('id, pedido_id')
+    .eq('id', pedidoItemId)
+    .maybeSingle();
+  if (selErr) throw selErr;
+  const item = row as { id: string; pedido_id: string } | null;
+  if (!item) throw new Error('Item não encontrado.');
+  const { data: ped, error: pedErr } = await supabase.from('pedidos').select('status').eq('id', item.pedido_id).maybeSingle();
+  if (pedErr) throw pedErr;
+  const status = (ped as { status: string } | null)?.status;
+  if (status !== 'em_preparacao') throw new Error('Só é possível marcar itens com o pedido em preparação.');
+  const { error } = await (supabase as any).from('pedido_itens').update({ cozinha_preparado: preparado }).eq('id', pedidoItemId);
+  if (error) throw error;
+}
 
 /**
  * Kanban cozinha: fila ativa (novo + em preparação) sem filtro de data — não compete com o limite de linhas do PostgREST.

@@ -121,6 +121,7 @@ CREATE TABLE IF NOT EXISTS pedido_itens (
   quantidade INT NOT NULL DEFAULT 1,
   valor_unitario DECIMAL(10,2) NOT NULL,
   observacao TEXT,
+  cozinha_preparado BOOLEAN NOT NULL DEFAULT false,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

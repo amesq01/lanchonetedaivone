@@ -164,9 +164,13 @@ export interface Database {
           quantidade: number;
           valor_unitario: number;
           observacao: string | null;
+          cozinha_preparado: boolean;
           created_at: string;
         };
-        Insert: Omit<Database['public']['Tables']['pedido_itens']['Row'], 'created_at'> & { created_at?: string };
+        Insert: Omit<Database['public']['Tables']['pedido_itens']['Row'], 'created_at' | 'cozinha_preparado'> & {
+          created_at?: string;
+          cozinha_preparado?: boolean;
+        };
         Update: Partial<Database['public']['Tables']['pedido_itens']['Insert']>;
       };
       notificacoes: {

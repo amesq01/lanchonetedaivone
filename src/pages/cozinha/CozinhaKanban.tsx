@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Inbox, ChefHat, CheckCircle } from 'lucide-react';
-import { getPedidosCozinha, updatePedidoStatus } from '../../lib/api';
+import { getPedidosCozinha, updatePedidoStatus, setPedidoItemCozinhaPreparado } from '../../lib/api';
 import { playSomNovoPedido, cozinhaSomInitOnFirstClick } from '../../lib/cozinhaSound';
 import { queryKeys } from '../../lib/queryClient';
 import { imprimirPedidoCozinhaRawBT } from '../../lib/rawbt';
@@ -87,6 +87,34 @@ export default function CozinhaKanban() {
     },
   });
 
+  const mutationItemPreparado = useMutation({
+    mutationFn: ({ pedidoItemId, preparado }: { pedidoItemId: string; preparado: boolean }) =>
+      setPedidoItemCozinhaPreparado(pedidoItemId, preparado),
+    onMutate: async ({ pedidoItemId, preparado }) => {
+      await queryClient.cancelQueries({ queryKey: queryKeys.pedidosCozinha });
+      const previous = queryClient.getQueryData<any[]>(queryKeys.pedidosCozinha);
+      queryClient.setQueryData(queryKeys.pedidosCozinha, (old: any[] | undefined) => {
+        if (!old) return old;
+        return old.map((ped) => ({
+          ...ped,
+          pedido_itens: (ped.pedido_itens ?? []).map((it: any) =>
+            it.id === pedidoItemId ? { ...it, cozinha_preparado: preparado } : it
+          ),
+        }));
+      });
+      return { previous };
+    },
+    onError: (e, _v, context) => {
+      if (context?.previous !== undefined) {
+        queryClient.setQueryData(queryKeys.pedidosCozinha, context.previous);
+      }
+      alert(e instanceof Error ? e.message : 'Erro ao atualizar item.');
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.pedidosCozinha });
+    },
+  });
+
   // No primeiro clique (som ativado por padrão), cria o contexto de áudio para o bip poder tocar
   useEffect(() => {
     const unlock = () => cozinhaSomInitOnFirstClick();
@@ -136,10 +164,29 @@ export default function CozinhaKanban() {
           </div>
         </div>
         <p className="text-sm text-stone-600">{nomeClienteEMesa(p)}</p>
-        <ul className="text-sm text-stone-500 mt-1">
-          {(p.pedido_itens ?? []).map((i: any) => (
-            <li key={i.id}>{i.quantidade}x {i.produtos?.nome || i.produtos?.descricao} {i.observacao ? ` (${i.observacao})` : ''}</li>
-          ))}
+        <ul className="mt-1 space-y-1 text-sm text-stone-500">
+          {(p.pedido_itens ?? []).map((i: any) => {
+            const texto = `${i.quantidade}x ${i.produtos?.nome || i.produtos?.descricao}${i.observacao ? ` (${i.observacao})` : ''}`;
+            const preparado = i.cozinha_preparado === true;
+            if (p.status === 'em_preparacao') {
+              return (
+                <li key={i.id} className="flex items-start gap-2">
+                  <input
+                    type="checkbox"
+                    checked={preparado}
+                    disabled={
+                      mutationItemPreparado.isPending && mutationItemPreparado.variables?.pedidoItemId === i.id
+                    }
+                    onChange={(e) => mutationItemPreparado.mutate({ pedidoItemId: i.id, preparado: e.target.checked })}
+                    className="mt-0.5 h-4 w-4 shrink-0 rounded border-stone-300 text-blue-600 focus:ring-blue-500"
+                    aria-label={preparado ? 'Desmarcar item preparado' : 'Marcar item como preparado'}
+                  />
+                  <span className={preparado ? 'text-stone-400 line-through' : ''}>{texto}</span>
+                </li>
+              );
+            }
+            return <li key={i.id}>{texto}</li>;
+          })}
         </ul>
         <div className="mt-2 flex gap-2">
           {p.status === 'novo_pedido' && (
