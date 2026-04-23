@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { ChevronDown, ChevronRight, Search } from 'lucide-react';
-import { getCategorias, getProdutos, saveProduto, updateProdutoAtivo, updateProdutoQuantidade } from '../../lib/api';
+import { getCategorias, getProdutos, saveProduto, updateProdutoAtivo, updateProdutoQuantidade, deleteProduto } from '../../lib/api';
 import { queryKeys } from '../../lib/queryClient';
 import type { ProdutoWithCategorias } from '../../types/database';
 import type { Categoria } from '../../types/database';
@@ -53,6 +53,21 @@ export default function AdminProdutos() {
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [editingQuantidade, setEditingQuantidade] = useState<Record<string, string>>({});
   const [savingQuantidadeId, setSavingQuantidadeId] = useState<string | null>(null);
+  const [confirmarExcluir, setConfirmarExcluir] = useState<ProdutoWithCategorias | null>(null);
+
+  const mutationExcluir = useMutation({
+    mutationFn: (id: string) => deleteProduto(id),
+    onSuccess: (_, id) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.produtos() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.produtosLojaOnline });
+      setConfirmarExcluir(null);
+      if (editing?.id === id) {
+        setOpen(false);
+        setEditing(null);
+      }
+    },
+    onError: (e) => alert(e instanceof Error ? e.message : 'Erro ao excluir produto.'),
+  });
 
   const { categoriasComProdutos, semCategoria } = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -345,7 +360,19 @@ export default function AdminProdutos() {
                             {(imagensProduto(p)[0]) ? <img src={imagensProduto(p)[0]} alt="" className="w-8 h-8 rounded object-cover" /> : <span className="text-stone-400 text-xs">—</span>}
                           </td>
                           <td className="px-4 py-2">
-                            <button onClick={() => openForm(p)} className="text-amber-600 hover:underline text-sm">Editar</button>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <button type="button" onClick={() => openForm(p)} className="text-amber-600 hover:underline text-sm">
+                                Editar
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setConfirmarExcluir(p)}
+                                disabled={mutationExcluir.isPending}
+                                className="text-red-600 hover:underline text-sm disabled:opacity-50"
+                              >
+                                Excluir
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -425,7 +452,19 @@ export default function AdminProdutos() {
                           {(imagensProduto(p)[0]) ? <img src={imagensProduto(p)[0]} alt="" className="w-8 h-8 rounded object-cover" /> : <span className="text-stone-400 text-xs">—</span>}
                         </td>
                         <td className="px-4 py-2">
-                          <button onClick={() => openForm(p)} className="text-amber-600 hover:underline text-sm">Editar</button>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <button type="button" onClick={() => openForm(p)} className="text-amber-600 hover:underline text-sm">
+                              Editar
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setConfirmarExcluir(p)}
+                              disabled={mutationExcluir.isPending}
+                              className="text-red-600 hover:underline text-sm disabled:opacity-50"
+                            >
+                              Excluir
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -442,6 +481,39 @@ export default function AdminProdutos() {
           <p className="rounded-xl bg-white p-6 text-center text-stone-500 shadow-sm border border-stone-200">Nenhum produto encontrado para &quot;{searchQuery}&quot;.</p>
         )}
       </div>
+
+      {confirmarExcluir && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl border border-stone-200">
+            <h3 className="font-semibold text-stone-800 mb-2">Excluir produto</h3>
+            <p className="text-sm text-stone-600 mb-4">
+              Tem certeza que deseja excluir permanentemente{' '}
+              <strong className="text-stone-800">
+                {confirmarExcluir.nome?.trim() || confirmarExcluir.descricao || 'este produto'}
+              </strong>{' '}
+              <span className="text-stone-500">(código {confirmarExcluir.codigo})</span>? Esta ação não pode ser desfeita. Produtos que já entraram em pedidos não podem ser excluídos.
+            </p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => mutationExcluir.mutate(confirmarExcluir.id)}
+                disabled={mutationExcluir.isPending}
+                className="flex-1 rounded-lg bg-red-600 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+              >
+                {mutationExcluir.isPending ? 'Excluindo...' : 'Sim, excluir'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmarExcluir(null)}
+                disabled={mutationExcluir.isPending}
+                className="rounded-lg border border-stone-300 px-4 py-2 text-sm text-stone-600 hover:bg-stone-50 disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">

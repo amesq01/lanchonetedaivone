@@ -683,6 +683,25 @@ export async function updateProdutoQuantidade(produtoId: string, quantidade: num
   if (error) throw error;
 }
 
+/**
+ * Remove o produto e vínculos em produto_categorias (CASCADE).
+ * Bloqueia se existir pedido_itens — evita apagar histórico de pedidos (FK CASCADE apagaria linhas de itens).
+ */
+export async function deleteProduto(produtoId: string): Promise<void> {
+  const { count, error: countErr } = await supabase
+    .from('pedido_itens')
+    .select('id', { count: 'exact', head: true })
+    .eq('produto_id', produtoId);
+  if (countErr) throw countErr;
+  if ((count ?? 0) > 0) {
+    throw new Error(
+      'Não é possível excluir este produto: ele já consta em pedidos. Inative-o ou ajuste o estoque em vez de excluir.'
+    );
+  }
+  const { error } = await supabase.from('produtos').delete().eq('id', produtoId);
+  if (error) throw error;
+}
+
 export async function nextPedidoNumero(): Promise<number> {
   const { data, error } = await supabase.rpc('next_pedido_numero');
   if (error) throw error;
