@@ -221,14 +221,15 @@ export default function CozinhaKanban() {
 
   const colunaKanban = (col: (typeof COLUNAS)[number]) => {
     const Icon = col.icon;
+    const listaColuna = porColuna(col.key);
     return (
       <div key={col.key} className="min-w-0 rounded-xl bg-stone-100 border border-stone-200 p-2 sm:p-4 flex flex-col min-h-0">
         <h3 className={`font-semibold mb-3 flex-shrink-0 flex items-center gap-2 rounded-lg border px-3 py-2 ${col.className}`}>
           <Icon className="h-5 w-5 flex-shrink-0" />
-          {col.label}
+          {col.label} ({listaColuna.length})
         </h3>
         <div className="flex-1 overflow-y-auto space-y-3 min-h-0">
-          {porColuna(col.key).map(pedidoCard)}
+          {listaColuna.map(pedidoCard)}
         </div>
       </div>
     );
@@ -244,7 +245,7 @@ export default function CozinhaKanban() {
             onClick={() => setAccordionFinalizadosAberto(!accordionFinalizadosAberto)}
             className="flex w-full items-center justify-between rounded-lg border border-stone-200 bg-stone-100 px-4 py-2 text-left font-medium text-stone-700"
           >
-            <span>Finalizado{finalizadosHoje.length ? ` (${finalizadosHoje.length})` : ''}</span>
+            <span>Finalizado ({finalizadosHoje.length})</span>
             <span>{accordionFinalizadosAberto ? '−' : '+'}</span>
           </button>
           {accordionFinalizadosAberto && (
