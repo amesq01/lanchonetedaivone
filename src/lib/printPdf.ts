@@ -1,10 +1,8 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import QRCode from 'qrcode';
+import { buildPixCopiaCola } from './pixEmv';
 
-/** Código PIX Copia e Cola (EMV) */
-const PIX_CODIGO =
-  '00020101021126580014br.gov.bcb.pix013627ed7096-d278-4665-9370-ddc18aea9c805204000053039865802BR5925JOAO BATISTA DE SOUSA MES6009SAO PAULO622905251KRVYGPT6K64YQE14P6SSWY2B6304DD53';
 const PIX_NOME = 'Joao Batista De Sousa Mesquita';
 const QR_SIZE_MM = 30;
 
@@ -29,9 +27,10 @@ function createDoc(): jsPDF {
   return doc;
 }
 
-/** Gera QR code PIX a partir do código e adiciona nome da titular abaixo. Retorna o y final. */
-async function addPixQrCode(doc: jsPDF, y: number): Promise<number> {
-  const dataUrl = await QRCode.toDataURL(PIX_CODIGO, { width: 400, margin: 1 });
+/** Gera QR code PIX; se `valorReais` > 0, o Copia e Cola inclui o total (campo EMV 54). */
+async function addPixQrCode(doc: jsPDF, y: number, valorReais?: number): Promise<number> {
+  const pixCodigo = buildPixCopiaCola(valorReais);
+  const dataUrl = await QRCode.toDataURL(pixCodigo, { width: 400, margin: 1 });
   const qrX = (PAPER_WIDTH_MM - QR_SIZE_MM) / 2;
   doc.addImage(dataUrl, 'PNG', qrX, y, QR_SIZE_MM, QR_SIZE_MM);
   y += QR_SIZE_MM + 4;
@@ -65,9 +64,9 @@ function addPedidoPagoStamp(doc: jsPDF, y: number): number {
 }
 
 /** Troca só o QR PIX (e linha da titular) pelo selo; não altera o corpo do comprovante acima. */
-async function addPixOuPedidoPago(doc: jsPDF, y: number, pedidoPago?: boolean): Promise<number> {
+async function addPixOuPedidoPago(doc: jsPDF, y: number, pedidoPago?: boolean, valorReais?: number): Promise<number> {
   if (pedidoPago) return addPedidoPagoStamp(doc, y);
-  return addPixQrCode(doc, y);
+  return addPixQrCode(doc, y, valorReais);
 }
 
 function addFooter(doc: jsPDF, y: number) {
@@ -299,7 +298,7 @@ export async function printContaMesa(opts: {
   doc.text(`R$ ${totalNaLinhaFinal.toFixed(2)}`, VALORES_RIGHT_MM, y, { align: 'right' });
   y += 12;
 
-  y = await addPixQrCode(doc, y);
+  y = await addPixQrCode(doc, y, totalNaLinhaFinal);
   addFooter(doc, y);
   printTarget.open(doc);
 }
@@ -390,7 +389,7 @@ export async function printContaViagem(opts: {
   if (opts.valorManual > 0) linhasViagem.push({ label: 'Desconto:', valor: `- R$ ${opts.valorManual.toFixed(2)}` });
   if ((opts.taxaEntrega ?? 0) > 0) linhasViagem.push({ label: 'Taxa de entrega:', valor: `R$ ${(opts.taxaEntrega ?? 0).toFixed(2)}` });
   y = addTotaisSection(doc, y, opts.subtotal, opts.total, linhasViagem);
-  y = await addPixOuPedidoPago(doc, y, opts.pedidoPago);
+  y = await addPixOuPedidoPago(doc, y, opts.pedidoPago, opts.total);
   addFooter(doc, y);
   printTarget.open(doc);
 }
@@ -502,7 +501,7 @@ export async function printPedido(
   if (desconto > 0) linhasExtra.push({ label: 'Desconto:', valor: `- R$ ${desconto.toFixed(2)}` });
   if (taxa > 0) linhasExtra.push({ label: 'Taxa entrega:', valor: `R$ ${taxa.toFixed(2)}` });
   y = addTotaisSection(doc, y, subtotal, total, linhasExtra);
-  y = await addPixOuPedidoPago(doc, y, Boolean(pedido.pedido_pago));
+  y = await addPixOuPedidoPago(doc, y, Boolean(pedido.pedido_pago), total);
   addFooter(doc, y);
   printTarget.open(doc);
 }
@@ -599,7 +598,7 @@ export async function printPedidosUnificados(pedidos: PedidoParaImpressao[], tit
   doc.text('TOTAL GERAL:', MARGIN_MM, y);
   doc.text(`R$ ${totalGeral.toFixed(2)}`, VALORES_RIGHT_MM, y, { align: 'right' });
   y += 12;
-  y = await addPixQrCode(doc, y);
+  y = await addPixQrCode(doc, y, totalGeral);
   addFooter(doc, y);
   printTarget.open(doc);
 }
@@ -704,7 +703,7 @@ export async function printPedidoEntrega(pedido: {
   if (desconto > 0) linhasEntrega.push({ label: 'Desconto:', valor: `- R$ ${desconto.toFixed(2)}` });
   if (taxa > 0) linhasEntrega.push({ label: 'Taxa entrega:', valor: `R$ ${taxa.toFixed(2)}` });
   y = addTotaisSection(doc, y, subtotal, total, linhasEntrega);
-  y = await addPixQrCode(doc, y);
+  y = await addPixQrCode(doc, y, total);
   addFooter(doc, y);
   printTarget.open(doc);
 }
