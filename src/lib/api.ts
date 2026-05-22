@@ -913,7 +913,7 @@ export async function updatePedidoItens(
 }
 
 const SELECT_PEDIDOS_COZINHA_KANBAN =
-  'id, numero, status, origem, tipo_entrega, cliente_nome, encerrado_em, updated_at, aceito_em, created_at, comanda_id, lancado_pelo_admin, pedido_itens(id, quantidade, observacao, cozinha_preparado, produtos(id, nome, descricao, vai_para_cozinha)), comandas(nome_cliente, mesa_id, mesas(numero, nome), profiles(nome))';
+  'id, numero, status, origem, tipo_entrega, cliente_nome, observacoes, encerrado_em, updated_at, aceito_em, created_at, comanda_id, lancado_pelo_admin, pedido_itens(id, quantidade, observacao, cozinha_preparado, produtos(id, nome, descricao, vai_para_cozinha)), comandas(nome_cliente, mesa_id, mesas(numero, nome), profiles(nome))';
 
 /** Cozinha: marca item como preparado (só com pedido em em_preparacao). */
 export async function setPedidoItemCozinhaPreparado(pedidoItemId: string, preparado: boolean) {

@@ -17,7 +17,7 @@ type PedidoCozinha = {
   tipo_entrega?: string | null;
   created_at?: string;
   cliente_nome?: string | null;
-  ponto_referencia?: string | null;
+  observacoes?: string | null;
   // Usado pela tela
   comandas?: {
     nome_cliente?: string | null;
@@ -90,7 +90,7 @@ function buildPedidoCozinhaTexto(pedido: PedidoCozinha): string {
   lines.push(origemLocal);
   lines.push(`Cliente: ${cliente}`);
   if (atendente) lines.push(`Atendente: ${atendente}`);
-  if (pedido.ponto_referencia) lines.push(`Ref: ${safeStr(pedido.ponto_referencia)}`);
+  if (pedido.observacoes?.trim()) lines.push(`Obs. pedido: ${safeStr(pedido.observacoes).trim()}`);
   lines.push('----------------------------');
   if (itens.length) lines.push(...itens);
   else lines.push('(sem itens para cozinha)');
