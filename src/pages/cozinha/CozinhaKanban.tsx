@@ -164,11 +164,6 @@ export default function CozinhaKanban() {
           </div>
         </div>
         <p className="text-sm text-stone-600">{nomeClienteEMesa(p)}</p>
-        {p.observacoes?.trim() && (
-          <p className="mt-1 text-sm text-amber-900">
-            <span className="font-medium text-stone-700">Obs. pedido:</span> {p.observacoes.trim()}
-          </p>
-        )}
         <ul className="mt-1 space-y-1 text-sm text-stone-500">
           {(p.pedido_itens ?? []).map((i: any) => {
             const texto = `${i.quantidade}x ${i.produtos?.nome || i.produtos?.descricao}${i.observacao ? ` (${i.observacao})` : ''}`;
@@ -218,6 +213,11 @@ export default function CozinhaKanban() {
             </button>
           )}
         </div>
+        {p.observacoes?.trim() && (
+          <p className="mt-2 text-sm font-medium text-red-600 break-words">
+            OBS: &quot;{p.observacoes.trim()}&quot;
+          </p>
+        )}
       </div>
     );
   };
