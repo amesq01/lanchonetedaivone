@@ -728,52 +728,27 @@ function agruparItensPorProduto(itens: { produto_id: string; quantidade: number 
 }
 
 /**
- * Decrementa estoque dos produtos ao lançar pedido.
+ * Decrementa estoque dos produtos ao lançar pedido (RPC SECURITY DEFINER — funciona no checkout anônimo).
  * Se quantidade ficar negativa, lança erro.
  * Se quantidade chegar a 0, marca produto como inativo (ativo = false).
  */
 export async function decrementarEstoque(itens: { produto_id: string; quantidade: number }[]) {
   if (itens.length === 0) return;
   const porProduto = agruparItensPorProduto(itens);
-  const ids = Object.keys(porProduto);
-  const { data: produtos, error: err } = await supabase.from('produtos').select('id, nome, quantidade').in('id', ids);
-  if (err) throw err;
-  const lista = (produtos ?? []) as { id: string; nome: string | null; quantidade: number }[];
-  const byId: Record<string, { nome: string | null; quantidade: number }> = {};
-  lista.forEach((p) => { byId[p.id] = { nome: p.nome, quantidade: Number(p.quantidade) ?? 0 }; });
-  for (const produtoId of ids) {
-    const atual = byId[produtoId]?.quantidade ?? 0;
-    const pedido = porProduto[produtoId] ?? 0;
-    if (atual < pedido) {
-      const nome = byId[produtoId]?.nome ?? 'Produto';
-      throw new Error(`${nome} sem estoque suficiente. Disponível: ${atual}.`);
-    }
-  }
-  const now = new Date().toISOString();
-  for (const produtoId of ids) {
-    const qty = porProduto[produtoId];
-    const atual = byId[produtoId]?.quantidade ?? 0;
-    const novaQtd = Math.max(0, atual - qty);
-    await (supabase as any).from('produtos').update({ quantidade: novaQtd, ativo: novaQtd > 0, updated_at: now }).eq('id', produtoId);
-  }
+  const p_itens = Object.entries(porProduto).map(([produto_id, quantidade]) => ({
+    produto_id,
+    quantidade,
+  }));
+  const { error } = await supabase.rpc('decrementar_estoque_itens', { p_itens });
+  if (error) throw new Error(error.message ?? 'Erro ao atualizar estoque.');
 }
 
 /**
- * Restaura estoque ao cancelar pedido: soma as quantidades dos itens de volta ao produto e reativa (ativo = true) se voltar a ter quantidade.
+ * Restaura estoque ao cancelar pedido: soma as quantidades dos itens de volta ao produto e reativa (ativo = true).
  */
 export async function restaurarEstoque(pedidoId: string) {
-  const { data: itens, error } = await supabase.from('pedido_itens').select('produto_id, quantidade').eq('pedido_id', pedidoId);
+  const { error } = await supabase.rpc('restaurar_estoque_pedido', { p_pedido_id: pedidoId });
   if (error) throw error;
-  if (!itens?.length) return;
-  const porProduto = agruparItensPorProduto(itens as { produto_id: string; quantidade: number }[]);
-  const now = new Date().toISOString();
-  for (const produtoId of Object.keys(porProduto)) {
-    const qty = porProduto[produtoId];
-    const { data: row } = await supabase.from('produtos').select('quantidade').eq('id', produtoId).single();
-    const atual = (row as { quantidade: number } | null) ? Number((row as any).quantidade) : 0;
-    const novaQtd = atual + qty;
-    await (supabase as any).from('produtos').update({ quantidade: novaQtd, ativo: true, updated_at: now }).eq('id', produtoId);
-  }
 }
 
 export async function createPedidoPresencial(
