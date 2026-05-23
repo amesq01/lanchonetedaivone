@@ -12,6 +12,7 @@ function invalidatePedidoQueries(queryClient: QueryClient) {
   queryClient.invalidateQueries({ queryKey: queryKeys.mesasDashboard });
   queryClient.invalidateQueries({ queryKey: ['mesa-detail'] });
   queryClient.invalidateQueries({ queryKey: ['admin-mesa-detail'] });
+  queryClient.invalidateQueries({ queryKey: queryKeys.produtosEstoqueBaixo });
 }
 
 function debouncedInvalidatePedidos(queryClient: QueryClient) {
@@ -65,6 +66,11 @@ export function subscribePedidosAndComandasRealtime(queryClient: QueryClient): (
       'postgres_changes',
       { event: '*', schema: 'public', table: 'comandas' },
       scheduleComandas
+    )
+    .on(
+      'postgres_changes',
+      { event: 'UPDATE', schema: 'public', table: 'produtos' },
+      () => queryClient.invalidateQueries({ queryKey: queryKeys.produtosEstoqueBaixo })
     )
     .subscribe();
 

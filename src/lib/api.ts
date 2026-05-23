@@ -599,6 +599,36 @@ export async function getCategorias() {
   return (data ?? []) as Database['public']['Tables']['categorias']['Row'][];
 }
 
+/** Limite (unidades) para aviso de estoque baixo no admin. */
+export const ESTOQUE_BAIXO_LIMITE = 4;
+
+export type ProdutoEstoqueBaixo = {
+  id: string;
+  codigo: string;
+  nome: string;
+  quantidade: number;
+};
+
+/** Produtos ativos com quantidade menor que o limite (padrão: 4). */
+export async function getProdutosEstoqueBaixo(limite = ESTOQUE_BAIXO_LIMITE): Promise<ProdutoEstoqueBaixo[]> {
+  const { data, error } = await supabase
+    .from('produtos')
+    .select('id, codigo, nome, descricao, quantidade')
+    .eq('ativo', true)
+    .lt('quantidade', limite)
+    .order('quantidade', { ascending: true })
+    .order('codigo', { ascending: true });
+  if (error) throw error;
+  return ((data ?? []) as { id: string; codigo: string; nome: string | null; descricao: string; quantidade: number }[]).map(
+    (p) => ({
+      id: p.id,
+      codigo: p.codigo,
+      nome: p.nome?.trim() || p.descricao || p.codigo,
+      quantidade: Number(p.quantidade) ?? 0,
+    })
+  );
+}
+
 export async function getProdutos(ativoOnly = false): Promise<ProdutoWithCategorias[]> {
   let q = supabase
     .from('produtos')

@@ -6,6 +6,7 @@ import { queryKeys } from '../lib/queryClient';
 import { subscribePedidosAndComandasRealtime } from '../lib/supabaseRealtime';
 import { getAdminSidebarCounts } from '../lib/api';
 import { useNovoPedidoOnline } from '../hooks/useNovoPedidoOnline';
+import AdminEstoqueBaixoBanner from '../components/admin/AdminEstoqueBaixoBanner';
 import { getLanchoneteAberta, setLanchoneteAberta as setLanchoneteAbertaApi, getLojaOnlineSoRetirada, setLojaOnlineSoRetirada as setLojaOnlineSoRetiradaApi, getLojaOnlineAgendaAbertura, setLojaOnlineAgendaAbertura as setLojaOnlineAgendaAberturaApi, getLojaOnlineFormasPagamento, setLojaOnlineFormasPagamento as setLojaOnlineFormasPagamentoApi } from '../lib/api';
 import {
   UtensilsCrossed,
@@ -470,6 +471,7 @@ export default function AdminLayout() {
           </NavLink>
         </div>
         <div className="flex-1 p-3 sm:p-4 lg:p-6 lg:pl-4 min-w-0">
+          <AdminEstoqueBaixoBanner />
           <Outlet />
         </div>
       </main>

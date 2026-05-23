@@ -7,6 +7,7 @@ export const queryKeys = {
   pedidosCozinha: ['pedidos-cozinha'] as const,
   adminSidebarCounts: ['admin-sidebar-counts'] as const,
   produtos: (ativoOnly?: boolean) => (ativoOnly === undefined ? ['produtos'] as const : ['produtos', { ativoOnly }] as const),
+  produtosEstoqueBaixo: ['produtos-estoque-baixo'] as const,
   /** Catálogo completo da loja (incl. sem estoque / inativos) para máscara de indisponível. */
   produtosLojaOnline: ['produtos', 'loja-online-catalogo'] as const,
   categorias: ['categorias'] as const,

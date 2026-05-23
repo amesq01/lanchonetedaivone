@@ -60,6 +60,7 @@ export default function AdminProdutos() {
     onSuccess: (_, id) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.produtos() });
       queryClient.invalidateQueries({ queryKey: queryKeys.produtosLojaOnline });
+      queryClient.invalidateQueries({ queryKey: queryKeys.produtosEstoqueBaixo });
       setConfirmarExcluir(null);
       if (editing?.id === id) {
         setOpen(false);
@@ -127,6 +128,7 @@ export default function AdminProdutos() {
     try {
       await updateProdutoAtivo(p.id, novoAtivo);
       queryClient.invalidateQueries({ queryKey: queryKeys.produtos() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.produtosEstoqueBaixo });
     } catch {
       // mantém estado atual; poderia mostrar toast
     } finally {
@@ -156,6 +158,7 @@ export default function AdminProdutos() {
     try {
       await updateProdutoQuantidade(p.id, qtd);
       queryClient.invalidateQueries({ queryKey: queryKeys.produtos() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.produtosEstoqueBaixo });
     } catch {
       setEditingQuantidade((prev) => ({ ...prev, [p.id]: raw }));
     } finally {
@@ -235,6 +238,7 @@ export default function AdminProdutos() {
         categoria_ids: categoriaIds,
       });
       queryClient.invalidateQueries({ queryKey: queryKeys.produtos() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.produtosEstoqueBaixo });
       setOpen(false);
     } finally {
       setSubmitting(false);
