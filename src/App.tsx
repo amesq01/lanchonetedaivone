@@ -21,8 +21,10 @@ const AdminViagem = lazy(() => import('./pages/admin/Viagem'));
 const AdminPedidosOnline = lazy(() => import('./pages/admin/PedidosOnline'));
 const AdminCozinha = lazy(() => import('./pages/admin/Cozinha'));
 const AdminRelatorioFinanceiro = lazy(() => import('./pages/admin/RelatorioFinanceiro'));
+const AdminCaixa = lazy(() => import('./pages/admin/Caixa'));
 const AdminRelatorioCancelamentos = lazy(() => import('./pages/admin/RelatorioCancelamentos'));
 const AdminProdutividade = lazy(() => import('./pages/admin/Produtividade'));
+const AdminCmv = lazy(() => import('./pages/admin/Cmv'));
 
 const CozinhaLayout = lazy(() => import('./layouts/CozinhaLayout'));
 const CozinhaKanban = lazy(() => import('./pages/cozinha/CozinhaKanban'));
@@ -75,8 +77,10 @@ export default function App() {
           <Route path="cupons" element={<AdminCupons />} />
           <Route path="taxa-entrega" element={<AdminTaxaEntrega />} />
           <Route path="relatorio-financeiro" element={<AdminRelatorioFinanceiro />} />
+          <Route path="caixa" element={<AdminCaixa />} />
           <Route path="produtividade" element={<AdminProdutividade />} />
           <Route path="relatorio-cancelamentos" element={<AdminRelatorioCancelamentos />} />
+          <Route path="cmv" element={<AdminCmv />} />
         </Route>
 
         <Route path="/pdv" element={<ProtectedRoute><AtendenteLayout /></ProtectedRoute>}>

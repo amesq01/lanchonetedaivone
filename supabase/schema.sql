@@ -132,6 +132,48 @@ CREATE INDEX IF NOT EXISTS idx_pedidos_comanda ON pedidos(comanda_id);
 CREATE INDEX IF NOT EXISTS idx_pedidos_origem ON pedidos(origem);
 CREATE INDEX IF NOT EXISTS idx_pedido_itens_pedido ON pedido_itens(pedido_id);
 
+-- CMV: insumos e ficha técnica
+CREATE TABLE IF NOT EXISTS insumos (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  nome TEXT NOT NULL,
+  unidade TEXT NOT NULL CHECK (unidade IN ('un', 'kg', 'g', 'L', 'ml')),
+  custo_unitario DECIMAL(10, 4) NOT NULL DEFAULT 0,
+  ativo BOOLEAN NOT NULL DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS produto_insumos (
+  produto_id UUID NOT NULL REFERENCES produtos(id) ON DELETE CASCADE,
+  insumo_id UUID NOT NULL REFERENCES insumos(id) ON DELETE RESTRICT,
+  quantidade DECIMAL(12, 4) NOT NULL CHECK (quantidade > 0),
+  PRIMARY KEY (produto_id, insumo_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_produto_insumos_insumo ON produto_insumos(insumo_id);
+
+-- Fluxo de caixa (saídas manuais; entradas = vendas por encerrado_em)
+CREATE TABLE IF NOT EXISTS caixa_categorias (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  nome TEXT NOT NULL UNIQUE,
+  ordem INT NOT NULL DEFAULT 0,
+  ativo BOOLEAN NOT NULL DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS caixa_saidas (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  categoria_id UUID NOT NULL REFERENCES caixa_categorias(id) ON DELETE RESTRICT,
+  data DATE NOT NULL,
+  valor DECIMAL(12, 2) NOT NULL CHECK (valor > 0),
+  descricao TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_caixa_saidas_data ON caixa_saidas(data);
+CREATE INDEX IF NOT EXISTS idx_caixa_saidas_categoria ON caixa_saidas(categoria_id);
+
 -- Função auxiliar para RLS: retorna a role do usuário atual sem causar recursão nas políticas
 -- SECURITY DEFINER = roda com privilégios do dono, não passa pelo RLS de profiles
 CREATE OR REPLACE FUNCTION public.get_my_profile_role()
@@ -153,6 +195,10 @@ ALTER TABLE produtos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE cupons ENABLE ROW LEVEL SECURITY;
 ALTER TABLE pedidos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE pedido_itens ENABLE ROW LEVEL SECURITY;
+ALTER TABLE insumos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE produto_insumos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE caixa_categorias ENABLE ROW LEVEL SECURITY;
+ALTER TABLE caixa_saidas ENABLE ROW LEVEL SECURITY;
 
 -- Políticas: admin e atendente leem/escrevem; anônimo só lê produtos (loja online)
 -- Usar get_my_profile_role() evita recursão infinita (policy em profiles que lia profiles)
@@ -172,6 +218,10 @@ CREATE POLICY "Pedidos online select" ON pedidos FOR SELECT USING (origem = 'onl
 CREATE POLICY "Pedido itens staff" ON pedido_itens FOR ALL USING (public.get_my_profile_role() IS NOT NULL);
 CREATE POLICY "Pedido itens insert online" ON pedido_itens FOR INSERT WITH CHECK (EXISTS (SELECT 1 FROM pedidos p WHERE p.id = pedido_id AND p.origem = 'online'));
 CREATE POLICY "Pedido itens select" ON pedido_itens FOR SELECT USING (EXISTS (SELECT 1 FROM pedidos p WHERE p.id = pedido_id AND p.origem = 'online'));
+CREATE POLICY "insumos staff full" ON insumos FOR ALL USING (public.get_my_profile_role() IS NOT NULL);
+CREATE POLICY "produto_insumos staff full" ON produto_insumos FOR ALL USING (public.get_my_profile_role() IS NOT NULL);
+CREATE POLICY "caixa_categorias staff full" ON caixa_categorias FOR ALL USING (public.get_my_profile_role() IS NOT NULL);
+CREATE POLICY "caixa_saidas staff full" ON caixa_saidas FOR ALL USING (public.get_my_profile_role() IS NOT NULL);
 
 -- Função para próximo número de pedido
 CREATE OR REPLACE FUNCTION next_pedido_numero()

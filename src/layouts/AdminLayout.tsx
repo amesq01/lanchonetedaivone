@@ -18,8 +18,10 @@ import {
   Bike,
   LogOut,
   BarChart3,
+  Wallet,
   TrendingUp,
   FileX,
+  Calculator,
   Menu,
   X,
   ChevronDown,
@@ -38,8 +40,10 @@ const nav = [
   { to: '/admin/cupons', label: 'Cupons', icon: Ticket },
   { to: '/admin/taxa-entrega', label: 'Taxa Entrega', icon: Bike },
   { to: '/admin/relatorio-financeiro', label: 'Rel. Financeiro', icon: BarChart3 },
+  { to: '/admin/caixa', label: 'Fluxo de Caixa', icon: Wallet },
   { to: '/admin/produtividade', label: 'Produtividade', icon: TrendingUp },
   { to: '/admin/relatorio-cancelamentos', label: 'Rel. Cancelamentos', icon: FileX },
+  { to: '/admin/cmv', label: 'CMV', icon: Calculator },
   { label: 'Configurações', icon: Settings, isModal: true as const },
 ];
 

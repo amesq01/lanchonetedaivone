@@ -173,6 +173,63 @@ export interface Database {
         };
         Update: Partial<Database['public']['Tables']['pedido_itens']['Insert']>;
       };
+      insumos: {
+        Row: {
+          id: string;
+          nome: string;
+          unidade: 'un' | 'kg' | 'g' | 'L' | 'ml';
+          custo_unitario: number;
+          ativo: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<Database['public']['Tables']['insumos']['Row'], 'id' | 'created_at' | 'updated_at'> & {
+          id?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database['public']['Tables']['insumos']['Insert']>;
+      };
+      produto_insumos: {
+        Row: {
+          produto_id: string;
+          insumo_id: string;
+          quantidade: number;
+        };
+        Insert: Database['public']['Tables']['produto_insumos']['Row'];
+        Update: Partial<Database['public']['Tables']['produto_insumos']['Insert']>;
+      };
+      caixa_categorias: {
+        Row: {
+          id: string;
+          nome: string;
+          ordem: number;
+          ativo: boolean;
+          created_at: string;
+        };
+        Insert: Omit<Database['public']['Tables']['caixa_categorias']['Row'], 'id' | 'created_at'> & {
+          id?: string;
+          created_at?: string;
+        };
+        Update: Partial<Database['public']['Tables']['caixa_categorias']['Insert']>;
+      };
+      caixa_saidas: {
+        Row: {
+          id: string;
+          categoria_id: string;
+          data: string;
+          valor: number;
+          descricao: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<Database['public']['Tables']['caixa_saidas']['Row'], 'id' | 'created_at' | 'updated_at'> & {
+          id?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database['public']['Tables']['caixa_saidas']['Insert']>;
+      };
       notificacoes: {
         Row: {
           id: string;
@@ -202,6 +259,13 @@ export type Categoria = Database['public']['Tables']['categorias']['Row'];
 export type ProdutoCategoria = Database['public']['Tables']['produto_categorias']['Row'];
 export type Produto = Database['public']['Tables']['produtos']['Row'];
 export type Cupom = Database['public']['Tables']['cupons']['Row'];
+export type Insumo = Database['public']['Tables']['insumos']['Row'];
+export type ProdutoInsumo = Database['public']['Tables']['produto_insumos']['Row'];
+export type CaixaCategoria = Database['public']['Tables']['caixa_categorias']['Row'];
+export type CaixaSaida = Database['public']['Tables']['caixa_saidas']['Row'];
+
+export const UNIDADES_INSUMO = ['un', 'kg', 'g', 'L', 'ml'] as const;
+export type UnidadeInsumo = (typeof UNIDADES_INSUMO)[number];
 
 /** Produto com categorias (via produto_categorias). categorias é array de { id, nome }. */
 export type ProdutoWithCategorias = Produto & {

@@ -21,6 +21,12 @@ export const queryKeys = {
   atendentes: ['atendentes'] as const,
   cupons: ['cupons'] as const,
   configTaxaEntrega: ['config', 'taxa_entrega'] as const,
+  insumos: ['insumos'] as const,
+  fichaTecnica: (produtoId: string) => ['ficha-tecnica', produtoId] as const,
+  relatorioCmv: (desde: string, ate: string) => ['relatorio-cmv', desde, ate] as const,
+  caixaCategorias: ['caixa-categorias'] as const,
+  caixaSaidas: (desde: string, ate: string) => ['caixa-saidas', desde, ate] as const,
+  relatorioFluxoCaixa: (desde: string, ate: string) => ['relatorio-fluxo-caixa', desde, ate] as const,
 } as const;
 
 export const queryClient = new QueryClient({

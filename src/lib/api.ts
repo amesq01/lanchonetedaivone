@@ -1796,3 +1796,36 @@ export function subscribeToNotificacoesAtendente(
     supabase.removeChannel(channel);
   };
 }
+
+export {
+  getInsumos,
+  saveInsumo,
+  deleteInsumo,
+  getFichaTecnicaProduto,
+  saveFichaTecnicaProduto,
+  calcularCustoFicha,
+  getRelatorioCmv,
+  margemTeoricaProduto,
+} from './cmv';
+export type {
+  InsumoRow,
+  FichaTecnicaLinha,
+  CmvPorProduto,
+  CmvPorCategoria,
+  CmvPorOrigem,
+  RelatorioCmv,
+} from './cmv';
+
+export {
+  getCaixaCategorias,
+  saveCaixaCategoria,
+  deleteCaixaCategoria,
+  getCaixaSaidas,
+  saveCaixaSaida,
+  deleteCaixaSaida,
+  getRelatorioFluxoCaixa,
+  calcularEntradasVendas,
+  utcRangeToBrDateBounds,
+} from './caixa';
+export { buildBrPeriodUtcRange, datetimeLocalBrToUtcIso } from './reportDatePresets';
+export type { CaixaCategoriaRow, CaixaSaidaRow, FluxoPorCategoria, RelatorioFluxoCaixa } from './caixa';
