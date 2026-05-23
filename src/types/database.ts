@@ -246,7 +246,24 @@ export interface Database {
       };
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      next_pedido_numero: {
+        Args: Record<PropertyKey, never>;
+        Returns: number;
+      };
+      decrementar_estoque_itens: {
+        Args: {
+          p_itens: Json;
+        };
+        Returns: null;
+      };
+      restaurar_estoque_pedido: {
+        Args: {
+          p_pedido_id: string;
+        };
+        Returns: null;
+      };
+    };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
   };

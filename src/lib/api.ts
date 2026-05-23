@@ -769,7 +769,7 @@ export async function decrementarEstoque(itens: { produto_id: string; quantidade
     produto_id,
     quantidade,
   }));
-  const { error } = await supabase.rpc('decrementar_estoque_itens', { p_itens });
+  const { error } = await (supabase as any).rpc('decrementar_estoque_itens', { p_itens });
   if (error) throw new Error(error.message ?? 'Erro ao atualizar estoque.');
 }
 
@@ -777,7 +777,7 @@ export async function decrementarEstoque(itens: { produto_id: string; quantidade
  * Restaura estoque ao cancelar pedido: soma as quantidades dos itens de volta ao produto e reativa (ativo = true).
  */
 export async function restaurarEstoque(pedidoId: string) {
-  const { error } = await supabase.rpc('restaurar_estoque_pedido', { p_pedido_id: pedidoId });
+  const { error } = await (supabase as any).rpc('restaurar_estoque_pedido', { p_pedido_id: pedidoId });
   if (error) throw error;
 }
 
