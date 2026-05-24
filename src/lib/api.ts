@@ -1597,14 +1597,15 @@ export type ProdutividadeProduto = {
   produtoId: string;
   nome: string;
   quantidade: number;
+  online: number;
+  naCasa: number;
 };
 
 export type ProdutividadePorCategoria = {
   categoriaId: string;
   categoriaNome: string;
   ordem: number;
-  produtosOnline: ProdutividadeProduto[];
-  produtosNaCasa: ProdutividadeProduto[];
+  produtos: ProdutividadeProduto[];
 };
 
 function emptyProdutividadePorCategoria(c: { id: string; nome: string; ordem: number }): ProdutividadePorCategoria {
@@ -1612,8 +1613,7 @@ function emptyProdutividadePorCategoria(c: { id: string; nome: string; ordem: nu
     categoriaId: c.id,
     categoriaNome: c.nome,
     ordem: c.ordem,
-    produtosOnline: [],
-    produtosNaCasa: [],
+    produtos: [],
   };
 }
 
@@ -1672,23 +1672,22 @@ export async function getProdutividade(desde: string, ate: string): Promise<{
   }
 
   const porCategoria: ProdutividadePorCategoria[] = categorias.map((c) => {
-    const produtosOnline: ProdutividadeProduto[] = [];
-    const produtosNaCasa: ProdutividadeProduto[] = [];
+    const produtos: ProdutividadeProduto[] = [];
     for (const [produtoId, info] of Object.entries(produtoPorId)) {
       if (!info.categoriaIds.includes(c.id)) continue;
-      const qOn = qtdOnline[produtoId] ?? 0;
-      const qCasa = qtdNaCasa[produtoId] ?? 0;
-      if (qOn > 0) produtosOnline.push({ produtoId, nome: info.nome, quantidade: qOn });
-      if (qCasa > 0) produtosNaCasa.push({ produtoId, nome: info.nome, quantidade: qCasa });
+      const online = qtdOnline[produtoId] ?? 0;
+      const naCasa = qtdNaCasa[produtoId] ?? 0;
+      const quantidade = online + naCasa;
+      if (quantidade > 0) {
+        produtos.push({ produtoId, nome: info.nome, quantidade, online, naCasa });
+      }
     }
-    produtosOnline.sort((a, b) => b.quantidade - a.quantidade);
-    produtosNaCasa.sort((a, b) => b.quantidade - a.quantidade);
+    produtos.sort((a, b) => b.quantidade - a.quantidade);
     return {
       categoriaId: c.id,
       categoriaNome: c.nome,
       ordem: c.ordem,
-      produtosOnline,
-      produtosNaCasa,
+      produtos,
     };
   });
   return { totalPedidos, porCategoria };
