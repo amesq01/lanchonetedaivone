@@ -107,8 +107,8 @@ function PeriodoFiltros({
 }
 
 function FluxoTab() {
-  const [desdeDateTime, setDesdeDateTime] = useState(() => presetMes().desde);
-  const [ateDateTime, setAteDateTime] = useState(() => presetMes().ate);
+  const [desdeDateTime, setDesdeDateTime] = useState(() => presetDia().desde);
+  const [ateDateTime, setAteDateTime] = useState(() => presetDia().ate);
   const [dados, setDados] = useState<RelatorioFluxoCaixa | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -222,8 +222,8 @@ function FluxoTab() {
 
 function SaidasTab() {
   const queryClient = useQueryClient();
-  const [desdeDateTime, setDesdeDateTime] = useState(() => presetMes().desde);
-  const [ateDateTime, setAteDateTime] = useState(() => presetMes().ate);
+  const [desdeDateTime, setDesdeDateTime] = useState(() => presetDia().desde);
+  const [ateDateTime, setAteDateTime] = useState(() => presetDia().ate);
   const [utcRange, setUtcRange] = useState<{ desde: string; ate: string } | null>(null);
   const [modal, setModal] = useState<CaixaSaidaRow | null | 'novo'>(null);
   const [erro, setErro] = useState('');
