@@ -3,7 +3,7 @@ import { ChevronDown, ChevronRight } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { getProdutividade, getRelatorioFinanceiro } from '../../lib/api';
-import type { ProdutividadePorCategoria } from '../../lib/api';
+import type { ProdutividadePorCategoria, ProdutividadeProduto } from '../../lib/api';
 
 const TIMEZONE_BR = 'America/Sao_Paulo';
 
@@ -189,20 +189,24 @@ export default function AdminProdutividade() {
       y += 6;
     }
 
-    const linhasProdutos: Array<[string, string, string]> = [];
+    const linhasProdutos: Array<[string, string, string, string]> = [];
     for (const cat of categoriasVisiveis) {
-      for (const prod of cat.produtos) {
-        linhasProdutos.push([cat.categoriaNome, prod.nome, String(prod.quantidade)]);
-      }
-      if (cat.produtos.length === 0) {
-        linhasProdutos.push([cat.categoriaNome, '—', '0']);
+      const pushLinhas = (origem: string, lista: ProdutividadeProduto[]) => {
+        for (const prod of lista) {
+          linhasProdutos.push([cat.categoriaNome, origem, prod.nome, String(prod.quantidade)]);
+        }
+      };
+      pushLinhas('Online', cat.produtosOnline);
+      pushLinhas('Na casa', cat.produtosNaCasa);
+      if (cat.produtosOnline.length === 0 && cat.produtosNaCasa.length === 0) {
+        linhasProdutos.push([cat.categoriaNome, '—', '—', '0']);
       }
     }
 
     if (linhasProdutos.length) {
       autoTable(doc, {
         startY: y,
-        head: [['Categoria', 'Produto', 'Qtd.']],
+        head: [['Categoria', 'Origem', 'Produto', 'Qtd.']],
         body: linhasProdutos,
         styles: { fontSize: 8 },
         headStyles: { fillColor: [245, 245, 245], textColor: 20 },
@@ -389,34 +393,69 @@ export default function AdminProdutividade() {
                       <ChevronRight className="w-4 h-4 shrink-0 text-stone-500" />
                     )}
                     {cat.categoriaNome}
-                    {cat.produtos.length > 0 && (
+                    {(cat.produtosOnline.length > 0 || cat.produtosNaCasa.length > 0) && (
                       <span className="ml-1 text-sm font-normal text-stone-500">
-                        ({cat.produtos.length} {cat.produtos.length === 1 ? 'produto' : 'produtos'})
+                        ({cat.produtosOnline.length} online · {cat.produtosNaCasa.length} na casa)
                       </span>
                     )}
                   </button>
                   {aberto && (
                     <>
-                      {cat.produtos.length === 0 ? (
+                      {cat.produtosOnline.length === 0 && cat.produtosNaCasa.length === 0 ? (
                         <p className="px-4 py-3 text-sm text-stone-500">Nenhuma venda no período.</p>
                       ) : (
-                        <div className="overflow-x-auto">
-                          <table className="w-full min-w-[200px]">
-                            <thead className="border-b border-stone-200 bg-stone-50/80">
-                              <tr>
-                                <th className="px-4 py-2 text-left text-xs font-medium text-stone-600">Produto</th>
-                                <th className="px-4 py-2 text-right text-xs font-medium text-stone-600">Quantidade</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {cat.produtos.map((prod) => (
-                                <tr key={prod.produtoId} className="border-b border-stone-100 last:border-0">
-                                  <td className="px-4 py-2 text-sm text-stone-800">{prod.nome}</td>
-                                  <td className="px-4 py-2 text-sm text-stone-600 text-right">{prod.quantidade}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4">
+                          <div>
+                            <h3 className="mb-2 text-sm font-semibold text-stone-700">Online</h3>
+                            {cat.produtosOnline.length === 0 ? (
+                              <p className="text-sm text-stone-500">Nenhuma venda online no período.</p>
+                            ) : (
+                              <div className="overflow-x-auto rounded-lg border border-stone-200">
+                                <table className="w-full min-w-[160px]">
+                                  <thead className="border-b border-stone-200 bg-stone-50/80">
+                                    <tr>
+                                      <th className="px-3 py-2 text-left text-xs font-medium text-stone-600">Produto</th>
+                                      <th className="px-3 py-2 text-right text-xs font-medium text-stone-600">Qtd</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {cat.produtosOnline.map((prod) => (
+                                      <tr key={prod.produtoId} className="border-b border-stone-100 last:border-0">
+                                        <td className="px-3 py-2 text-sm text-stone-800">{prod.nome}</td>
+                                        <td className="px-3 py-2 text-sm text-stone-600 text-right">{prod.quantidade}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+                          </div>
+                          <div>
+                            <h3 className="mb-2 text-sm font-semibold text-stone-700">Na casa</h3>
+                            <p className="mb-2 text-xs text-stone-500">Presencial e viagem</p>
+                            {cat.produtosNaCasa.length === 0 ? (
+                              <p className="text-sm text-stone-500">Nenhuma venda na casa no período.</p>
+                            ) : (
+                              <div className="overflow-x-auto rounded-lg border border-stone-200">
+                                <table className="w-full min-w-[160px]">
+                                  <thead className="border-b border-stone-200 bg-stone-50/80">
+                                    <tr>
+                                      <th className="px-3 py-2 text-left text-xs font-medium text-stone-600">Produto</th>
+                                      <th className="px-3 py-2 text-right text-xs font-medium text-stone-600">Qtd</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {cat.produtosNaCasa.map((prod) => (
+                                      <tr key={prod.produtoId} className="border-b border-stone-100 last:border-0">
+                                        <td className="px-3 py-2 text-sm text-stone-800">{prod.nome}</td>
+                                        <td className="px-3 py-2 text-sm text-stone-600 text-right">{prod.quantidade}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       )}
                     </>

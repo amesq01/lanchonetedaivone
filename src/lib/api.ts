@@ -1593,45 +1593,72 @@ export async function getRelatorioFinanceiro(desde: string, ate: string) {
   return { pedidos: resultado, totalGeral, totalPorFormaPagamento };
 }
 
+export type ProdutividadeProduto = {
+  produtoId: string;
+  nome: string;
+  quantidade: number;
+};
+
 export type ProdutividadePorCategoria = {
   categoriaId: string;
   categoriaNome: string;
   ordem: number;
-  produtos: { produtoId: string; nome: string; quantidade: number }[];
+  produtosOnline: ProdutividadeProduto[];
+  produtosNaCasa: ProdutividadeProduto[];
 };
+
+function emptyProdutividadePorCategoria(c: { id: string; nome: string; ordem: number }): ProdutividadePorCategoria {
+  return {
+    categoriaId: c.id,
+    categoriaNome: c.nome,
+    ordem: c.ordem,
+    produtosOnline: [],
+    produtosNaCasa: [],
+  };
+}
 
 export async function getProdutividade(desde: string, ate: string): Promise<{
   totalPedidos: number;
   porCategoria: ProdutividadePorCategoria[];
 }> {
+  const { data: categoriasData } = await supabase.from('categorias').select('id, nome, ordem').order('ordem');
+  const categorias = (categoriasData ?? []) as { id: string; nome: string; ordem: number }[];
+
   const { data: pedidosData } = await supabase
     .from('pedidos')
-    .select('id')
+    .select('id, origem')
     .eq('status', 'finalizado')
     .gte('encerrado_em', desde)
     .lte('encerrado_em', ate);
-  const pedidos = (pedidosData ?? []) as { id: string }[];
+  const pedidos = (pedidosData ?? []) as { id: string; origem: string }[];
   const totalPedidos = pedidos.length;
   if (!pedidos.length) {
-    const { data: categoriasData } = await supabase.from('categorias').select('id, nome, ordem').order('ordem');
-    const categorias = (categoriasData ?? []) as { id: string; nome: string; ordem: number }[];
     return {
       totalPedidos: 0,
-      porCategoria: categorias.map((c) => ({ categoriaId: c.id, categoriaNome: c.nome, ordem: c.ordem, produtos: [] })),
+      porCategoria: categorias.map(emptyProdutividadePorCategoria),
     };
   }
+
+  const pedidoOrigem = new Map(pedidos.map((p) => [p.id, p.origem]));
   const pedidoIds = pedidos.map((p) => p.id);
   const { data: itensData } = await supabase
     .from('pedido_itens')
-    .select('produto_id, quantidade')
+    .select('pedido_id, produto_id, quantidade')
     .in('pedido_id', pedidoIds);
-  const itens = (itensData ?? []) as { produto_id: string; quantidade: number }[];
-  const qtdPorProduto: Record<string, number> = {};
+  const itens = (itensData ?? []) as { pedido_id: string; produto_id: string; quantidade: number }[];
+
+  const qtdOnline: Record<string, number> = {};
+  const qtdNaCasa: Record<string, number> = {};
   for (const i of itens) {
-    qtdPorProduto[i.produto_id] = (qtdPorProduto[i.produto_id] ?? 0) + i.quantidade;
+    const origem = pedidoOrigem.get(i.pedido_id);
+    const qtd = Number(i.quantidade);
+    if (origem === 'online') {
+      qtdOnline[i.produto_id] = (qtdOnline[i.produto_id] ?? 0) + qtd;
+    } else if (origem === 'presencial' || origem === 'viagem') {
+      qtdNaCasa[i.produto_id] = (qtdNaCasa[i.produto_id] ?? 0) + qtd;
+    }
   }
-  const { data: categoriasData } = await supabase.from('categorias').select('id, nome, ordem').order('ordem');
-  const categorias = (categoriasData ?? []) as { id: string; nome: string; ordem: number }[];
+
   const { data: produtosData } = await supabase
     .from('produtos')
     .select('id, nome, descricao, categoria_id, produto_categorias(categoria_id)');
@@ -1643,16 +1670,26 @@ export async function getProdutividade(desde: string, ate: string): Promise<{
     if (categoriaIds.length === 0 && p.categoria_id) categoriaIds = [p.categoria_id];
     produtoPorId[p.id] = { nome: p.nome ?? p.descricao ?? '-', categoriaIds };
   }
+
   const porCategoria: ProdutividadePorCategoria[] = categorias.map((c) => {
-    const produtosNaCategoria: { produtoId: string; nome: string; quantidade: number }[] = [];
+    const produtosOnline: ProdutividadeProduto[] = [];
+    const produtosNaCasa: ProdutividadeProduto[] = [];
     for (const [produtoId, info] of Object.entries(produtoPorId)) {
-      if (info.categoriaIds.includes(c.id)) {
-        const qtd = qtdPorProduto[produtoId] ?? 0;
-        if (qtd > 0) produtosNaCategoria.push({ produtoId, nome: info.nome, quantidade: qtd });
-      }
+      if (!info.categoriaIds.includes(c.id)) continue;
+      const qOn = qtdOnline[produtoId] ?? 0;
+      const qCasa = qtdNaCasa[produtoId] ?? 0;
+      if (qOn > 0) produtosOnline.push({ produtoId, nome: info.nome, quantidade: qOn });
+      if (qCasa > 0) produtosNaCasa.push({ produtoId, nome: info.nome, quantidade: qCasa });
     }
-    produtosNaCategoria.sort((a, b) => b.quantidade - a.quantidade);
-    return { categoriaId: c.id, categoriaNome: c.nome, ordem: c.ordem, produtos: produtosNaCategoria };
+    produtosOnline.sort((a, b) => b.quantidade - a.quantidade);
+    produtosNaCasa.sort((a, b) => b.quantidade - a.quantidade);
+    return {
+      categoriaId: c.id,
+      categoriaNome: c.nome,
+      ordem: c.ordem,
+      produtosOnline,
+      produtosNaCasa,
+    };
   });
   return { totalPedidos, porCategoria };
 }
