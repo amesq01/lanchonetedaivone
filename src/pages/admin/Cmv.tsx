@@ -567,6 +567,13 @@ function FichasTab() {
       .filter(Boolean) as { insumo_id: string; quantidade: string; insumo: InsumoRow; qtd: number; custo: number }[];
   }, [linhas, insumos]);
 
+  const idsNaFicha = useMemo(() => new Set(linhas.map((l) => l.insumo_id)), [linhas]);
+
+  const insumosDisponiveis = useMemo(
+    () => insumos.filter((i) => i.ativo && !idsNaFicha.has(i.id)),
+    [insumos, idsNaFicha]
+  );
+
   const custoFicha = calcularCustoFicha(linhasDetalhe.map((l) => ({ quantidade: l.qtd, custo_unitario: Number(l.insumo.custo_unitario) })));
   const margemTeorica = produtoSel ? margemTeoricaProduto(produtoSel, custoFicha) : null;
 
@@ -681,18 +688,26 @@ function FichasTab() {
               <label className="text-xs text-stone-600">Insumo</label>
               <select value={novoInsumoId} onChange={(e) => setNovoInsumoId(e.target.value)} className="mt-1 block rounded-lg border border-stone-300 px-3 py-2 text-sm">
                 <option value="">Selecione</option>
-                {insumos.filter((i) => i.ativo).map((i) => (
+                {insumosDisponiveis.map((i) => (
                   <option key={i.id} value={i.id}>
                     {i.nome} ({i.unidade}) – {fmtBrl(Number(i.custo_unitario))}
                   </option>
                 ))}
               </select>
+              {insumosDisponiveis.length === 0 && (
+                <p className="mt-1 text-xs text-stone-500">Todos os insumos já foram adicionados.</p>
+              )}
             </div>
             <div>
               <label className="text-xs text-stone-600">Quantidade</label>
               <input type="number" step="0.0001" min="0" value={novaQtd} onChange={(e) => setNovaQtd(e.target.value)} className="mt-1 w-24 rounded-lg border border-stone-300 px-3 py-2" />
             </div>
-            <button type="button" onClick={addLinha} className="rounded-lg border border-stone-300 px-3 py-2 text-sm hover:bg-stone-50">
+            <button
+              type="button"
+              onClick={addLinha}
+              disabled={insumosDisponiveis.length === 0}
+              className="rounded-lg border border-stone-300 px-3 py-2 text-sm hover:bg-stone-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
               Adicionar
             </button>
           </div>
