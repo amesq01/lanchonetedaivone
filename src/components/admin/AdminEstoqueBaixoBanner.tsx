@@ -8,7 +8,7 @@ export default function AdminEstoqueBaixoBanner() {
   const { data: produtos = [] } = useQuery({
     queryKey: queryKeys.produtosEstoqueBaixo,
     queryFn: () => getProdutosEstoqueBaixo(),
-    staleTime: 30 * 1000,
+    staleTime: 0,
   });
 
   if (produtos.length === 0) return null;

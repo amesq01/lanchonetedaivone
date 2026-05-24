@@ -1,4 +1,4 @@
-import { QueryClient } from '@tanstack/react-query';
+import { QueryClient, type QueryClient as QueryClientType } from '@tanstack/react-query';
 
 /** Query keys usados no app para cache e invalidação. */
 export const queryKeys = {
@@ -29,6 +29,13 @@ export const queryKeys = {
   caixaSaidas: (desde: string, ate: string) => ['caixa-saidas', desde, ate] as const,
   relatorioFluxoCaixa: (desde: string, ate: string) => ['relatorio-fluxo-caixa', desde, ate] as const,
 } as const;
+
+/** Invalida catálogo e estoque (admin, loja, banner) após pedido ou UPDATE em produtos. */
+export function invalidateProdutosQueries(queryClient: QueryClientType) {
+  queryClient.invalidateQueries({ queryKey: ['produtos'] });
+  queryClient.invalidateQueries({ queryKey: queryKeys.produtosLojaOnline });
+  queryClient.invalidateQueries({ queryKey: queryKeys.produtosEstoqueBaixo });
+}
 
 export const queryClient = new QueryClient({
   defaultOptions: {

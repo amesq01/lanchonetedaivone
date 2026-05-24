@@ -1,6 +1,6 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { supabase } from './supabase';
-import { queryKeys } from './queryClient';
+import { invalidateProdutosQueries, queryKeys } from './queryClient';
 
 const DEBOUNCE_MS = 200;
 
@@ -12,7 +12,7 @@ function invalidatePedidoQueries(queryClient: QueryClient) {
   queryClient.invalidateQueries({ queryKey: queryKeys.mesasDashboard });
   queryClient.invalidateQueries({ queryKey: ['mesa-detail'] });
   queryClient.invalidateQueries({ queryKey: ['admin-mesa-detail'] });
-  queryClient.invalidateQueries({ queryKey: queryKeys.produtosEstoqueBaixo });
+  invalidateProdutosQueries(queryClient);
 }
 
 function debouncedInvalidatePedidos(queryClient: QueryClient) {
@@ -70,7 +70,7 @@ export function subscribePedidosAndComandasRealtime(queryClient: QueryClient): (
     .on(
       'postgres_changes',
       { event: 'UPDATE', schema: 'public', table: 'produtos' },
-      () => queryClient.invalidateQueries({ queryKey: queryKeys.produtosEstoqueBaixo })
+      () => invalidateProdutosQueries(queryClient)
     )
     .subscribe();
 

@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { ChevronDown, ChevronRight, Search } from 'lucide-react';
 import { getCategorias, getProdutos, saveProduto, updateProdutoAtivo, updateProdutoQuantidade, deleteProduto } from '../../lib/api';
-import { queryKeys } from '../../lib/queryClient';
+import { invalidateProdutosQueries, queryKeys } from '../../lib/queryClient';
 import type { ProdutoWithCategorias } from '../../types/database';
 import type { Categoria } from '../../types/database';
 import { imagensProduto } from '../../types/database';
@@ -22,7 +22,8 @@ export default function AdminProdutos() {
   const produtosQuery = useQuery({
     queryKey: queryKeys.produtos(false),
     queryFn: () => getProdutos(false),
-    staleTime: 60 * 1000,
+    staleTime: 0,
+    refetchOnMount: 'always',
   });
   const categoriasQuery = useQuery({
     queryKey: queryKeys.categorias,
@@ -58,9 +59,7 @@ export default function AdminProdutos() {
   const mutationExcluir = useMutation({
     mutationFn: (id: string) => deleteProduto(id),
     onSuccess: (_, id) => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.produtos() });
-      queryClient.invalidateQueries({ queryKey: queryKeys.produtosLojaOnline });
-      queryClient.invalidateQueries({ queryKey: queryKeys.produtosEstoqueBaixo });
+      invalidateProdutosQueries(queryClient);
       setConfirmarExcluir(null);
       if (editing?.id === id) {
         setOpen(false);
@@ -127,8 +126,7 @@ export default function AdminProdutos() {
     setTogglingId(p.id);
     try {
       await updateProdutoAtivo(p.id, novoAtivo);
-      queryClient.invalidateQueries({ queryKey: queryKeys.produtos() });
-      queryClient.invalidateQueries({ queryKey: queryKeys.produtosEstoqueBaixo });
+      invalidateProdutosQueries(queryClient);
     } catch {
       // mantém estado atual; poderia mostrar toast
     } finally {
@@ -157,8 +155,7 @@ export default function AdminProdutos() {
     setSavingQuantidadeId(p.id);
     try {
       await updateProdutoQuantidade(p.id, qtd);
-      queryClient.invalidateQueries({ queryKey: queryKeys.produtos() });
-      queryClient.invalidateQueries({ queryKey: queryKeys.produtosEstoqueBaixo });
+      invalidateProdutosQueries(queryClient);
     } catch {
       setEditingQuantidade((prev) => ({ ...prev, [p.id]: raw }));
     } finally {
@@ -237,8 +234,7 @@ export default function AdminProdutos() {
         valor_promocional: emPromocao && valorPromocional.trim() ? Number(valorPromocional) : null,
         categoria_ids: categoriaIds,
       });
-      queryClient.invalidateQueries({ queryKey: queryKeys.produtos() });
-      queryClient.invalidateQueries({ queryKey: queryKeys.produtosEstoqueBaixo });
+      invalidateProdutosQueries(queryClient);
       setOpen(false);
     } finally {
       setSubmitting(false);
