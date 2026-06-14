@@ -104,7 +104,7 @@ export default function LojaCarrinho() {
     });
   };
 
-  const rawSubtotal = itens.reduce((s, i) => s + i.quantidade * precoVenda(i.produto), 0);
+  const rawSubtotal = itens.reduce((s, i) => s + i.quantidade * precoVenda(i.produto, 'online'), 0);
   const subtotal = Number.isFinite(rawSubtotal) ? rawSubtotal : 0;
   let rawDesconto = cupomAplicado ? (subtotal * Number(cupomAplicado.porcentagem)) / 100 : 0;
   if (cupomAplicado?.valorMaximo != null) rawDesconto = Math.min(rawDesconto, cupomAplicado.valorMaximo);
@@ -185,7 +185,7 @@ export default function LojaCarrinho() {
                     </div>
                   </div>
                   <div className="flex flex-col items-end gap-1">
-                    <span className="font-medium text-amber-600">R$ {(item.quantidade * precoVenda(item.produto)).toFixed(2)}</span>
+                    <span className="font-medium text-amber-600">R$ {(item.quantidade * precoVenda(item.produto, 'online')).toFixed(2)}</span>
                     <button type="button" onClick={() => removeItem(i)} className="p-1.5 rounded text-stone-400 hover:bg-red-50 hover:text-red-600" title="Remover item" aria-label="Remover item">
                       <Trash2 size={18} />
                     </button>

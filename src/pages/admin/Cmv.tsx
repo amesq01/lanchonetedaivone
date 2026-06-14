@@ -575,7 +575,10 @@ function FichasTab() {
   );
 
   const custoFicha = calcularCustoFicha(linhasDetalhe.map((l) => ({ quantidade: l.qtd, custo_unitario: Number(l.insumo.custo_unitario) })));
-  const margemTeorica = produtoSel ? margemTeoricaProduto(produtoSel, custoFicha) : null;
+  const precoNaCasa = produtoSel ? precoVenda(produtoSel, 'presencial') : null;
+  const precoEmbalagem = produtoSel ? precoVenda(produtoSel, 'online') : null;
+  const margemNaCasa = precoNaCasa != null ? margemTeoricaProduto(precoNaCasa, custoFicha) : null;
+  const margemEmbalagem = precoEmbalagem != null ? margemTeoricaProduto(precoEmbalagem, custoFicha) : null;
 
   const mutationSave = useMutation({
     mutationFn: () =>
@@ -631,14 +634,16 @@ function FichasTab() {
             <span>
               <strong>Custo da ficha:</strong> {fmtBrl(custoFicha)}
             </span>
-            {produtoSel && (
+            {produtoSel && precoNaCasa != null && (
               <span>
-                <strong>Preço de venda:</strong> {fmtBrl(precoVenda(produtoSel))}
+                <strong>Preço na casa:</strong> {fmtBrl(precoNaCasa)}
+                {margemNaCasa != null && <> · Margem: {fmtPct(margemNaCasa)}</>}
               </span>
             )}
-            {margemTeorica != null && (
+            {produtoSel && precoEmbalagem != null && (
               <span>
-                <strong>Margem teórica:</strong> {fmtPct(margemTeorica)}
+                <strong>Preço viagem/online:</strong> {fmtBrl(precoEmbalagem)}
+                {margemEmbalagem != null && <> · Margem: {fmtPct(margemEmbalagem)}</>}
               </span>
             )}
           </div>

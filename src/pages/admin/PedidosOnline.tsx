@@ -6,7 +6,7 @@ import type { FraçãoPagamento } from '../../lib/api';
 import { printPedido, printContaViagem } from '../../lib/printPdf';
 import { useAuth } from '../../contexts/AuthContext';
 import type { Produto } from '../../types/database';
-import { precoVenda, imagensProduto } from '../../types/database';
+import { precoBase, precoVenda, emPromocaoPorOrigem, imagensProduto } from '../../types/database';
 import { queryKeys } from '../../lib/queryClient';
 import { useLojaConfig } from '../../contexts/LojaConfigContext';
 
@@ -377,7 +377,7 @@ export default function AdminPedidosOnline() {
     const itens = carrinhoEdicao.map((i) => ({
       produto_id: i.produto.id,
       quantidade: i.quantidade,
-      valor_unitario: precoVenda(i.produto),
+      valor_unitario: precoVenda(i.produto, 'online'),
       observacao: i.observacao || undefined,
     }));
     mutationEditarItens.mutate(
@@ -813,13 +813,13 @@ export default function AdminPedidosOnline() {
                         <span className="text-stone-800 truncate text-sm">{p.nome || p.descricao}</span>
                       </div>
                       <div className="flex-shrink-0 text-right text-[10px]">
-                        {p.em_promocao && p.valor_promocional != null && Number(p.valor_promocional) > 0 ? (
+                        {emPromocaoPorOrigem(p, 'online') ? (
                           <>
-                            <span className="text-stone-500 block">De: <span className="line-through text-stone-400">R$ {Number(p.valor).toFixed(2)}</span></span>
-                            <span className="text-amber-600 font-medium">Por: R$ {Number(p.valor_promocional).toFixed(2)}</span>
+                            <span className="text-stone-500 block">De: <span className="line-through text-stone-400">R$ {precoBase(p, 'online').toFixed(2)}</span></span>
+                            <span className="text-amber-600 font-medium">Por: R$ {precoVenda(p, 'online').toFixed(2)}</span>
                           </>
                         ) : (
-                          <span className="text-amber-600 font-medium text-sm">R$ {precoVenda(p).toFixed(2)}</span>
+                          <span className="text-amber-600 font-medium text-sm">R$ {precoVenda(p, 'online').toFixed(2)}</span>
                         )}
                       </div>
                     </button>

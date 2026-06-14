@@ -1,6 +1,7 @@
 import { supabase } from './supabase';
 import type { Database } from '../types/database';
-import type { ProdutoWithCategorias } from '../types/database';
+import type { OrigemPreco, ProdutoWithCategorias } from '../types/database';
+import { precoVenda } from '../types/database';
 
 type ConfigKey = 'taxa_entrega' | 'quantidade_mesas';
 
@@ -668,6 +669,9 @@ export async function saveProduto(payload: {
   vai_para_cozinha: boolean;
   em_promocao: boolean;
   valor_promocional: number | null;
+  valor_na_casa: number | null;
+  em_promocao_na_casa: boolean;
+  valor_promocional_na_casa: number | null;
   categoria_ids: string[];
 }) {
   const { categoria_ids, ...prod } = payload;
@@ -732,6 +736,34 @@ export async function deleteProduto(produtoId: string): Promise<void> {
   if (error) throw error;
 }
 
+async function fetchProdutosParaPreco(ids: string[]): Promise<Map<string, ProdutoWithCategorias>> {
+  const uniq = [...new Set(ids)];
+  if (!uniq.length) return new Map();
+  const { data, error } = await supabase.from('produtos').select('*').in('id', uniq);
+  if (error) throw error;
+  const map = new Map<string, ProdutoWithCategorias>();
+  for (const p of (data ?? []) as ProdutoWithCategorias[]) {
+    map.set(p.id, p);
+  }
+  return map;
+}
+
+function assertPrecosItens(
+  produtosPorId: Map<string, ProdutoWithCategorias>,
+  itens: { produto_id: string; valor_unitario: number }[],
+  origem: OrigemPreco
+) {
+  for (const item of itens) {
+    const prod = produtosPorId.get(item.produto_id);
+    if (!prod) throw new Error('Produto não encontrado.');
+    const esperado = precoVenda(prod, origem);
+    if (Math.abs(Number(item.valor_unitario) - esperado) > 0.001) {
+      const nome = prod.nome || prod.descricao || 'Produto';
+      throw new Error(`Preço inválido para ${nome}. Atualize a página e tente novamente.`);
+    }
+  }
+}
+
 export async function nextPedidoNumero(): Promise<number> {
   const { data, error } = await supabase.rpc('next_pedido_numero');
   if (error) throw error;
@@ -787,6 +819,8 @@ export async function createPedidoPresencial(
   opts?: { lancadoPeloAdmin?: boolean }
 ) {
   await getComandaAbertaOuErro(comandaId);
+  const produtosPorId = await fetchProdutosParaPreco(itens.map((i) => i.produto_id));
+  assertPrecosItens(produtosPorId, itens, 'presencial');
   await decrementarEstoque(itens);
   const numero = await nextPedidoNumero();
   const { data: pedido, error: e1 } = await (supabase as any).from('pedidos').insert({
@@ -808,6 +842,8 @@ export async function createPedidoViagem(
   itens: { produto_id: string; quantidade: number; valor_unitario: number; observacao?: string }[],
   opts?: { lancadoPeloAdmin?: boolean; telefone?: string }
 ) {
+  const produtosPorId = await fetchProdutosParaPreco(itens.map((i) => i.produto_id));
+  assertPrecosItens(produtosPorId, itens, 'viagem');
   await decrementarEstoque(itens);
   const numero = await nextPedidoNumero();
   const { data: mesaViagem } = await supabase.from('mesas').select('id').eq('is_viagem', true).single();
@@ -879,10 +915,16 @@ export async function updatePedidoItens(
   itens: { produto_id: string; quantidade: number; valor_unitario: number; observacao?: string }[],
   opts?: { adminOverride?: boolean }
 ) {
-  const { data: ped, error: ePed } = await supabase.from('pedidos').select('status').eq('id', pedidoId).single();
+  const { data: ped, error: ePed } = await supabase.from('pedidos').select('status, origem').eq('id', pedidoId).single();
   if (ePed || !ped) throw new Error('Pedido não encontrado.');
-  const status = (ped as { status: string }).status;
+  const pedRow = ped as { status: string; origem: OrigemPreco };
+  const status = pedRow.status;
   if (!opts?.adminOverride && !STATUS_EDITAVEL.includes(status)) throw new Error(`Pedido não pode ser editado. Status atual: ${status}.`);
+
+  if (itens.length > 0) {
+    const produtosPorId = await fetchProdutosParaPreco(itens.map((i) => i.produto_id));
+    assertPrecosItens(produtosPorId, itens, pedRow.origem);
+  }
 
   const { data: atuais, error: eItens } = await supabase.from('pedido_itens').select('produto_id, quantidade').eq('pedido_id', pedidoId);
   if (eItens) throw eItens;
@@ -1304,6 +1346,8 @@ export async function createPedidoOnline(
     const { allowed, message } = await canPlaceOrderOnline();
     if (!allowed) throw new Error(message ?? 'A lanchonete está fechada para pedidos online.');
   }
+  const produtosPorId = await fetchProdutosParaPreco(payload.itens.map((i) => i.produto_id));
+  assertPrecosItens(produtosPorId, payload.itens, 'online');
   await decrementarEstoque(payload.itens);
   const tipoEntrega = payload.tipo_entrega ?? 'entrega';
   const taxa =

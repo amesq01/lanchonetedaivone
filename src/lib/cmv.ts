@@ -1,7 +1,5 @@
 import { supabase } from './supabase';
 import type { Insumo, UnidadeInsumo } from '../types/database';
-import { precoVenda } from '../types/database';
-import type { ProdutoWithCategorias } from '../types/database';
 
 export type InsumoRow = Insumo;
 
@@ -377,8 +375,7 @@ export async function getRelatorioCmv(desdeIso: string, ateIso: string): Promise
   };
 }
 
-export function margemTeoricaProduto(produto: Pick<ProdutoWithCategorias, 'valor' | 'em_promocao' | 'valor_promocional'>, custoFicha: number): number | null {
-  const preco = precoVenda(produto);
+export function margemTeoricaProduto(preco: number, custoFicha: number): number | null {
   if (preco <= 0) return null;
   return ((preco - custoFicha) / preco) * 100;
 }

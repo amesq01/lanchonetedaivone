@@ -71,7 +71,7 @@ export default function LojaCheckout() {
   const cupomDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const produtosQuery = useQuery({ queryKey: queryKeys.produtos(true), queryFn: () => getProdutos(true) });
-  const produtos = (produtosQuery.data ?? []).map((p) => ({ id: p.id, valor: precoVenda(p) }));
+  const produtos = (produtosQuery.data ?? []).map((p) => ({ id: p.id, valor: precoVenda(p, 'online') }));
 
   const cart = getCart();
   const bloqueado = !configLoading && lanchoneteAberta === false

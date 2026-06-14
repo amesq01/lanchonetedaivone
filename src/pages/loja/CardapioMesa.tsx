@@ -3,7 +3,7 @@ import { ChevronLeft, ChevronRight, Printer, X } from 'lucide-react';
 import { getProdutos, getCategorias } from '../../lib/api';
 import type { ProdutoWithCategorias } from '../../types/database';
 import type { Categoria } from '../../types/database';
-import { precoVenda, imagensProduto } from '../../types/database';
+import { precoBase, precoVenda, emPromocaoPorOrigem, imagensProduto } from '../../types/database';
 
 function CardapioLoading() {
   return (
@@ -32,8 +32,8 @@ function produtosDaCategoria(produtos: ProdutoWithCategorias[], categoriaId: str
 }
 
 function ModalProdutoCardapio({ produto, onClose }: { produto: ProdutoWithCategorias; onClose: () => void }) {
-  const valor = precoVenda(produto);
-  const emPromo = produto.em_promocao && produto.valor_promocional != null && Number(produto.valor_promocional) > 0;
+  const valor = precoVenda(produto, 'presencial');
+  const emPromo = emPromocaoPorOrigem(produto, 'presencial');
   const fotos = imagensProduto(produto);
   const [idx, setIdx] = useState(0);
   const indice = Math.min(idx, Math.max(0, fotos.length - 1));
@@ -74,8 +74,8 @@ function ModalProdutoCardapio({ produto, onClose }: { produto: ProdutoWithCatego
           <div className="mt-4 font-semibold text-amber-600">
             {emPromo ? (
               <>
-                <span className="text-stone-400 line-through font-normal mr-1">R$ {Number(produto.valor).toFixed(2)}</span>
-                R$ {Number(produto.valor_promocional).toFixed(2)}
+                <span className="text-stone-400 line-through font-normal mr-1">R$ {precoBase(produto, 'presencial').toFixed(2)}</span>
+                R$ {valor.toFixed(2)}
               </>
             ) : (
               <>R$ {valor.toFixed(2)}</>
@@ -91,8 +91,8 @@ function ModalProdutoCardapio({ produto, onClose }: { produto: ProdutoWithCatego
 }
 
 function CardItem({ produto, onClick }: { produto: ProdutoWithCategorias; onClick?: () => void }) {
-  const valor = precoVenda(produto);
-  const emPromo = produto.em_promocao && produto.valor_promocional != null && Number(produto.valor_promocional) > 0;
+  const valor = precoVenda(produto, 'presencial');
+  const emPromo = emPromocaoPorOrigem(produto, 'presencial');
   const isClickable = !!onClick;
   return (
     <article
@@ -122,7 +122,7 @@ function CardItem({ produto, onClick }: { produto: ProdutoWithCategorias; onClic
           <div className="font-semibold text-amber-600 print:text-sm truncate sm:hidden">
             {emPromo ? (
               <div className="flex flex-row items-baseline gap-1.5">
-                <span className="text-xs text-stone-500 font-normal shrink-0">De: <span className="line-through text-stone-400">R$ {Number(produto.valor).toFixed(2)}</span></span>
+                <span className="text-xs text-stone-500 font-normal shrink-0">De: <span className="line-through text-stone-400">R$ {precoBase(produto, 'presencial').toFixed(2)}</span></span>
                 <span className="text-amber-600 shrink-0">Por: R$ {valor.toFixed(2)}</span>
               </div>
             ) : (
@@ -143,7 +143,7 @@ function CardItem({ produto, onClick }: { produto: ProdutoWithCategorias; onClic
         <div className="hidden sm:flex flex-shrink-0 self-center font-semibold text-amber-600 print:text-sm print:flex sm:mr-[15px]">
           {emPromo ? (
             <div className="flex flex-col items-end">
-              <span className="text-xs text-stone-500 font-normal">De: <span className="line-through text-stone-400">R$ {Number(produto.valor).toFixed(2)}</span></span>
+              <span className="text-xs text-stone-500 font-normal">De: <span className="line-through text-stone-400">R$ {precoBase(produto, 'presencial').toFixed(2)}</span></span>
               <span className="text-amber-600">Por: R$ {valor.toFixed(2)}</span>
             </div>
           ) : (
@@ -207,7 +207,7 @@ export default function CardapioMesa() {
 
   const byCategoria = (categoriaId: string | null): ProdutoWithCategorias[] => {
     if (categoriaId === promocoesId) {
-      return produtos.filter((p) => p.em_promocao === true);
+      return produtos.filter((p) => p.em_promocao_na_casa === true);
     }
     return produtos.filter((p) => {
       const ids = getCategoriaIds(p);
@@ -218,7 +218,7 @@ export default function CardapioMesa() {
   };
 
   const categoriasComProdutos = categorias.filter((c) => {
-    if (c.nome.toUpperCase() === 'PROMOÇÕES') return produtos.some((p) => p.em_promocao === true);
+    if (c.nome.toUpperCase() === 'PROMOÇÕES') return produtos.some((p) => p.em_promocao_na_casa === true);
     return byCategoria(c.id).length > 0;
   });
   const exibirCategoria = (cat: Categoria) =>

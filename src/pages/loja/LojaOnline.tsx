@@ -7,7 +7,7 @@ import { queryKeys } from '../../lib/queryClient';
 import { produtoIndisponivelNoCardapio } from '../../lib/produtoLoja';
 import type { ProdutoWithCategorias } from '../../types/database';
 import type { Categoria } from '../../types/database';
-import { precoVenda, imagensProduto } from '../../types/database';
+import { precoBase, precoVenda, emPromocaoPorOrigem, imagensProduto } from '../../types/database';
 import { getCart, type SavedItem } from './Carrinho';
 import { useLojaConfig } from '../../contexts/LojaConfigContext';
 
@@ -320,8 +320,8 @@ function ModalProduto({
   onQtyChange: (novaQty: number) => void;
   onClose: () => void;
 }) {
-  const preco = precoVenda(produto);
-  const emPromo = produto.em_promocao && produto.valor_promocional != null && Number(produto.valor_promocional) > 0;
+  const preco = precoVenda(produto, 'online');
+  const emPromo = emPromocaoPorOrigem(produto, 'online');
   const qty = Math.max(0, qtyInCart);
   const indisponivel = produtoIndisponivelNoCardapio(produto);
   const fotos = imagensProduto(produto);
@@ -382,8 +382,8 @@ function ModalProduto({
             <div className={emPromo ? 'flex flex-col' : 'font-semibold text-amber-600'}>
               {emPromo ? (
                 <>
-                  <span className="text-xs text-stone-500">De: <span className="line-through text-stone-400 font-normal">R$ {Number(produto.valor).toFixed(2)}</span></span>
-                  <span className="text-lg font-semibold text-amber-600">Por: R$ {Number(produto.valor_promocional).toFixed(2)}</span>
+                  <span className="text-xs text-stone-500">De: <span className="line-through text-stone-400 font-normal">R$ {precoBase(produto, 'online').toFixed(2)}</span></span>
+                  <span className="text-lg font-semibold text-amber-600">Por: R$ {preco.toFixed(2)}</span>
                 </>
               ) : (
                 <>R$ {preco.toFixed(2)}</>
@@ -423,8 +423,8 @@ function CardProduto({
   onRemove: () => void;
 }) {
   const quantidade = Math.max(0, qty);
-  const preco = precoVenda(produto);
-  const emPromo = produto.em_promocao && produto.valor_promocional != null && Number(produto.valor_promocional) > 0;
+  const preco = precoVenda(produto, 'online');
+  const emPromo = emPromocaoPorOrigem(produto, 'online');
   const indisponivel = produtoIndisponivelNoCardapio(produto);
   return (
     <div
@@ -462,8 +462,8 @@ function CardProduto({
           <div className="font-semibold text-amber-600">
             {emPromo ? (
               <>
-                <span className="text-stone-400 line-through font-normal mr-1">R$ {Number(produto.valor).toFixed(2)}</span>
-                <span className="text-amber-600">R$ {Number(produto.valor_promocional).toFixed(2)}</span>
+                <span className="text-stone-400 line-through font-normal mr-1">R$ {precoBase(produto, 'online').toFixed(2)}</span>
+                <span className="text-amber-600">R$ {preco.toFixed(2)}</span>
               </>
             ) : (
               <>R$ {preco.toFixed(2)}</>

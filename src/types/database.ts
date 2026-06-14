@@ -97,6 +97,9 @@ export interface Database {
           categoria_id: string | null;
           em_promocao: boolean;
           valor_promocional: number | null;
+          valor_na_casa: number | null;
+          em_promocao_na_casa: boolean;
+          valor_promocional_na_casa: number | null;
           created_at: string;
           updated_at: string;
         };
@@ -289,12 +292,49 @@ export type ProdutoWithCategorias = Produto & {
   produto_categorias?: { categoria_id: string; categorias: { id: string; nome: string } | null }[];
 };
 
-/** Preço de venda: valor_promocional se em_promocao, senão valor. */
-export function precoVenda(produto: Pick<Produto, 'valor' | 'em_promocao' | 'valor_promocional'>): number {
+export type OrigemPreco = 'presencial' | 'viagem' | 'online';
+
+export type ProdutoPrecoFields = Pick<
+  Produto,
+  'valor' | 'valor_na_casa' | 'em_promocao' | 'valor_promocional' | 'em_promocao_na_casa' | 'valor_promocional_na_casa'
+>;
+
+/** Preço base (sem promoção) para a origem informada. */
+export function precoBase(produto: ProdutoPrecoFields, origem: OrigemPreco): number {
+  if (origem === 'presencial') {
+    return Number(produto.valor_na_casa ?? produto.valor);
+  }
+  return Number(produto.valor);
+}
+
+/** Preço de venda efetivo (com promoção da faixa correspondente). */
+export function precoVenda(produto: ProdutoPrecoFields, origem: OrigemPreco = 'online'): number {
+  if (origem === 'presencial') {
+    if (
+      produto.em_promocao_na_casa &&
+      produto.valor_promocional_na_casa != null &&
+      Number(produto.valor_promocional_na_casa) > 0
+    ) {
+      return Number(produto.valor_promocional_na_casa);
+    }
+    return precoBase(produto, origem);
+  }
   if (produto.em_promocao && produto.valor_promocional != null && Number(produto.valor_promocional) > 0) {
     return Number(produto.valor_promocional);
   }
-  return Number(produto.valor);
+  return precoBase(produto, origem);
+}
+
+/** Indica se há promoção ativa na faixa da origem. */
+export function emPromocaoPorOrigem(produto: ProdutoPrecoFields, origem: OrigemPreco): boolean {
+  if (origem === 'presencial') {
+    return (
+      produto.em_promocao_na_casa &&
+      produto.valor_promocional_na_casa != null &&
+      Number(produto.valor_promocional_na_casa) > 0
+    );
+  }
+  return produto.em_promocao && produto.valor_promocional != null && Number(produto.valor_promocional) > 0;
 }
 
 /** Lista de URLs de imagens do produto: imagens se houver, senão [imagem_url] se existir. */

@@ -6,7 +6,7 @@ import { ChevronDown, ChevronUp } from 'lucide-react';
 import { getMesas, getComandaByMesaComAtendente, getProdutos, createPedidoPresencial, getPedidosByComanda, getPedidoStatus, updatePedidoStatus, updatePedidoItens, closeComanda } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
 import type { Produto } from '../../types/database';
-import { imagensProduto, precoVenda } from '../../types/database';
+import { imagensProduto, precoBase, precoVenda, emPromocaoPorOrigem } from '../../types/database';
 import { queryKeys } from '../../lib/queryClient';
 
 type ItemCarrinho = { produto: Produto; quantidade: number; observacao: string };
@@ -143,7 +143,7 @@ export default function AtendenteMesaDetail() {
       const itens = carrinho.map((i) => ({
         produto_id: i.produto.id,
         quantidade: i.quantidade,
-        valor_unitario: precoVenda(i.produto),
+        valor_unitario: precoVenda(i.produto, 'presencial'),
         observacao: i.observacao || undefined,
       }));
       await createPedidoPresencial(comandaId, itens);
@@ -232,7 +232,7 @@ export default function AtendenteMesaDetail() {
       const itens = carrinhoEdicao.map((i) => ({
         produto_id: i.produto.id,
         quantidade: i.quantidade,
-        valor_unitario: precoVenda(i.produto),
+        valor_unitario: precoVenda(i.produto, 'presencial'),
         observacao: i.observacao || undefined,
       }));
       await updatePedidoItens(popupEditar.id, itens);
@@ -311,13 +311,13 @@ export default function AtendenteMesaDetail() {
                       <span className="text-stone-800 truncate text-sm">{p.nome || p.descricao}</span>
                     </div>
                     <div className="flex-shrink-0 text-right text-[10px]">
-                      {p.em_promocao && p.valor_promocional != null && Number(p.valor_promocional) > 0 ? (
+                      {emPromocaoPorOrigem(p, 'presencial') ? (
                         <>
-                          <span className="text-stone-500 block">De: <span className="line-through text-stone-400">R$ {Number(p.valor).toFixed(2)}</span></span>
-                          <span className="text-amber-600 font-medium">Por: R$ {Number(p.valor_promocional).toFixed(2)}</span>
+                          <span className="text-stone-500 block">De: <span className="line-through text-stone-400">R$ {precoBase(p, 'presencial').toFixed(2)}</span></span>
+                          <span className="text-amber-600 font-medium">Por: R$ {precoVenda(p, 'presencial').toFixed(2)}</span>
                         </>
                       ) : (
-                        <span className="text-amber-600 font-medium text-sm">R$ {precoVenda(p).toFixed(2)}</span>
+                        <span className="text-amber-600 font-medium text-sm">R$ {precoVenda(p, 'presencial').toFixed(2)}</span>
                       )}
                     </div>
                   </button>
@@ -430,13 +430,13 @@ export default function AtendenteMesaDetail() {
                         <span className="text-stone-800 truncate text-sm">{p.nome || p.descricao}</span>
                       </div>
                       <div className="flex-shrink-0 text-right text-[10px]">
-                        {p.em_promocao && p.valor_promocional != null && Number(p.valor_promocional) > 0 ? (
+                        {emPromocaoPorOrigem(p, 'presencial') ? (
                           <>
-                            <span className="text-stone-500 block">De: <span className="line-through text-stone-400">R$ {Number(p.valor).toFixed(2)}</span></span>
-                            <span className="text-amber-600 font-medium">Por: R$ {Number(p.valor_promocional).toFixed(2)}</span>
+                            <span className="text-stone-500 block">De: <span className="line-through text-stone-400">R$ {precoBase(p, 'presencial').toFixed(2)}</span></span>
+                            <span className="text-amber-600 font-medium">Por: R$ {precoVenda(p, 'presencial').toFixed(2)}</span>
                           </>
                         ) : (
-                          <span className="text-amber-600 font-medium text-sm">R$ {precoVenda(p).toFixed(2)}</span>
+                          <span className="text-amber-600 font-medium text-sm">R$ {precoVenda(p, 'presencial').toFixed(2)}</span>
                         )}
                       </div>
                     </button>

@@ -5,7 +5,7 @@ import { getCategorias, getProdutos, saveProduto, updateProdutoAtivo, updateProd
 import { invalidateProdutosQueries, queryKeys } from '../../lib/queryClient';
 import type { ProdutoWithCategorias } from '../../types/database';
 import type { Categoria } from '../../types/database';
-import { imagensProduto } from '../../types/database';
+import { imagensProduto, precoVenda } from '../../types/database';
 
 function getCategoriaIds(p: ProdutoWithCategorias): string[] {
   const ids = (p.produto_categorias ?? []).map((pc) => pc.categoria_id);
@@ -48,6 +48,9 @@ export default function AdminProdutos() {
   const [imagens, setImagens] = useState<string[]>([]);
   const [emPromocao, setEmPromocao] = useState(false);
   const [valorPromocional, setValorPromocional] = useState('');
+  const [valorNaCasa, setValorNaCasa] = useState('');
+  const [emPromocaoNaCasa, setEmPromocaoNaCasa] = useState(false);
+  const [valorPromocionalNaCasa, setValorPromocionalNaCasa] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
@@ -86,7 +89,7 @@ export default function AdminProdutos() {
     for (const cat of categorias) {
       let prods = produtosDaCategoria(filtered, cat.id);
       if (cat.id === promocoesId) {
-        const emPromo = filtered.filter((p) => p.em_promocao === true);
+        const emPromo = filtered.filter((p) => p.em_promocao === true || p.em_promocao_na_casa === true);
         const ids = new Set(prods.map((p) => p.id));
         for (const p of emPromo) {
           if (!ids.has(p.id)) {
@@ -98,7 +101,7 @@ export default function AdminProdutos() {
       if (prods.length > 0) comProdutos.push({ categoria: cat, produtos: prods });
     }
 
-    const promocoesProdutos = filtered.filter((p) => p.em_promocao === true);
+    const promocoesProdutos = filtered.filter((p) => p.em_promocao === true || p.em_promocao_na_casa === true);
     const temPromocoesCat = !!promocoesId;
     if (promocoesProdutos.length > 0 && !temPromocoesCat) {
       comProdutos.push({
@@ -107,7 +110,7 @@ export default function AdminProdutos() {
       });
     }
 
-    const semCat = filtered.filter((p) => getCategoriaIds(p).length === 0 && !p.em_promocao);
+    const semCat = filtered.filter((p) => getCategoriaIds(p).length === 0 && !p.em_promocao && !p.em_promocao_na_casa);
     return { categoriasComProdutos: comProdutos, semCategoria: semCat };
   }, [list, categorias, searchQuery]);
 
@@ -194,6 +197,9 @@ export default function AdminProdutos() {
       setImagens(imagensProduto(prod));
       setEmPromocao(prod.em_promocao === true);
       setValorPromocional(prod.valor_promocional != null ? String(prod.valor_promocional) : '');
+      setValorNaCasa(prod.valor_na_casa != null ? String(prod.valor_na_casa) : '');
+      setEmPromocaoNaCasa(prod.em_promocao_na_casa === true);
+      setValorPromocionalNaCasa(prod.valor_promocional_na_casa != null ? String(prod.valor_promocional_na_casa) : '');
     } else {
       setEditing(null);
       setCodigo('');
@@ -209,6 +215,9 @@ export default function AdminProdutos() {
       setImagens([]);
       setEmPromocao(false);
       setValorPromocional('');
+      setValorNaCasa('');
+      setEmPromocaoNaCasa(false);
+      setValorPromocionalNaCasa('');
     }
     setOpen(true);
   }
@@ -232,6 +241,9 @@ export default function AdminProdutos() {
         vai_para_cozinha: vaiParaCozinha,
         em_promocao: emPromocao,
         valor_promocional: emPromocao && valorPromocional.trim() ? Number(valorPromocional) : null,
+        valor_na_casa: valorNaCasa.trim() ? Number(valorNaCasa) : null,
+        em_promocao_na_casa: emPromocaoNaCasa,
+        valor_promocional_na_casa: emPromocaoNaCasa && valorPromocionalNaCasa.trim() ? Number(valorPromocionalNaCasa) : null,
         categoria_ids: categoriaIds,
       });
       invalidateProdutosQueries(queryClient);
@@ -311,7 +323,7 @@ export default function AdminProdutos() {
                         <th className="px-4 py-2 text-left text-xs font-medium text-stone-600">Código</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-stone-600">Nome</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-stone-600">Descrição</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-stone-600">Valor</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-stone-600">Preços</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-stone-600">Quantidade</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-stone-600">Ativo</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-stone-600">Foto</th>
@@ -325,9 +337,8 @@ export default function AdminProdutos() {
                           <td className="px-4 py-2 text-sm">{p.nome || '—'}</td>
                           <td className="px-4 py-2 text-sm text-stone-600 max-w-[140px] truncate">{p.descricao}</td>
                           <td className="px-4 py-2 text-sm">
-                            {p.em_promocao && p.valor_promocional != null
-                              ? <>R$ <span className="line-through text-stone-400">{Number(p.valor).toFixed(2)}</span> → R$ {Number(p.valor_promocional).toFixed(2)}</>
-                              : `R$ ${Number(p.valor).toFixed(2)}`}
+                            <span className="block">Na casa: R$ {precoVenda(p, 'presencial').toFixed(2)}</span>
+                            <span className="block text-stone-500">Viagem/Online: R$ {precoVenda(p, 'online').toFixed(2)}</span>
                           </td>
                           <td className="px-4 py-2">
                             <input
@@ -403,7 +414,7 @@ export default function AdminProdutos() {
                       <th className="px-4 py-2 text-left text-xs font-medium text-stone-600">Código</th>
                       <th className="px-4 py-2 text-left text-xs font-medium text-stone-600">Nome</th>
                       <th className="px-4 py-2 text-left text-xs font-medium text-stone-600">Descrição</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-stone-600">Valor</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-stone-600">Preços</th>
                       <th className="px-4 py-2 text-left text-xs font-medium text-stone-600">Quantidade</th>
                       <th className="px-4 py-2 text-left text-xs font-medium text-stone-600">Ativo</th>
                       <th className="px-4 py-2 text-left text-xs font-medium text-stone-600">Foto</th>
@@ -417,9 +428,8 @@ export default function AdminProdutos() {
                         <td className="px-4 py-2 text-sm">{p.nome || '—'}</td>
                         <td className="px-4 py-2 text-sm text-stone-600 max-w-[140px] truncate">{p.descricao}</td>
                         <td className="px-4 py-2 text-sm">
-                          {p.em_promocao && p.valor_promocional != null
-                            ? <>R$ <span className="line-through text-stone-400">{Number(p.valor).toFixed(2)}</span> → R$ {Number(p.valor_promocional).toFixed(2)}</>
-                            : `R$ ${Number(p.valor).toFixed(2)}`}
+                          <span className="block">Na casa: R$ {precoVenda(p, 'presencial').toFixed(2)}</span>
+                          <span className="block text-stone-500">Viagem/Online: R$ {precoVenda(p, 'online').toFixed(2)}</span>
                         </td>
                         <td className="px-4 py-2">
                           <input
@@ -540,20 +550,48 @@ export default function AdminProdutos() {
                 <label className="block text-sm font-medium text-stone-600">Acompanhamentos</label>
                 <input value={acompanhamentos} onChange={(e) => setAcompanhamentos(e.target.value)} className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2" placeholder="Ex: Batata, Salada" />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-stone-600">Valor (R$) *</label>
-                <input type="number" step="0.01" min="0" value={valor} onChange={(e) => setValor(e.target.value)} required className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2" />
-              </div>
-              <div className="flex items-center gap-2">
-                <input type="checkbox" id="em_promocao" checked={emPromocao} onChange={(e) => setEmPromocao(e.target.checked)} className="rounded border-stone-300" />
-                <label htmlFor="em_promocao" className="text-sm font-medium text-stone-600">Na promoção?</label>
-              </div>
-              {emPromocao && (
+              <div className="rounded-lg border border-stone-200 bg-stone-50 p-3 space-y-3">
+                <p className="text-sm font-semibold text-stone-700">Preço na casa (consumo no local)</p>
                 <div>
-                  <label className="block text-sm font-medium text-stone-600">Valor promocional (R$) *</label>
-                  <input type="number" step="0.01" min="0" value={valorPromocional} onChange={(e) => setValorPromocional(e.target.value)} className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2" placeholder="Preço na promoção" />
+                  <label className="block text-sm font-medium text-stone-600">Valor na casa (R$)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={valorNaCasa}
+                    onChange={(e) => setValorNaCasa(e.target.value)}
+                    className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2"
+                    placeholder="Opcional — se vazio, usa o preço viagem/online"
+                  />
                 </div>
-              )}
+                <div className="flex items-center gap-2">
+                  <input type="checkbox" id="em_promocao_na_casa" checked={emPromocaoNaCasa} onChange={(e) => setEmPromocaoNaCasa(e.target.checked)} className="rounded border-stone-300" />
+                  <label htmlFor="em_promocao_na_casa" className="text-sm font-medium text-stone-600">Promo na casa?</label>
+                </div>
+                {emPromocaoNaCasa && (
+                  <div>
+                    <label className="block text-sm font-medium text-stone-600">Valor promocional na casa (R$)</label>
+                    <input type="number" step="0.01" min="0" value={valorPromocionalNaCasa} onChange={(e) => setValorPromocionalNaCasa(e.target.value)} className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2" />
+                  </div>
+                )}
+              </div>
+              <div className="rounded-lg border border-stone-200 bg-stone-50 p-3 space-y-3">
+                <p className="text-sm font-semibold text-stone-700">Preço viagem / online (com embalagem)</p>
+                <div>
+                  <label className="block text-sm font-medium text-stone-600">Valor viagem/online (R$) *</label>
+                  <input type="number" step="0.01" min="0" value={valor} onChange={(e) => setValor(e.target.value)} required className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2" />
+                </div>
+                <div className="flex items-center gap-2">
+                  <input type="checkbox" id="em_promocao" checked={emPromocao} onChange={(e) => setEmPromocao(e.target.checked)} className="rounded border-stone-300" />
+                  <label htmlFor="em_promocao" className="text-sm font-medium text-stone-600">Promo viagem/online?</label>
+                </div>
+                {emPromocao && (
+                  <div>
+                    <label className="block text-sm font-medium text-stone-600">Valor promocional viagem/online (R$)</label>
+                    <input type="number" step="0.01" min="0" value={valorPromocional} onChange={(e) => setValorPromocional(e.target.value)} className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2" placeholder="Preço na promoção" />
+                  </div>
+                )}
+              </div>
               <div>
                 <label className="block text-sm font-medium text-stone-600">Quantidade</label>
                 <input type="number" min="0" value={quantidade} onChange={(e) => setQuantidade(Number(e.target.value))} className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2" />
