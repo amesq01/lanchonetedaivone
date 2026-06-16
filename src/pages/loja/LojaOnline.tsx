@@ -9,6 +9,8 @@ import type { ProdutoWithCategorias } from '../../types/database';
 import type { Categoria } from '../../types/database';
 import { precoBase, precoVenda, emPromocaoPorOrigem, imagensProduto } from '../../types/database';
 import { getCart, type SavedItem } from './Carrinho';
+import { CopaBrasilHeaderBg } from '../../components/loja/CopaBrasilHeaderBg';
+import { isTemaCopaMundialAtivo } from '../../lib/temaCopa';
 import { useLojaConfig } from '../../contexts/LojaConfigContext';
 
 const CART_KEY = 'lanchonete_cart';
@@ -198,6 +200,8 @@ export default function LojaOnline() {
 
   if (loading && !erro) return <LojaLoading />;
 
+  const temaCopa = isTemaCopaMundialAtivo();
+
   if (erro) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-stone-50 px-4">
@@ -215,11 +219,31 @@ export default function LojaOnline() {
 
   return (
     <div className="min-h-screen bg-stone-50">
-      <header className="sticky top-0 z-10 border-b border-stone-200 bg-white/95 backdrop-blur">
-        <div className="mx-auto max-w-4xl px-4 py-4">
+      <header
+        className={
+          temaCopa
+            ? 'sticky top-0 z-10 overflow-hidden border-b-2 border-yellow-400/60 shadow-md shadow-green-900/10'
+            : 'sticky top-0 z-10 border-b border-stone-200 bg-white/95 backdrop-blur'
+        }
+      >
+        {temaCopa && <CopaBrasilHeaderBg />}
+        <div className={`mx-auto max-w-4xl px-4 py-4 ${temaCopa ? 'relative z-10' : ''}`}>
+          {temaCopa && (
+            <p className="copa-header-badge mb-2 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-white shadow-lg sm:text-xs">
+              <span className="copa-header-badge__icon" aria-hidden>
+                ⚽
+              </span>
+              Copa do Mundo · Viva o Brasil
+              <span className="copa-header-badge__icon" aria-hidden>
+                🇧🇷
+              </span>
+            </p>
+          )}
           <div className="flex items-center justify-between">
             <div className="flex flex-col sm:flex-row sm:items-center sm:gap-2">
-              <h1 className="text-xl font-bold text-stone-800">Lanchonete Terra e Mar</h1>
+              <h1 className={`text-xl font-bold ${temaCopa ? 'text-stone-900 drop-shadow-sm' : 'text-stone-800'}`}>
+                Lanchonete Terra e Mar
+              </h1>
               {lanchoneteAberta !== null && (
                 <span className={`inline-flex items-center gap-1.5 text-sm font-medium ${lanchoneteAberta ? 'text-green-600' : 'text-red-600'}`}>
                   <span className={`h-2 w-2 rounded-full flex-shrink-0 ${lanchoneteAberta ? 'bg-green-500' : 'bg-red-500'}`} />
@@ -249,7 +273,13 @@ export default function LojaOnline() {
               No momento, pedidos estão disponíveis apenas para retirada no local.
             </p>
           )}
-          <nav className="mt-3 flex flex-wrap gap-2 border-t border-stone-100 pt-3">
+          <nav
+            className={
+              temaCopa
+                ? 'mt-3 flex flex-wrap gap-2 rounded-xl border border-white/50 bg-white/60 px-2 py-2 shadow-sm backdrop-blur-sm sm:px-3'
+                : 'mt-3 flex flex-wrap gap-2 border-t border-stone-100 pt-3'
+            }
+          >
             <button
               type="button"
               onClick={() => setCategoriaSelecionada(null)}
