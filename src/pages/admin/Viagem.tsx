@@ -9,6 +9,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import type { Produto } from '../../types/database';
 import { precoBase, precoVenda, emPromocaoPorOrigem, imagensProduto } from '../../types/database';
 import { formatarTelefone } from '../../lib/mascaraTelefone';
+import { mensagemQuantidadeMinima, quantidadeMinimaProduto } from '../../lib/produtoLoja';
 import { X } from 'lucide-react';
 
 function haXmin(fromAt: string): string {
@@ -243,15 +244,26 @@ export default function AdminViagem() {
     }
   };
 
-  const addItemNovo = (produto: Produto, qtd = 1, obs = '') => {
+  const addItemNovo = (produto: Produto, qtd?: number, obs = '') => {
     const exist = carrinhoNovo.find((i) => i.produto.id === produto.id && i.observacao === obs);
-    if (exist) setCarrinhoNovo((c) => c.map((i) => i.produto.id === produto.id && i.observacao === obs ? { ...i, quantidade: i.quantidade + qtd } : i));
-    else setCarrinhoNovo((c) => [...c, { produto, quantidade: qtd, observacao: obs }]);
+    if (exist) {
+      const delta = qtd ?? 1;
+      setCarrinhoNovo((c) => c.map((i) => i.produto.id === produto.id && i.observacao === obs ? { ...i, quantidade: i.quantidade + delta } : i));
+    } else {
+      const qty = qtd ?? quantidadeMinimaProduto(produto);
+      setCarrinhoNovo((c) => [...c, { produto, quantidade: qty, observacao: obs }]);
+    }
     setSearchNovo('');
   };
   const updateQtdNovo = (index: number, delta: number) => {
     setCarrinhoNovo((c) => {
-      const novo = c.map((item, i) => (i === index ? { ...item, quantidade: Math.max(0, item.quantidade + delta) } : item));
+      const novo = c.map((item, i) => {
+        if (i !== index) return item;
+        let quantidade = Math.max(0, item.quantidade + delta);
+        const min = quantidadeMinimaProduto(item.produto);
+        if (quantidade > 0 && quantidade < min) quantidade = 0;
+        return { ...item, quantidade };
+      });
       return novo.filter((i) => i.quantidade > 0);
     });
   };
@@ -267,6 +279,11 @@ export default function AdminViagem() {
     }
     if (carrinhoNovo.length === 0) {
       alert('Adicione ao menos um item.');
+      return;
+    }
+    const erroMin = mensagemQuantidadeMinima(carrinhoNovo);
+    if (erroMin) {
+      alert(erroMin);
       return;
     }
     setEnviandoNovo(true);
@@ -294,16 +311,26 @@ export default function AdminViagem() {
   const sNovo = (searchNovo || '').trim().toLowerCase();
   const filtradosNovo = sNovo ? produtos.filter((p) => (p.nome?.toLowerCase().includes(sNovo)) || (p.codigo === searchNovo.trim())) : [];
 
-  const addItemEdicao = (produto: Produto, qtd = 1, obs = '') => {
+  const addItemEdicao = (produto: Produto, qtd?: number, obs = '') => {
     setCarrinhoEdicao((c) => {
       const exist = c.find((i) => i.produto.id === produto.id && i.observacao === obs);
-      if (exist) return c.map((i) => i.produto.id === produto.id && i.observacao === obs ? { ...i, quantidade: i.quantidade + qtd } : i);
-      return [...c, { produto, quantidade: qtd, observacao: obs }];
+      if (exist) {
+        const delta = qtd ?? 1;
+        return c.map((i) => i.produto.id === produto.id && i.observacao === obs ? { ...i, quantidade: i.quantidade + delta } : i);
+      }
+      const qty = qtd ?? quantidadeMinimaProduto(produto);
+      return [...c, { produto, quantidade: qty, observacao: obs }];
     });
   };
   const updateQtdEdicao = (index: number, delta: number) => {
     setCarrinhoEdicao((c) => {
-      const novo = c.map((item, i) => (i === index ? { ...item, quantidade: Math.max(0, item.quantidade + delta) } : item));
+      const novo = c.map((item, i) => {
+        if (i !== index) return item;
+        let quantidade = Math.max(0, item.quantidade + delta);
+        const min = quantidadeMinimaProduto(item.produto);
+        if (quantidade > 0 && quantidade < min) quantidade = 0;
+        return { ...item, quantidade };
+      });
       return novo.filter((i) => i.quantidade > 0);
     });
   };
@@ -312,6 +339,11 @@ export default function AdminViagem() {
   };
   const salvarEdicao = async () => {
     if (!popupEditar || carrinhoEdicao.length === 0) return;
+    const erroMin = mensagemQuantidadeMinima(carrinhoEdicao);
+    if (erroMin) {
+      alert(erroMin);
+      return;
+    }
     setEnviandoEdicao(true);
     try {
       const itens = carrinhoEdicao.map((i) => ({

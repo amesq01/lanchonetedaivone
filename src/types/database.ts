@@ -90,6 +90,7 @@ export interface Database {
           acompanhamentos: string | null;
           valor: number;
           quantidade: number;
+          quantidade_minima: number;
           ativo: boolean;
           imagem_url: string | null;
           imagens: string[] | null;

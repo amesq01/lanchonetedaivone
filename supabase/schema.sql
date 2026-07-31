@@ -61,6 +61,7 @@ CREATE TABLE IF NOT EXISTS produtos (
   acompanhamentos TEXT,
   valor DECIMAL(10,2) NOT NULL,
   quantidade INT DEFAULT 0,
+  quantidade_minima INT NOT NULL DEFAULT 1 CHECK (quantidade_minima >= 1),
   ativo BOOLEAN DEFAULT TRUE,
   imagem_url TEXT,
   vai_para_cozinha BOOLEAN DEFAULT TRUE,

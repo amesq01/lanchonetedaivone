@@ -7,6 +7,7 @@ import { queryKeys } from '../../lib/queryClient';
 import type { Produto } from '../../types/database';
 import { precoVenda, imagensProduto } from '../../types/database';
 import { useLojaConfig } from '../../contexts/LojaConfigContext';
+import { quantidadeMinimaLoja } from '../../lib/produtoLoja';
 
 type Item = { produto: Produto; quantidade: number; observacao: string };
 
@@ -67,8 +68,9 @@ export default function LojaCarrinho() {
     let saved = getCart();
     if (addId && map[addId]) {
       const exist = saved.find((x) => x.produto_id === addId);
+      const min = quantidadeMinimaLoja(map[addId]);
       if (exist) exist.quantidade++;
-      else saved = [...saved, { produto_id: addId, quantidade: 1, observacao: '' }];
+      else saved = [...saved, { produto_id: addId, quantidade: min, observacao: '' }];
     }
     const cart: Item[] = saved.map((s) => ({ produto: map[s.produto_id], quantidade: s.quantidade, observacao: s.observacao })).filter((i) => i.produto);
     setItens(cart);
@@ -78,9 +80,13 @@ export default function LojaCarrinho() {
   const updateQtd = (index: number, delta: number) => {
     setItens((prev) => {
       if (index < 0 || index >= prev.length) return prev;
-      const next = prev.map((item, i) =>
-        i === index ? { ...item, quantidade: Math.max(0, item.quantidade + delta) } : item
-      );
+      const next = prev.map((item, i) => {
+        if (i !== index) return item;
+        const min = quantidadeMinimaLoja(item.produto);
+        let quantidade = Math.max(0, item.quantidade + delta);
+        if (quantidade > 0 && quantidade < min) quantidade = 0;
+        return { ...item, quantidade };
+      });
       const filtered = next.filter((i) => i.quantidade > 0);
       saveCart(filtered);
       return filtered;
@@ -170,7 +176,9 @@ export default function LojaCarrinho() {
         ) : (
           <>
             <ul className="space-y-4">
-              {itens.map((item, i) => (
+              {itens.map((item, i) => {
+                const minQty = quantidadeMinimaLoja(item.produto);
+                return (
                 <li key={i} className="flex gap-4 rounded-xl bg-white p-4 shadow-sm border border-stone-100">
                   <div className="w-16 h-16 rounded-lg bg-stone-100 flex-shrink-0 flex items-center justify-center text-stone-400 text-xs">
                     {imagensProduto(item.produto)[0] ? <img src={imagensProduto(item.produto)[0]} alt="" className="rounded-lg w-full h-full object-cover" /> : 'IMG'}
@@ -183,6 +191,9 @@ export default function LojaCarrinho() {
                       <span className="w-6 text-center font-medium">{item.quantidade}</span>
                       <button type="button" onClick={() => updateQtd(i, 1)} className="w-8 h-8 rounded border border-stone-300 text-stone-600">+</button>
                     </div>
+                    {minQty > 1 && (
+                      <p className="mt-1 text-xs text-stone-500">Mínimo {minQty} unidades</p>
+                    )}
                   </div>
                   <div className="flex flex-col items-end gap-1">
                     <span className="font-medium text-amber-600">R$ {(item.quantidade * precoVenda(item.produto, 'online')).toFixed(2)}</span>
@@ -191,7 +202,8 @@ export default function LojaCarrinho() {
                     </button>
                   </div>
                 </li>
-              ))}
+                );
+              })}
             </ul>
             <div className="mt-6 rounded-xl bg-white p-4 shadow-sm border border-stone-100 space-y-4">
               <div>

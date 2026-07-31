@@ -42,6 +42,7 @@ export default function AdminProdutos() {
   const [acompanhamentos, setAcompanhamentos] = useState('');
   const [valor, setValor] = useState('');
   const [quantidade, setQuantidade] = useState(0);
+  const [quantidadeMinima, setQuantidadeMinima] = useState(1);
   const [ativo, setAtivo] = useState(true);
   const [vaiParaCozinha, setVaiParaCozinha] = useState(true);
   const [categoriaIds, setCategoriaIds] = useState<string[]>([]);
@@ -191,6 +192,7 @@ export default function AdminProdutos() {
       setAcompanhamentos(prod.acompanhamentos ?? '');
       setValor(String(prod.valor));
       setQuantidade(prod.quantidade);
+      setQuantidadeMinima(Math.max(1, Number(prod.quantidade_minima) || 1));
       setAtivo(prod.ativo);
       setVaiParaCozinha(prod.vai_para_cozinha !== false);
       setCategoriaIds((prod.produto_categorias ?? []).map((pc) => pc.categoria_id));
@@ -209,6 +211,7 @@ export default function AdminProdutos() {
       setAcompanhamentos('');
       setValor('');
       setQuantidade(0);
+      setQuantidadeMinima(1);
       setAtivo(true);
       setVaiParaCozinha(true);
       setCategoriaIds([]);
@@ -235,6 +238,7 @@ export default function AdminProdutos() {
         acompanhamentos: acompanhamentos || null,
         valor: Number(valor),
         quantidade,
+        quantidade_minima: Math.max(1, Math.floor(Number(quantidadeMinima) || 1)),
         ativo,
         imagem_url: imagens.length > 0 ? imagens[0].trim() || null : null,
         imagens: imagens.map((u) => u.trim()).filter(Boolean),
@@ -593,8 +597,13 @@ export default function AdminProdutos() {
                 )}
               </div>
               <div>
-                <label className="block text-sm font-medium text-stone-600">Quantidade</label>
+                <label className="block text-sm font-medium text-stone-600">Quantidade (estoque)</label>
                 <input type="number" min="0" value={quantidade} onChange={(e) => setQuantidade(Number(e.target.value))} className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-stone-600">Pedido mínimo (unidades)</label>
+                <input type="number" min="1" value={quantidadeMinima} onChange={(e) => setQuantidadeMinima(Math.max(1, Number(e.target.value) || 1))} className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2" />
+                <p className="mt-1 text-xs text-stone-500">Vale para loja online, mesa e viagem.</p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-stone-600">Fotos do produto (URLs)</label>

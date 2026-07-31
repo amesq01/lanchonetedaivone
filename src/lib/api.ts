@@ -663,6 +663,7 @@ export async function saveProduto(payload: {
   acompanhamentos: string | null;
   valor: number;
   quantidade: number;
+  quantidade_minima: number;
   ativo: boolean;
   imagem_url: string | null;
   imagens?: string[];

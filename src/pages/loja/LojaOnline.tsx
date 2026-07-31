@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { ChevronLeft, ChevronRight, ShoppingCart, Trash2, X } from 'lucide-react';
 import { getProdutosLojaOnline, getCategorias } from '../../lib/api';
 import { queryKeys } from '../../lib/queryClient';
-import { produtoIndisponivelNoCardapio } from '../../lib/produtoLoja';
+import { produtoIndisponivelNoCardapio, quantidadeMinimaLoja } from '../../lib/produtoLoja';
 import type { ProdutoWithCategorias } from '../../types/database';
 import type { Categoria } from '../../types/database';
 import { precoBase, precoVenda, emPromocaoPorOrigem, imagensProduto } from '../../types/database';
@@ -143,8 +143,12 @@ export default function LojaOnline() {
   function updateQtyInCart(produto: ProdutoWithCategorias, newQty: number) {
     const cart = getCart();
     const cur = cart.find((x) => x.produto_id === produto.id)?.quantidade ?? 0;
+    const min = quantidadeMinimaLoja(produto);
     if (produtoIndisponivelNoCardapio(produto) && newQty > cur) {
       newQty = cur;
+    }
+    if (newQty > 0 && newQty < min) {
+      newQty = cur === 0 ? min : 0;
     }
     if (newQty <= 0) {
       const filtered = cart.filter((x) => x.produto_id !== produto.id);
@@ -170,7 +174,7 @@ export default function LojaOnline() {
 
   function openModal(produto: ProdutoWithCategorias) {
     if (!produtoIndisponivelNoCardapio(produto) && (qtyByProd[produto.id] ?? 0) === 0) {
-      updateQtyInCart(produto, 1);
+      updateQtyInCart(produto, quantidadeMinimaLoja(produto));
     }
     setModalProduto(produto);
   }
@@ -353,6 +357,7 @@ function ModalProduto({
   const preco = precoVenda(produto, 'online');
   const emPromo = emPromocaoPorOrigem(produto, 'online');
   const qty = Math.max(0, qtyInCart);
+  const minQty = quantidadeMinimaLoja(produto);
   const indisponivel = produtoIndisponivelNoCardapio(produto);
   const fotos = imagensProduto(produto);
   const [idx, setIdx] = useState(0);
@@ -408,6 +413,9 @@ function ModalProduto({
             <span className="w-10 text-center font-semibold text-stone-800">{qty}</span>
             <button type="button" onClick={() => onQtyChange(qty + 1)} className="w-9 h-9 rounded-lg border border-stone-300 text-stone-600 hover:bg-stone-50 font-medium disabled:opacity-50 disabled:cursor-not-allowed" disabled={indisponivel}>+</button>
           </div>
+          {minQty > 1 && (
+            <p className="mt-2 text-xs text-stone-500">Mínimo {minQty} unidades</p>
+          )}
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <div className={emPromo ? 'flex flex-col' : 'font-semibold text-amber-600'}>
               {emPromo ? (
@@ -456,6 +464,7 @@ function CardProduto({
   const preco = precoVenda(produto, 'online');
   const emPromo = emPromocaoPorOrigem(produto, 'online');
   const indisponivel = produtoIndisponivelNoCardapio(produto);
+  const minQty = quantidadeMinimaLoja(produto);
   return (
     <div
       role="button"
@@ -501,6 +510,9 @@ function CardProduto({
           </div>
           {quantidade > 0 && (
             <div className="text-xs font-medium text-stone-600">{labelAdicionado(quantidade)}</div>
+          )}
+          {minQty > 1 && quantidade === 0 && !indisponivel && (
+            <div className="text-xs text-stone-500">Mínimo {minQty} unidades</div>
           )}
           <div className="flex items-center gap-2 min-w-0 max-sm:justify-end">
             <button

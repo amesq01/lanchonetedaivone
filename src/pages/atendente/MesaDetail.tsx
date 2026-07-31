@@ -8,6 +8,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import type { Produto } from '../../types/database';
 import { imagensProduto, precoBase, precoVenda, emPromocaoPorOrigem } from '../../types/database';
 import { queryKeys } from '../../lib/queryClient';
+import { mensagemQuantidadeMinima, quantidadeMinimaProduto } from '../../lib/produtoLoja';
 
 type ItemCarrinho = { produto: Produto; quantidade: number; observacao: string };
 
@@ -107,10 +108,15 @@ export default function AtendenteMesaDetail() {
     }
   }, [s, filtrados.length]);
 
-  const addItem = (produto: Produto, qtd = 1, obs = '') => {
+  const addItem = (produto: Produto, qtd?: number, obs = '') => {
     const exist = carrinho.find((i) => i.produto.id === produto.id && i.observacao === obs);
-    if (exist) setCarrinho((c) => c.map((i) => i.produto.id === produto.id && i.observacao === obs ? { ...i, quantidade: i.quantidade + qtd } : i));
-    else setCarrinho((c) => [...c, { produto, quantidade: qtd, observacao: obs }]);
+    if (exist) {
+      const delta = qtd ?? 1;
+      setCarrinho((c) => c.map((i) => i.produto.id === produto.id && i.observacao === obs ? { ...i, quantidade: i.quantidade + delta } : i));
+    } else {
+      const qty = qtd ?? quantidadeMinimaProduto(produto);
+      setCarrinho((c) => [...c, { produto, quantidade: qty, observacao: obs }]);
+    }
     setSearch('');
   };
 
@@ -124,9 +130,13 @@ export default function AtendenteMesaDetail() {
       if (!applied || applied.index >= c.length) return c;
       if (appliedIdRef.current === applied.id) return c;
       appliedIdRef.current = applied.id;
-      const novo = c.map((item, i) =>
-        i === applied.index ? { ...item, quantidade: Math.max(0, item.quantidade + applied.delta) } : item
-      );
+      const novo = c.map((item, i) => {
+        if (i !== applied.index) return item;
+        let quantidade = Math.max(0, item.quantidade + applied.delta);
+        const min = quantidadeMinimaProduto(item.produto);
+        if (quantidade > 0 && quantidade < min) quantidade = 0;
+        return { ...item, quantidade };
+      });
       return novo.filter((i) => i.quantidade > 0);
     });
   };
@@ -138,6 +148,11 @@ export default function AtendenteMesaDetail() {
   const finalizarPedido = async () => {
     if (!comandaId || carrinho.length === 0) return;
     if (comandaInvalidada) return;
+    const erroMin = mensagemQuantidadeMinima(carrinho);
+    if (erroMin) {
+      setToast(erroMin);
+      return;
+    }
     setEnviando(true);
     try {
       const itens = carrinho.map((i) => ({
@@ -206,16 +221,26 @@ export default function AtendenteMesaDetail() {
     if (comandaId) queryClient.invalidateQueries({ queryKey: queryKeys.mesaDetail(mesaId!) });
   };
 
-  const addItemEdicao = (produto: Produto, qtd = 1, obs = '') => {
+  const addItemEdicao = (produto: Produto, qtd?: number, obs = '') => {
     setCarrinhoEdicao((c) => {
       const exist = c.find((i) => i.produto.id === produto.id && i.observacao === obs);
-      if (exist) return c.map((i) => i.produto.id === produto.id && i.observacao === obs ? { ...i, quantidade: i.quantidade + qtd } : i);
-      return [...c, { produto, quantidade: qtd, observacao: obs }];
+      if (exist) {
+        const delta = qtd ?? 1;
+        return c.map((i) => i.produto.id === produto.id && i.observacao === obs ? { ...i, quantidade: i.quantidade + delta } : i);
+      }
+      const qty = qtd ?? quantidadeMinimaProduto(produto);
+      return [...c, { produto, quantidade: qty, observacao: obs }];
     });
   };
   const updateQtdEdicao = (index: number, delta: number) => {
     setCarrinhoEdicao((c) => {
-      const novo = c.map((item, i) => (i === index ? { ...item, quantidade: Math.max(0, item.quantidade + delta) } : item));
+      const novo = c.map((item, i) => {
+        if (i !== index) return item;
+        let quantidade = Math.max(0, item.quantidade + delta);
+        const min = quantidadeMinimaProduto(item.produto);
+        if (quantidade > 0 && quantidade < min) quantidade = 0;
+        return { ...item, quantidade };
+      });
       return novo.filter((i) => i.quantidade > 0);
     });
   };
@@ -225,6 +250,11 @@ export default function AtendenteMesaDetail() {
   const salvarEdicao = async () => {
     if (!popupEditar || carrinhoEdicao.length === 0) {
       setToast('Adicione pelo menos um item.');
+      return;
+    }
+    const erroMin = mensagemQuantidadeMinima(carrinhoEdicao);
+    if (erroMin) {
+      setToast(erroMin);
       return;
     }
     setEnviandoEdicao(true);

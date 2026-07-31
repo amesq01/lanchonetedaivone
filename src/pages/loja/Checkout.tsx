@@ -7,6 +7,7 @@ import { precoVenda } from '../../types/database';
 import type { SavedItem } from './Carrinho';
 import { getCupomAplicado } from './Carrinho';
 import { useLojaConfig } from '../../contexts/LojaConfigContext';
+import { quantidadeMinimaLoja } from '../../lib/produtoLoja';
 
 const CART_KEY = 'lanchonete_cart';
 const CLIENTE_KEY = 'lanchonete_cliente';
@@ -71,7 +72,8 @@ export default function LojaCheckout() {
   const cupomDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const produtosQuery = useQuery({ queryKey: queryKeys.produtos(true), queryFn: () => getProdutos(true) });
-  const produtos = (produtosQuery.data ?? []).map((p) => ({ id: p.id, valor: precoVenda(p, 'online') }));
+  const produtosCompletos = produtosQuery.data ?? [];
+  const produtos = produtosCompletos.map((p) => ({ id: p.id, valor: precoVenda(p, 'online') }));
 
   const cart = getCart();
   const bloqueado = !configLoading && lanchoneteAberta === false
@@ -232,6 +234,18 @@ export default function LojaCheckout() {
     if (tipoEntrega === 'entrega' && !enderecoTrim) {
       setError('Informe o endereço.');
       return;
+    }
+
+    const produtoPorId = Object.fromEntries(produtosCompletos.map((p) => [p.id, p]));
+    for (const item of cart) {
+      const produto = produtoPorId[item.produto_id];
+      if (!produto) continue;
+      const min = quantidadeMinimaLoja(produto);
+      if (item.quantidade < min) {
+        const nomeProduto = (produto.nome?.trim() || produto.descricao || 'este produto').trim();
+        setError(`Pedido mínimo de ${min} unidades para ${nomeProduto}.`);
+        return;
+      }
     }
 
     setWhatsappDraft(whatsapp);
