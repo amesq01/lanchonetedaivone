@@ -20,14 +20,8 @@ function nomeCardapioLoja(p: ProdutoWithCategorias): string {
   return (p.nome?.trim() || p.descricao || '').trim();
 }
 
-function isCategoriaBebidas(cat: Categoria): boolean {
-  const n = cat.nome.trim().toLowerCase();
-  return n === 'bebidas' || n === 'bebida';
-}
-
-/** Só para Bebidas/Bebida: ordem alfabética (pt-BR). Demais categorias mantêm a ordem vinda da API. */
-function ordenarProdutosLojaSeBebidas(cat: Categoria, lista: ProdutoWithCategorias[]): ProdutoWithCategorias[] {
-  if (!isCategoriaBebidas(cat)) return lista;
+/** Ordem alfabética (pt-BR) pelo nome exibido no cardápio. */
+function ordenarProdutosLojaAlfabetico(lista: ProdutoWithCategorias[]): ProdutoWithCategorias[] {
   return [...lista].sort((a, b) =>
     nomeCardapioLoja(a).localeCompare(nomeCardapioLoja(b), 'pt-BR', { sensitivity: 'base' })
   );
@@ -319,7 +313,7 @@ export default function LojaOnline() {
           <section key={cat.id} className="mb-4 sm:mb-8">
             <h2 className="mb-2 sm:mb-4 text-lg font-semibold text-stone-800">{cat.nome}</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-4 items-stretch">
-              {ordenarProdutosLojaSeBebidas(cat, byCategoria(cat.id)).map((p) => (
+              {ordenarProdutosLojaAlfabetico(byCategoria(cat.id)).map((p) => (
                 <CardProduto key={p.id} produto={p} qty={qtyByProd[p.id] ?? 0} onOpenModal={() => openModal(p)} onRemove={() => removeFromCart(p)} />
               ))}
             </div>
