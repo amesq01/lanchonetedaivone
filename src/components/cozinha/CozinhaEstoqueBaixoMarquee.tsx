@@ -18,24 +18,21 @@ export default function CozinhaEstoqueBaixoMarquee() {
 
   const itens = produtos.map(rotuloProduto).join('   •   ');
   const texto = `Estoque baixo (abaixo de ${ESTOQUE_BAIXO_LIMITE} un.): ${itens}`;
-  const duracao = Math.max(18, produtos.length * 7);
+  const duracao = Math.max(16, Math.min(60, 8 + produtos.length * 5));
 
   return (
     <div
       role="status"
       aria-live="polite"
-      className="mt-1 min-w-0 overflow-hidden"
+      className="estoque-marquee-viewport mt-1"
       title={texto}
     >
-      <div
-        className="estoque-marquee-track text-sm font-semibold text-red-600"
+      <p
+        className="estoque-marquee-track m-0 text-sm font-semibold text-red-600"
         style={{ animationDuration: `${duracao}s` }}
       >
-        <span className="px-4 whitespace-nowrap">{texto}</span>
-        <span className="px-4 whitespace-nowrap" aria-hidden>
-          {texto}
-        </span>
-      </div>
+        {texto}
+      </p>
     </div>
   );
 }

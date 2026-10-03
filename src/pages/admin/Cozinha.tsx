@@ -6,7 +6,7 @@ export default function AdminCozinha() {
   return (
     <CozinhaSoundProvider>
       <div>
-        <div className="mb-4">
+            <div className="mb-4 min-w-0">
           <div className="flex items-center gap-2">
             <h1 className="text-2xl font-bold text-stone-800">Cozinha</h1>
             <CozinhaSoundToggle />

@@ -605,27 +605,26 @@
   }
 }
 
-@keyframes estoque-marquee {
+@keyframes estoque-marquee-rtl {
   from {
-    transform: translateX(0);
+    transform: translate3d(0, 0, 0);
   }
   to {
-    transform: translateX(-50%);
+    transform: translate3d(-100%, 0, 0);
   }
+}
+
+.estoque-marquee-viewport {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .estoque-marquee-track {
-  display: flex;
-  width: max-content;
-  animation: estoque-marquee 20s linear infinite;
-}
-
-.estoque-marquee-track:hover {
-  animation-play-state: paused;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .estoque-marquee-track {
-    animation: none;
-  }
+  display: inline-block;
+  white-space: nowrap;
+  padding-left: 100%;
+  animation: estoque-marquee-rtl 22s linear infinite;
+  will-change: transform;
 }
