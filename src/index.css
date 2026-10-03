@@ -604,3 +604,28 @@
     object-fit: cover !important;
   }
 }
+
+@keyframes estoque-marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.estoque-marquee-track {
+  display: flex;
+  width: max-content;
+  animation: estoque-marquee 20s linear infinite;
+}
+
+.estoque-marquee-track:hover {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .estoque-marquee-track {
+    animation: none;
+  }
+}
