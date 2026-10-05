@@ -628,3 +628,18 @@
   animation: estoque-marquee-rtl 22s linear infinite;
   will-change: transform;
 }
+
+/* Botão "Adicionar ao" da loja: onda orgânica que acompanha a largura da coluna do nome */
+@media (max-width: 639px) {
+  .loja-add-wave {
+    width: 100%;
+    height: 44px;
+    border-radius: 0;
+    -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 208 44' preserveAspectRatio='none'><path fill='black' d='M0,44 C40,44 58,38 80,26 C102,14 136,4 168,4 L208,4 L208,44 Z'/></svg>");
+    mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 208 44' preserveAspectRatio='none'><path fill='black' d='M0,44 C40,44 58,38 80,26 C102,14 136,4 168,4 L208,4 L208,44 Z'/></svg>");
+    -webkit-mask-size: 100% 100%;
+    mask-size: 100% 100%;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+  }
+}

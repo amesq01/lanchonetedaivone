@@ -508,11 +508,11 @@ function CardProduto({
           {minQty > 1 && quantidade === 0 && !indisponivel && (
             <div className="text-xs text-stone-500">Mínimo {minQty} unidades</div>
           )}
-          <div className="flex items-center gap-2 min-w-0 max-sm:justify-end">
+          <div className="flex items-center gap-2 min-w-0">
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); onOpenModal(); }}
-              className={`flex-1 min-w-0 rounded-lg py-2 px-3 text-white font-medium flex items-center justify-center gap-1.5 transition-opacity max-sm:flex-none max-sm:w-[208px] max-sm:min-w-0 max-sm:h-[44px] max-sm:text-[12px] max-sm:font-semibold max-sm:py-2 max-sm:px-3 max-sm:gap-1.5 max-sm:justify-end max-sm:rounded-none max-sm:[clip-path:path('M0,44_C10,44_20,43.5_30,42_C42,39_56,33_72,24_C92,12_118,5_156,4_L208,4_L208,44_Z')] ${indisponivel ? 'bg-stone-500 opacity-90 hover:opacity-100 max-sm:bg-stone-500 max-sm:hover:bg-stone-600' : 'bg-amber-600 opacity-80 hover:opacity-100 hover:bg-amber-700 max-sm:bg-[#f57c00] max-sm:hover:bg-[#e66d00]'}`}
+              className={`flex-1 min-w-0 rounded-lg py-2 px-3 text-white font-medium flex items-center justify-center gap-1.5 transition-opacity loja-add-wave max-sm:text-[12px] max-sm:font-semibold max-sm:pt-3 max-sm:pb-1 max-sm:px-3 max-sm:gap-1.5 max-sm:justify-end ${indisponivel ? 'bg-stone-500 opacity-90 hover:opacity-100 max-sm:bg-stone-500 max-sm:hover:bg-stone-600' : 'bg-amber-600 opacity-80 hover:opacity-100 hover:bg-amber-700 max-sm:bg-[#f57c00] max-sm:hover:bg-[#e66d00]'}`}
               aria-label={indisponivel ? 'Ver detalhes (indisponível no momento)' : 'Adicionar ao carrinho'}
               title={indisponivel ? 'Indisponível — toque para ver detalhes' : 'Adicionar ao carrinho'}
             >
