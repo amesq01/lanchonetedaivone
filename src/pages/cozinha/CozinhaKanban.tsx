@@ -135,7 +135,7 @@ export default function CozinhaKanban() {
 
   const porColuna = (key: string) => {
     if (key === 'finalizado') {
-      /** Já vêm só “hoje” em Brasília de `getPedidosCozinha` — não filtrar de novo pela data do navegador. */
+      /** Já vêm na janela 04:00→04:00 de `getPedidosCozinha` — não filtrar de novo pela data do navegador. */
       const list = pedidos.filter((p) => p.status === 'finalizado');
       const dataFinalizado = (p: any) => new Date(p.encerrado_em ?? p.updated_at).getTime();
       return [...list].sort((a, b) => dataFinalizado(b) - dataFinalizado(a));
@@ -256,7 +256,7 @@ export default function CozinhaKanban() {
           {accordionFinalizadosAberto && (
             <div className="mt-2 max-h-[min(40vh,420px)] space-y-3 overflow-y-auto rounded-lg border border-stone-200 bg-stone-50/50 p-3">
               {finalizadosHoje.length === 0 ? (
-                <p className="py-2 text-sm text-stone-500">Nenhum pedido finalizado hoje (dia em Brasília).</p>
+                <p className="py-2 text-sm text-stone-500">Nenhum pedido finalizado neste expediente (somem às 04:00).</p>
               ) : (
                 finalizadosHoje.map(pedidoCard)
               )}

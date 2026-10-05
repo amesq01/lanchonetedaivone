@@ -414,7 +414,7 @@ function pedidoTemItemCozinhaRow(p: { pedido_itens?: { produtos?: { vai_para_coz
 
 /** Busca mínima para contagem cozinha na sidebar. Consultas separadas evitam o limite padrão de 1000 linhas misturando milhares de finalizados com a fila ativa. */
 async function getPedidosCozinhaParaContagem(): Promise<{ id: string; status: string; pedido_itens: { produtos: { vai_para_cozinha: boolean } | null }[] }[]> {
-  const { desde, ate } = hojeBrasiliaUTC();
+  const { desde, ate } = janelaFinalizadosCozinhaUTC();
   const sel = 'id, status, pedido_itens(produtos(vai_para_cozinha))';
   const [{ data: ativos, error: e1 }, { data: finEnc, error: e2 }, { data: finSem, error: e3 }] = await Promise.all([
     supabase.from('pedidos').select(sel).in('status', ['novo_pedido', 'em_preparacao']),
@@ -983,10 +983,10 @@ export async function setPedidoItemCozinhaPreparado(pedidoItemId: string, prepar
 
 /**
  * Kanban cozinha: fila ativa (novo + em preparação) sem filtro de data — não compete com o limite de linhas do PostgREST.
- * Finalizados: só o dia corrente em Brasília (encerrado_em, ou updated_at se encerrado_em for nulo).
+ * Finalizados: dia operacional 04:00→04:00 em Brasília (encerrado_em, ou updated_at se encerrado_em for nulo).
  */
 export async function getPedidosCozinha() {
-  const { desde, ate } = hojeBrasiliaUTC();
+  const { desde, ate } = janelaFinalizadosCozinhaUTC();
   const [{ data: ativos, error: e1 }, { data: finEnc, error: e2 }, { data: finSem, error: e3 }] = await Promise.all([
     supabase
       .from('pedidos')
@@ -1147,6 +1147,30 @@ function hojeBrasiliaUTC(): { desde: string; ate: string } {
   const [y, m, d] = brDateStr.split('-').map(Number);
   const desde = new Date(Date.UTC(y, m - 1, d, 3, 0, 0, 0)).toISOString();
   const ate = new Date(Date.UTC(y, m - 1, d + 1, 2, 59, 59, 999)).toISOString();
+  return { desde, ate };
+}
+
+/**
+ * Dia operacional da cozinha para a coluna Finalizados: 04:00 → 04:00 em Brasília.
+ * Antes das 04:00 ainda vale o dia anterior (ex.: sábado 22h e domingo 02h somem domingo às 04:00).
+ */
+function janelaFinalizadosCozinhaUTC(): { desde: string; ate: string } {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(new Date());
+  const n = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((p) => p.type === type)?.value);
+  const y = n('year');
+  const m = n('month');
+  const d = n('day');
+  const hora = n('hour');
+  const inicioDia = hora < 4 ? d - 1 : d;
+  const desde = new Date(Date.UTC(y, m - 1, inicioDia, 7, 0, 0, 0)).toISOString();
+  const ate = new Date(Date.UTC(y, m - 1, inicioDia + 1, 6, 59, 59, 999)).toISOString();
   return { desde, ate };
 }
 
