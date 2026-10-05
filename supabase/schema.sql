@@ -168,6 +168,7 @@ CREATE TABLE IF NOT EXISTS caixa_saidas (
   data DATE NOT NULL,
   valor DECIMAL(12, 2) NOT NULL CHECK (valor > 0),
   descricao TEXT,
+  forma_pagamento TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );

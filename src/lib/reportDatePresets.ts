@@ -74,3 +74,28 @@ export function presetAno(): { desde: string; ate: string } {
   const y = new Date().getFullYear();
   return { desde: `${y}-01-01T00:00`, ate: `${y}-12-31T23:59` };
 }
+
+/** Intervalo imediatamente anterior, com a mesma duração. */
+export function periodoAnteriorUtc(desdeIso: string, ateIso: string): { desde: string; ate: string } {
+  const desdeMs = new Date(desdeIso).getTime();
+  const ateMs = new Date(ateIso).getTime();
+  const duracaoMs = ateMs - desdeMs;
+  const ate2Ms = desdeMs - 1000;
+  const desde2Ms = ate2Ms - duracaoMs;
+  return {
+    desde: new Date(desde2Ms).toISOString(),
+    ate: new Date(ate2Ms).toISOString(),
+  };
+}
+
+/** Rótulo do período a partir de datetime-local (Brasília). */
+export function tituloPeriodoBr(desdeDateTime: string, ateDateTime: string): string {
+  if (!desdeDateTime || !ateDateTime) return '—';
+  const fmt = (dt: string) =>
+    `${new Date(`${dt.slice(0, 10)}T12:00:00`).toLocaleDateString('pt-BR', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    })} ${dt.slice(11, 16)}`;
+  return `${fmt(desdeDateTime)} – ${fmt(ateDateTime)}`;
+}

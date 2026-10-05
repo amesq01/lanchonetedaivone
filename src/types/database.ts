@@ -224,6 +224,7 @@ export interface Database {
           data: string;
           valor: number;
           descricao: string | null;
+          forma_pagamento: string | null;
           created_at: string;
           updated_at: string;
         };

@@ -9,10 +9,63 @@ import {
   saveCaixaSaida,
   deleteCaixaSaida,
   getRelatorioFluxoCaixa,
+  getRelatorioFinanceiro,
+  getProdutividade,
+  getRelatorioCancelamentos,
+  FORMAS_PAGAMENTO_SAIDA,
+  labelFormaPagamentoSaida,
 } from '../../lib/api';
-import type { RelatorioFluxoCaixa, CaixaCategoriaRow, CaixaSaidaRow } from '../../lib/api';
+import type {
+  RelatorioFluxoCaixa,
+  CaixaCategoriaRow,
+  CaixaSaidaRow,
+  ProdutividadePorCategoria,
+} from '../../lib/api';
 import { queryKeys } from '../../lib/queryClient';
-import { buildBrPeriodUtcRange, presetAno, presetDia, presetMes, presetSemana } from '../../lib/reportDatePresets';
+import {
+  buildBrPeriodUtcRange,
+  periodoAnteriorUtc,
+  presetAno,
+  presetDia,
+  presetMes,
+  presetSemana,
+  tituloPeriodoBr,
+} from '../../lib/reportDatePresets';
+import { RelatorioAccordion } from '../../components/admin/RelatorioAccordion';
+import RelatorioFinanceiroResultados, {
+  gerarPdfRelatorioFinanceiro,
+  type CompararFinanceiro,
+  type PedidoRelatorioFinanceiro,
+} from '../../components/admin/RelatorioFinanceiroResultados';
+import ProdutividadeResultados, {
+  categoriasVisiveisProdutividade,
+  gerarPdfProdutividade,
+  rankingAtendentesDePedidos,
+} from '../../components/admin/ProdutividadeResultados';
+import RelatorioCancelamentosResultados, {
+  gerarPdfRelatorioCancelamentos,
+  type ItemCancelamento,
+} from '../../components/admin/RelatorioCancelamentosResultados';
+
+type AccordionId = 'financeiro' | 'produtividade' | 'cancelamentos';
+
+type RelatoriosPeriodo = {
+  financeiro: {
+    pedidos: PedidoRelatorioFinanceiro[];
+    totalGeral: number;
+    totalPorFormaPagamento: Record<string, number>;
+    comparar: CompararFinanceiro;
+  };
+  produtividade: {
+    totalPedidos: number;
+    porCategoria: ProdutividadePorCategoria[];
+    totalPedidosAnterior: number;
+  };
+  cancelamentos: {
+    itens: ItemCancelamento[];
+    totalAnterior: number;
+  };
+};
 
 type TabId = 'fluxo' | 'saidas' | 'categorias';
 
@@ -106,18 +159,67 @@ function PeriodoFiltros({
   );
 }
 
+function botaoPdf(onClick: () => void) {
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
+      className="inline-flex items-center rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-sm font-medium text-stone-700 hover:bg-stone-50"
+    >
+      Gerar PDF
+    </button>
+  );
+}
+
 function FluxoTab() {
   const [desdeDateTime, setDesdeDateTime] = useState(() => presetDia().desde);
   const [ateDateTime, setAteDateTime] = useState(() => presetDia().ate);
   const [dados, setDados] = useState<RelatorioFluxoCaixa | null>(null);
+  const [relatorios, setRelatorios] = useState<RelatoriosPeriodo | null>(null);
   const [loading, setLoading] = useState(false);
+  const [accordionAbertos, setAccordionAbertos] = useState<Set<AccordionId>>(() => new Set(['financeiro']));
 
   const carregar = (desdeDt: string, ateDt: string) => {
     const range = buildBrPeriodUtcRange(desdeDt, ateDt);
     if (!range) return;
+    const anterior = periodoAnteriorUtc(range.desde, range.ate);
     setLoading(true);
-    getRelatorioFluxoCaixa(range.desde, range.ate)
-      .then(setDados)
+    setAccordionAbertos(new Set(['financeiro']));
+    Promise.all([
+      getRelatorioFluxoCaixa(range.desde, range.ate),
+      getRelatorioFinanceiro(range.desde, range.ate),
+      getRelatorioFinanceiro(anterior.desde, anterior.ate),
+      getProdutividade(range.desde, range.ate),
+      getProdutividade(anterior.desde, anterior.ate),
+      getRelatorioCancelamentos(range.desde, range.ate),
+      getRelatorioCancelamentos(anterior.desde, anterior.ate),
+    ])
+      .then(([fluxo, finAtual, finAnterior, prodAtual, prodAnterior, cancAtual, cancAnterior]) => {
+        setDados(fluxo);
+        setRelatorios({
+          financeiro: {
+            pedidos: (finAtual.pedidos ?? []) as PedidoRelatorioFinanceiro[],
+            totalGeral: finAtual.totalGeral,
+            totalPorFormaPagamento: finAtual.totalPorFormaPagamento ?? {},
+            comparar: {
+              totalGeral: finAnterior.totalGeral,
+              totalPedidos: (finAnterior.pedidos ?? []).length,
+            },
+          },
+          produtividade: {
+            totalPedidos: prodAtual.totalPedidos,
+            porCategoria: prodAtual.porCategoria,
+            totalPedidosAnterior: prodAnterior.totalPedidos,
+          },
+          cancelamentos: {
+            itens: (cancAtual.itens ?? []) as ItemCancelamento[],
+            totalAnterior: (cancAnterior.itens ?? []).length,
+          },
+        });
+      })
       .finally(() => setLoading(false));
   };
 
@@ -126,6 +228,16 @@ function FluxoTab() {
   }, []);
 
   const r = dados?.resumo;
+  const tituloPeriodo = tituloPeriodoBr(desdeDateTime, ateDateTime);
+
+  const toggleAccordion = (id: AccordionId) => {
+    setAccordionAbertos((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   return (
     <div>
@@ -185,13 +297,14 @@ function FluxoTab() {
           )}
 
           {dados.saidas.length > 0 && (
-            <div className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm">
+            <div className="mb-6 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm">
               <h2 className="border-b border-stone-100 px-4 py-3 font-semibold text-stone-800">Lançamentos de saída</h2>
               <table className="w-full text-sm">
                 <thead className="bg-stone-50 text-left text-stone-600">
                   <tr>
                     <th className="px-4 py-2">Data</th>
                     <th className="px-4 py-2">Categoria</th>
+                    <th className="px-4 py-2">Pagamento</th>
                     <th className="px-4 py-2">Descrição</th>
                     <th className="px-4 py-2 text-right">Valor</th>
                   </tr>
@@ -201,6 +314,7 @@ function FluxoTab() {
                     <tr key={s.id} className="border-t border-stone-100">
                       <td className="px-4 py-2 whitespace-nowrap">{fmtDataBr(s.data)}</td>
                       <td className="px-4 py-2">{s.categoria_nome}</td>
+                      <td className="px-4 py-2">{labelFormaPagamentoSaida(s.forma_pagamento)}</td>
                       <td className="px-4 py-2 text-stone-600">{s.descricao || '—'}</td>
                       <td className="px-4 py-2 text-right">{fmtBrl(s.valor)}</td>
                     </tr>
@@ -211,7 +325,83 @@ function FluxoTab() {
           )}
 
           {dados.saidas.length === 0 && (
-            <p className="text-sm text-stone-500">Nenhuma saída lançada neste período. Use a aba Saídas para registrar compras e despesas.</p>
+            <p className="mb-6 text-sm text-stone-500">
+              Nenhuma saída lançada neste período. Use a aba Saídas para registrar compras e despesas.
+            </p>
+          )}
+
+          {relatorios && (
+            <div className="space-y-3">
+              <RelatorioAccordion
+                title="Relatório financeiro"
+                open={accordionAbertos.has('financeiro')}
+                onToggle={() => toggleAccordion('financeiro')}
+                extraHeader={botaoPdf(() =>
+                  gerarPdfRelatorioFinanceiro({
+                    tituloPeriodo,
+                    pedidos: relatorios.financeiro.pedidos,
+                    totalGeral: relatorios.financeiro.totalGeral,
+                    totalPorFormaPagamento: relatorios.financeiro.totalPorFormaPagamento,
+                    saidas: dados.saidas,
+                  })
+                )}
+              >
+                <RelatorioFinanceiroResultados
+                  tituloPeriodo={tituloPeriodo}
+                  pedidos={relatorios.financeiro.pedidos}
+                  totalGeral={relatorios.financeiro.totalGeral}
+                  totalPorFormaPagamento={relatorios.financeiro.totalPorFormaPagamento}
+                  compararDados={relatorios.financeiro.comparar}
+                  saidas={dados.saidas}
+                />
+              </RelatorioAccordion>
+
+              <RelatorioAccordion
+                title="Produtividade"
+                open={accordionAbertos.has('produtividade')}
+                onToggle={() => toggleAccordion('produtividade')}
+                extraHeader={botaoPdf(() => {
+                  const categorias = categoriasVisiveisProdutividade(relatorios.produtividade.porCategoria);
+                  const ranking = rankingAtendentesDePedidos(relatorios.financeiro.pedidos);
+                  const anterior = relatorios.produtividade.totalPedidosAnterior;
+                  const atual = relatorios.produtividade.totalPedidos;
+                  gerarPdfProdutividade({
+                    tituloPeriodo,
+                    totalPedidos: atual,
+                    totalPedidosAnterior: anterior,
+                    variacaoPedidos: anterior > 0 ? ((atual - anterior) / anterior) * 100 : null,
+                    categorias,
+                    rankingAtendentes: ranking,
+                  });
+                })}
+              >
+                <ProdutividadeResultados
+                  tituloPeriodo={tituloPeriodo}
+                  totalPedidos={relatorios.produtividade.totalPedidos}
+                  totalPedidosAnterior={relatorios.produtividade.totalPedidosAnterior}
+                  porCategoria={relatorios.produtividade.porCategoria}
+                  pedidosParaRanking={relatorios.financeiro.pedidos}
+                />
+              </RelatorioAccordion>
+
+              <RelatorioAccordion
+                title="Relatório de cancelamentos"
+                open={accordionAbertos.has('cancelamentos')}
+                onToggle={() => toggleAccordion('cancelamentos')}
+                extraHeader={botaoPdf(() =>
+                  gerarPdfRelatorioCancelamentos({
+                    tituloPeriodo,
+                    itens: relatorios.cancelamentos.itens,
+                  })
+                )}
+              >
+                <RelatorioCancelamentosResultados
+                  tituloPeriodo={tituloPeriodo}
+                  itens={relatorios.cancelamentos.itens}
+                  totalAnterior={relatorios.cancelamentos.totalAnterior}
+                />
+              </RelatorioAccordion>
+            </div>
           )}
         </>
       )}
@@ -307,6 +497,7 @@ function SaidasTab() {
             <tr>
               <th className="px-4 py-2">Data</th>
               <th className="px-4 py-2">Categoria</th>
+              <th className="px-4 py-2">Pagamento</th>
               <th className="px-4 py-2">Descrição</th>
               <th className="px-4 py-2 text-right">Valor</th>
               <th className="px-4 py-2 w-24" />
@@ -317,6 +508,7 @@ function SaidasTab() {
               <tr key={s.id} className="border-t border-stone-100">
                 <td className="px-4 py-2">{fmtDataBr(s.data)}</td>
                 <td className="px-4 py-2">{s.categoria_nome}</td>
+                <td className="px-4 py-2">{labelFormaPagamentoSaida(s.forma_pagamento)}</td>
                 <td className="px-4 py-2 text-stone-600">{s.descricao || '—'}</td>
                 <td className="px-4 py-2 text-right font-medium">{fmtBrl(s.valor)}</td>
                 <td className="px-4 py-2">
@@ -383,13 +575,21 @@ function SaidaModal({
   erro: string;
   saving: boolean;
   onClose: () => void;
-  onSave: (p: { id?: string; categoria_id: string; data: string; valor: number; descricao?: string | null }) => void;
+  onSave: (p: {
+    id?: string;
+    categoria_id: string;
+    data: string;
+    valor: number;
+    descricao?: string | null;
+    forma_pagamento: string;
+  }) => void;
 }) {
   const hoje = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
   const [categoriaId, setCategoriaId] = useState(inicial?.categoria_id ?? categorias[0]?.id ?? '');
   const [data, setData] = useState(inicial?.data?.slice(0, 10) ?? hoje);
   const [valor, setValor] = useState(inicial ? String(inicial.valor) : '');
   const [descricao, setDescricao] = useState(inicial?.descricao ?? '');
+  const [formaPagamento, setFormaPagamento] = useState(inicial?.forma_pagamento ?? '');
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
@@ -432,6 +632,21 @@ function SaidaModal({
             />
           </div>
           <div>
+            <label className="block text-sm font-medium text-stone-600">Forma de pagamento</label>
+            <select
+              value={formaPagamento}
+              onChange={(e) => setFormaPagamento(e.target.value)}
+              className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2"
+            >
+              <option value="">Selecione</option>
+              {FORMAS_PAGAMENTO_SAIDA.map((forma) => (
+                <option key={forma} value={forma}>
+                  {labelFormaPagamentoSaida(forma)}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
             <label className="block text-sm font-medium text-stone-600">Descrição (opcional)</label>
             <input
               type="text"
@@ -448,7 +663,7 @@ function SaidaModal({
           </button>
           <button
             type="button"
-            disabled={saving || !categoriaId || !data || !valor}
+            disabled={saving || !categoriaId || !data || !valor || !formaPagamento}
             onClick={() =>
               onSave({
                 id: inicial?.id,
@@ -456,6 +671,7 @@ function SaidaModal({
                 data,
                 valor: Number(valor),
                 descricao: descricao || null,
+                forma_pagamento: formaPagamento,
               })
             }
             className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50"
@@ -619,7 +835,7 @@ export default function Caixa() {
 
   return (
     <div className="p-4 md:p-6">
-      <h1 className="mb-1 text-2xl font-bold text-stone-900">Fluxo de caixa</h1>
+      <h1 className="mb-1 text-2xl font-bold text-stone-900">Financeiro</h1>
       <p className="mb-6 text-sm text-stone-600">
         Compare o que entrou com vendas e o que saiu com compras e despesas cadastradas manualmente.
       </p>

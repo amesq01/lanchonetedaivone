@@ -1936,6 +1936,8 @@ export {
   getRelatorioFluxoCaixa,
   calcularEntradasVendas,
   utcRangeToBrDateBounds,
+  FORMAS_PAGAMENTO_SAIDA,
+  labelFormaPagamentoSaida,
 } from './caixa';
 export { buildBrPeriodUtcRange, datetimeLocalBrToUtcIso } from './reportDatePresets';
-export type { CaixaCategoriaRow, CaixaSaidaRow, FluxoPorCategoria, RelatorioFluxoCaixa } from './caixa';
+export type { CaixaCategoriaRow, CaixaSaidaRow, FluxoPorCategoria, RelatorioFluxoCaixa, FormaPagamentoSaida } from './caixa';

@@ -167,10 +167,26 @@ export async function getCaixaSaidas(desdeIso: string, ateIso: string): Promise<
     data: row.data,
     valor: Number(row.valor),
     descricao: row.descricao,
+    forma_pagamento: row.forma_pagamento ?? null,
     created_at: row.created_at,
     updated_at: row.updated_at,
     categoria_nome: row.caixa_categorias?.nome ?? '-',
   }));
+}
+
+export const FORMAS_PAGAMENTO_SAIDA = ['pix', 'dinheiro', 'débito', 'crédito'] as const;
+export type FormaPagamentoSaida = (typeof FORMAS_PAGAMENTO_SAIDA)[number];
+
+export function labelFormaPagamentoSaida(forma: string | null | undefined): string {
+  if (!forma) return '—';
+  const map: Record<string, string> = {
+    pix: 'Pix',
+    dinheiro: 'Dinheiro',
+    débito: 'Débito',
+    credito: 'Crédito',
+    crédito: 'Crédito',
+  };
+  return map[forma] ?? forma;
 }
 
 export async function saveCaixaSaida(payload: {
@@ -179,16 +195,22 @@ export async function saveCaixaSaida(payload: {
   data: string;
   valor: number;
   descricao?: string | null;
+  forma_pagamento: string;
 }): Promise<void> {
   const valor = Math.max(0.01, Number(payload.valor));
   const data = payload.data.slice(0, 10);
+  const forma = payload.forma_pagamento?.trim() || '';
   if (!payload.categoria_id || !data) throw new Error('Categoria e data são obrigatórias.');
+  if (!FORMAS_PAGAMENTO_SAIDA.includes(forma as FormaPagamentoSaida)) {
+    throw new Error('Informe a forma de pagamento.');
+  }
   const now = new Date().toISOString();
   const row = {
     categoria_id: payload.categoria_id,
     data,
     valor,
     descricao: payload.descricao?.trim() || null,
+    forma_pagamento: forma,
     updated_at: now,
   };
   if (payload.id) {
